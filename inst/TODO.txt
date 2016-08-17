@@ -1,0 +1,10 @@
+http://gallery.rcpp.org/articles/using-rcppprogress/
+
+
+> finir les tests julien 
+> supprimer le cas binaire et le remplacer par le cas continu
+> optimiser le code C++
+
+> exporter un rapport
+> faire la fonction de calcul de puissance
+> possibilite d'arreter l'analyse de la pair si ex aequo
