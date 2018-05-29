@@ -1,99 +1,84 @@
+# reset the default value of the number of permuation sample
+BuyseTest.options(method.inference = "none") # no permutation test
+
+#### simulate some data ####
+df.data <- simBuyseTest(1e2, n.strata = 2)
+
+                                        # display 
+if(require(survival)){
+    resKM_tempo <- survfit(Surv(eventtime,status)~Treatment, data = df.data)
+    plot(resKM_tempo)
+}
+
+#### one time to event endpoint ####
+BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data)
+
+summary(BT) # net chance in favor of treatment
+summary(BT, percentage = FALSE)  
+summary(BT, statistic = "winRatio") # win Ratio
+
+## bootstrap to compute the CI
+\dontrun{
+    BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
+                    method.inference = "permutation", n.resampling = 1e3)
+}
+\dontshow{
+    BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
+                    method.inference = "permutation", n.resampling = 1e1, trace = 0)
+}
+summary(BT, statistic = "netChance") ## default
+summary(BT, statistic = "winRatio") 
+
+## parallel boostrap
+\dontrun{
+    BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
+                    method.inference = "permutation", n.resampling = 1e3, cpus = 2)
+    summary(BT)
+}
+
+## method Gehan is much faster but does not optimally handle censored observations
+BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
+                method.tte = "Gehan", trace = 0)
+summary(BT)
+
+#### one time to event endpoint: only differences in survival over 1 unit ####
+BT <- BuyseTest(Treatment ~ TTE(eventtime, threshold = 1, censoring = status), data=df.data)
+summary(BT)
+
+#### one time to event endpoint with a strata variable
+BT <- BuyseTest(Treatment ~ strata + TTE(eventtime, censoring = status), data=df.data)
+summary(BT)
+
+#### several endpoints with a strata variable
+f <- Treatment ~ strata + T(eventtime, 1, status) + B(toxicity) 
+f <- update(f, 
+            ~. + T(eventtime, 0.5, status) + C(score, 1) + T(eventtime, 0.25, status))
+
+BT <- BuyseTest(f, data=df.data)
+summary(BT)
+
 #### real example : Veteran dataset of the survival package ####
 #### Only one endpoint. Type = Time-to-event. Thresold = 0. Stratfication by histological subtype
-#### method = "Gehan"
+#### method.tte = "Gehan"
 
+if(require(survival)){
 \dontrun{
   data(veteran,package="survival")
-  library(BuyseTest)
-  BT_Gehan <- BuyseTest(data=veteran,endpoint="time",treatment="trt",strata="celltype",
-                        type="timeToEvent",censoring="status",threshold=0,
-                        n.bootstrap=10000,method="Gehan",cpus="all")
+ 
+  ## method.tte = "Gehan"
+  BT_Gehan <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,censoring=status), 
+                        data=veteran, method.tte="Gehan",
+                        method.inference = "permutation", n.resampling = 1e3)
   
   summary_Gehan <- summary(BT_Gehan)
+  summary_Gehan <- summary(BT_Gehan, statistic = "winRatio")
   
-  #### method = "Peron"
-  
-  BT_Peron <- BuyseTest(data=veteran,endpoint="time",treatment="trt",strata="celltype",
-                        type="timeToEvent",censoring="status",threshold=0,
-                        n.bootstrap=1000,method="Peron",cpus="all")
-  
-  summary_Peron <- summary(BT_Peron)
+  ## method.tte = "Peron"
+  BT_Peron <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,censoring=status), 
+                        data=veteran, method.tte="Peron",
+                        method.inference = "permutation", n.resampling = 1e3)
+
+  class(BT_Peron)
+  summary(BT_Peron)
 }
-
-#### Several endpoints :
-#######Survival, a time-to-event endpoint
-#######Toxicity, a continuous/ordinal endpoint : 6 grades of maximal adverse event 
-
-set.seed(10)
-
-n.Treatment <- 100
-n.Control <- 100
-prob.Treatment_TOX <- c(0.5,0.25,0.10,0.075,0.05,0.025)
-prob.Control_TOX <- c(0.7,0.15,0.05,0.05,0.025,0.025)
-
-lambda.Treatment_TTE <- 0.6
-lambda.Control_TTE <- 1
-
-data_test <- data.frame(treatment=c(rep(1,n.Treatment),
-                                    rep(0,n.Control)  ))
-data_test$toxicity <- c(apply(rmultinom(n.Treatment,size=1,
-                                        prob=prob.Treatment_TOX)==1,2,which),
-                        apply(rmultinom(n.Control,size=1,
-                                        prob=prob.Control_TOX)==1,2,which))
-
-data_test$toxicityInv <-6-data_test$toxicity
-
-data_test$EventTime <- c(rexp(n.Treatment,rate=lambda.Treatment_TTE),
-                         rexp(n.Control,rate=lambda.Control_TTE))
-data_test$CensoringTime <- c(rexp(n.Treatment,rate=lambda.Treatment_TTE),
-                             rexp(n.Control,rate=lambda.Control_TTE))
-data_test$CensoringTime[data_test$CensoringTime>4] <- 4
-
-data_test$Survival <- apply(data_test[,c("EventTime","CensoringTime")],1,min)
-data_test$event <- as.numeric(apply(data_test[,c("EventTime","CensoringTime")],
-                                    1,which.min)==1)
-
-resKM_tempo <- survfit(Surv(data_test[,"Survival"],data_test[,"event"])~data_test$treatment)
-plot(resKM_tempo)
-
-all.endpoints <- c("Survival","toxicityInv","Survival","toxicityInv","Survival","toxicityInv")
-
-#### method = "Gehan". 
-\dontrun{
-BT_Gehan <- BuyseTest(data=data_test,method="Gehan",
-                      endpoint=all.endpoints,
-                      treatment="treatment",
-                      censoring=c("event",NA,"event",NA,"event",NA),
-                      type=c("TTE","cont","TTE","cont","TTE","cont"),
-                      threshold=c(1.5,3,0.75,2,0.25,1),n.bootstrap=100,trace=2,cpus="all")
 }
-\dontshow{
-  BT_Gehan <- BuyseTest(data=data_test,method="Gehan",
-                        endpoint=all.endpoints,
-                        treatment="treatment",
-                        censoring=c("event",NA,"event",NA,"event",NA),
-                        type=c("TTE","cont","TTE","cont","TTE","cont"),
-                        threshold=c(1.5,3,0.75,2,0.25,1),n.bootstrap=1,trace=0,cpus=1)
-  
-}
-summary(BT_Gehan)
-
-#### method = "Peron". 
-
-\dontrun{
-  BT_Peron <- BuyseTest(data=data_test,method="Peron",
-                      endpoint=all.endpoints,
-                      treatment="treatment",
-                      censoring=c("event",NA,"event",NA,"event",NA),
-                      type=c("TTE","cont","TTE","cont","TTE","cont"),
-                      threshold=c(1.5,3,0.75,2,0.25,1),n.bootstrap=100,trace=2,cpus="all")
-}
-\dontshow{
-  BT_Peron <- BuyseTest(data=data_test,method="Peron",
-                        endpoint=all.endpoints,
-                        treatment="treatment",
-                        censoring=c("event",NA,"event",NA,"event",NA),
-                        type=c("TTE","cont","TTE","cont","TTE","cont"),
-                        threshold=c(1.5,3,0.75,2,0.25,1),n.bootstrap=1,trace=0,cpus=1)
-}
-summary(BT_Peron)
