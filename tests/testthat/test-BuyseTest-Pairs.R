@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar 30 2018 (13:17) 
 ## Version: 
-## Last-Updated: maj 26 2018 (17:05) 
+## Last-Updated: sep 24 2018 (10:40) 
 ##           By: Brice Ozenne
-##     Update #: 128
+##     Update #: 145
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -24,7 +24,7 @@ context("Check BuyseTest on simple examples")
 
 ## * settings
 BuyseTest.options(check = FALSE,
-                  keep.comparison = TRUE,
+                  keep.pairScore = TRUE,
                   method.inference = "none",
                   trace = 0)
 
@@ -39,7 +39,7 @@ test_that("check favorable - 1 Binary",{
     expect_equal(as.double(BT@count.unfavorable),0)
     expect_equal(as.double(BT@count.neutral),0)
     expect_equal(as.double(BT@count.uninf),0)
-    ## BT@tableComparison
+    ## getPairScore(BT)
 
     ## several pairs
     data2 <- rbind(data, data)
@@ -48,7 +48,7 @@ test_that("check favorable - 1 Binary",{
     expect_equal(as.double(BT@count.unfavorable),0)
     expect_equal(as.double(BT@count.neutral),0)
     expect_equal(as.double(BT@count.uninf),0)
-    ## BT@tableComparison
+    ## getPairScore(BT)
 
     ## with strata
     data3 <- rbind(cbind(data2, strata = 0), cbind(data2, strata = 1))
@@ -57,7 +57,7 @@ test_that("check favorable - 1 Binary",{
     expect_equal(as.double(BT@count.unfavorable),c(0,0))
     expect_equal(as.double(BT@count.neutral),c(0,0))
     expect_equal(as.double(BT@count.uninf),c(0,0))
-    ## BT@tableComparison
+    ## getPairScore(BT)
 
 })
 
@@ -86,7 +86,7 @@ test_that("check unfavorable - 1 Binary",{
     expect_equal(as.double(BT@count.unfavorable),c(4,4))
     expect_equal(as.double(BT@count.neutral),c(0,0))
     expect_equal(as.double(BT@count.uninf),c(0,0))
-    ## BT@tableComparison
+    ## getPairScore(BT)
 
 })
 
@@ -115,7 +115,7 @@ test_that("check neutral - 1 Binary",{
     expect_equal(as.double(BT@count.unfavorable),c(0,0))
     expect_equal(as.double(BT@count.neutral),c(4,4))
     expect_equal(as.double(BT@count.uninf),c(0,0))
-    ## BT@tableComparison
+    ## getPairScore(BT)
 })
 
 ## ** NA as uninformative
@@ -144,7 +144,7 @@ test_that("check unfavorable - 2 Binary",{
                      toxicity2 = c(1,0),
                      Id = 1:10)
     BT <- BuyseTest(Treatment ~ bin(toxicity1) + bin(toxicity2), data = dt)
-    ## BT@tableComparison
+    ## getPairScore(BT)
 
     ## total pairs: 25
     expect_equal(as.double(BT@count.favorable),c(0,0))
@@ -165,8 +165,8 @@ test_that("check mixed - 2 Binary",{
                      toxicity1 = 0,
                      toxicity2 = c(1,0,1,0))
     BT <- BuyseTest(Treatment ~ bin(toxicity1) + bin(toxicity2), data = dt,
-                    keep.comparison = TRUE)
-    ## BT@tableComparison
+                    keep.pairScore = TRUE)
+    ## getPairScore(BT)
 
     expect_equal(as.double(BT@count.favorable),c(0,1))
     expect_equal(as.double(BT@count.unfavorable),c(0,1))
@@ -438,7 +438,7 @@ test_that("check NA - time to event",{
     expect_equal(as.double(BT@count.uninf),0)
 })
 
-## * one time to event endpoint (extrapolation using Peto/Efron/Peron)
+## * one time to event endpoint (extrapolation using Gehan/Peron)
 ## ** with 2 pairs
 # one is censored
 dt.2pairs <- data.table(id = 1:4,
@@ -448,9 +448,9 @@ dt.2pairs <- data.table(id = 1:4,
 
 
 ## *** Gehan
-test_that("2 pairs - Gehan",{
+test_that("2 pairs - Gehan - no correction",{
     BT <- BuyseTest(treat ~ tte(time, threshold = 0, censoring = cens), data = dt.2pairs,
-                    method.tte="Gehan")
+                    method.tte="Gehan", correction.uninf = FALSE)
   
     expect_equal(as.double(BT@count.favorable),0)
     expect_equal(as.double(BT@count.unfavorable),2)
@@ -464,72 +464,32 @@ test_that("2 pairs - Gehan",{
     expect_equal(as.double(BT@Delta.winRatio),0)
 })
 
-## *** Peto
-test_that("2 pairs - Peto",{ 
+test_that("2 pairs - Gehan - correction",{
     BT <- BuyseTest(treat ~ tte(time, threshold = 0, censoring = cens), data = dt.2pairs,
-                    method.tte="Peto")
-
-    ## same survival curve for both groups (denoting S survival time and T group)
-    ## P[T>=t|T=0,S>=10] = P[S>=t|S>=10] = 1 (t=<12), 2/3 (12<t=<20), 1/3 (20<t=<32), 0 (t>32)
-    ## summary(survival::survfit(survival::Surv(time=time, event=cens) ~ 1, data=dt.2pairs))
-
-    ## all comparisons (see BT@tableComparison)
-    ## 10* vs 20 : unfavorable (1/3) favorable (1/3) uninformative (1/3)
-    ## Indeed in P[S>20|T=0,S>=10] = 1/3 and P[S<20|T=0,S>=10] = 1-P[S>=20|T=0,S>=10]= 1-2/3 = 1/3
-    ## 10* vs 32 : unfavorable (2/3) favorable (0) uninformative (1/3)
-    ## Indeed in P[S>32|T=0,S>12] = 0 and P[S<32|T=0,S>=10] = 1-P[S>=32|T=0,S>=10] = 1-1/3 = 2/3
-    ## 12 vs 20 : unfavorable
-    ## 12 vs 32 : unfavorable
-
-    expect_equal(as.double(BT@count.favorable),1/3)
-    expect_equal(as.double(BT@count.unfavorable),3)
-    expect_equal(as.double(BT@count.neutral),0)
-    expect_equal(as.double(BT@count.uninf),2/3)
-
-    expect_equal(as.double(BT@delta.netChance),-2/3)
-    expect_equal(as.double(BT@Delta.netChance),-2/3)
-
-    expect_equal(as.double(BT@delta.winRatio),1/9)
-    expect_equal(as.double(BT@Delta.winRatio),1/9)
-})
-
-## *** Efron
-test_that("2 pairs - Efron",{
-    BT <- BuyseTest(treat ~ tte(time, threshold = 0, censoring = cens), data = dt.2pairs,
-                    method.tte="Efron")
+                    method.tte="Gehan", correction.uninf = TRUE)
   
-    ## different survival curve per groups (denoting S survival time and T group)
-    ## P[T>=t|T=0,S>=10] = 1 (t=<12), 0 (t>12)
-    ## P[T>=t|T=1,S>=10] = 1 (t=<20), 1/2 (20<t=<32), 0 (t>32)
-
-    ## all comparisons (see BT@tableComparison)
-    ## 10* vs 20 : unfavorable
-    ## 10* vs 32 : unfavorable
-    ## 12 vs 20 : unfavorable
-    ## 12 vs 32 : unfavorable
-
     expect_equal(as.double(BT@count.favorable),0)
     expect_equal(as.double(BT@count.unfavorable),4)
     expect_equal(as.double(BT@count.neutral),0)
     expect_equal(as.double(BT@count.uninf),0)
-  
-    expect_equal(as.double(BT@delta.netChance),-1)
-    expect_equal(as.double(BT@Delta.netChance),-1)
+ 
+    expect_equal(as.double(BT@delta.netChance),-1) ## 
+    expect_equal(as.double(BT@Delta.netChance),-1) ##
     
     expect_equal(as.double(BT@delta.winRatio),0)
     expect_equal(as.double(BT@Delta.winRatio),0)
 })
 
 ## *** Peron
-test_that("2 pairs - Peron",{
+test_that("2 pairs - Peron - no correction",{
     BT <- BuyseTest(treat ~ tte(time, threshold = 0, censoring = cens), data = dt.2pairs,
-                    method.tte="Peron")
+                    method.tte="Peron", correction.uninf = FALSE)
   
     ## different survival curve per groups (denoting S survival time and T group)
     ## P[T>=t|T=0,S>=10] = 1 (t=<12), 0 (t>12)
     ## P[T>=t|T=1,S>=10] = 1 (t=<20), 1/2 (20<t=<32), 0 (t>32)
 
-    ## all comparisons (see BT@tableComparison)
+    ## all pairScores (see getPairScore(BT))
     ## 10* vs 20 : unfavorable
     ## 10* vs 32 : unfavorable
     ## 12 vs 20 : unfavorable
@@ -548,49 +508,33 @@ test_that("2 pairs - Peron",{
   
 })
 
-## * two time to events
-## ** unbalanced number of pairs
-## check previous bug with export of the pairs
-dt <- data.table("Treatment" = c(1, 0, 0, 0), 
-                 "eventtime1" = c(0.68, 0.84, 0.43, 0.48), 
-                 "status1" = c(1, 0, 0, 1), 
-                 "eventtime2" = c(0.37, 0.85, 1.04, 1.33), 
-                 "status2" = c(0, 0, 1, 0))
+test_that("2 pairs - Peron - correction",{
+    BT <- BuyseTest(treat ~ tte(time, threshold = 0, censoring = cens), data = dt.2pairs,
+                    method.tte="Peron", correction.uninf = TRUE)
+  
+    ## different survival curve per groups (denoting S survival time and T group)
+    ## P[T>=t|T=0,S>=10] = 1 (t=<12), 0 (t>12)
+    ## P[T>=t|T=1,S>=10] = 1 (t=<20), 1/2 (20<t=<32), 0 (t>32)
 
-test_that("check previous bug with option keep.comparison",{
-    ## the bug was some of the results of BT@tableComparison were set to random intialization values (when C++ create the vector)
-    ## because they were not updated during the execution of the function
-    BT <- BuyseTest(Treatment ~ tte(eventtime1, 1, status1) + tte(eventtime2, 0.5, status2),
-                    data = dt, method.tte = "Gehan")
+    ## all pairScores (see getPairScore(BT))
+    ## 10* vs 20 : unfavorable
+    ## 10* vs 32 : unfavorable
+    ## 12 vs 20 : unfavorable
+    ## 12 vs 32 : unfavorable
 
-    GS <- list(eventtime1_1 = data.table("strata" = factor(c("1", "1", "1")), 
-                                         "index.1" = c(1, 1, 1), 
-                                         "index.0" = c(2, 3, 4), 
-                                         "indexWithinStrata.1" = c(1, 1, 1), 
-                                         "indexWithinStrata.0" = c(1, 2, 3), 
-                                         "favorable" = c(0, 0, 0), 
-                                         "unfavorable" = c(0, 0, 0), 
-                                         "neutral" = c(0, 0, 1), 
-                                         "uninformative" = c(1, 1, 0)) ,
-               eventtime2_0.5 = data.table("strata" = factor(c("1", "1", "1")), 
-                                           "index.1" = c(1, 1, 1), 
-                                           "index.0" = c(4, 2, 3), 
-                                           "indexWithinStrata.1" = c(1, 1, 1), 
-                                           "indexWithinStrata.0" = c(3, 1, 2), 
-                                           "favorable" = c(0, 0, 0), 
-                                           "unfavorable" = c(0, 0, 0), 
-                                           "neutral" = c(0, 0, 0), 
-                                           "uninformative" = c(1, 1, 1))
-               )
+    expect_equal(as.double(BT@count.favorable),0)
+    expect_equal(as.double(BT@count.unfavorable),4)
+    expect_equal(as.double(BT@count.neutral),0)
+    expect_equal(as.double(BT@count.uninf),0)
+  
+    expect_equal(as.double(BT@delta.netChance),-1)
+    expect_equal(as.double(BT@Delta.netChance),-1)
 
-    expect_equal(BT@tableComparison[[1]],GS[[1]])
-    expect_equal(BT@tableComparison[[2]],GS[[2]])
-             
-    expect_equal(as.double(BT@count.favorable),c(0,0))
-    expect_equal(as.double(BT@count.unfavorable),c(0,0))
-    expect_equal(as.double(BT@count.neutral),c(1,0))
-    expect_equal(as.double(BT@count.uninf),c(2,3))
+    expect_equal(as.double(BT@delta.winRatio),0)
+    expect_equal(as.double(BT@Delta.winRatio),0)
+  
 })
+
 ##----------------------------------------------------------------------
 ### test-BuyseTest-Pairs.R ends here
 

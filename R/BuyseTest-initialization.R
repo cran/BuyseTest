@@ -8,7 +8,7 @@
 #' 
 #' \code{initializeArgs}: Normalize the argument 
 #' \itemize{
-#' \item method.tte, neutral.as.uninf, keep.comparison, n.resampling, seed, cpus, trace: set to default value when not specified.
+#' \item method.tte, neutral.as.uninf, keep.pairScore, n.resampling, seed, cpus, trace: set to default value when not specified.
 #' \item formula: call \code{initializeFormula} to extract arguments.
 #' \item type: convert to numeric.
 #' \item censoring: only keep censoring relative to TTE endpoint. Set to \code{NULL} if no TTE endpoint.
@@ -26,8 +26,6 @@
 #' \code{initializeData}: Divide the dataset into two, one relative to the treatment group and the other relative to the control group.
 #' Merge the strata into one with the interaction variable.
 #' Extract for each strata the index of the observations within each group.
-#' Apply Efron correction (when method.tte is set to Efron), i.e. set the last event to an observed event.
-#' 
 #' \code{initializeSurvival}: Compute the survival via KM.
 #' 
 #' @keywords function internal BuyseTest
@@ -41,8 +39,10 @@ initializeArgs <- function(alternative,
                            data,
                            endpoint,
                            formula,
-                           keep.comparison,
+                           keep.pairScore,
                            method.tte,
+                           correction.uninf,
+                           model.tte,
                            method.inference,
                            n.resampling,
                            neutral.as.uninf,
@@ -58,8 +58,9 @@ initializeArgs <- function(alternative,
 
     ## ** apply default options
     if(is.null(cpus)){ cpus <- option$cpus }
-    if(is.null(keep.comparison)){ keep.comparison <- option$keep.comparison }
+    if(is.null(keep.pairScore)){ keep.pairScore <- option$keep.pairScore }
     if(is.null(method.tte)){ method.tte <- option$method.tte }
+    if(is.null(correction.uninf)){ correction.uninf <- option$correction.uninf }
     if(is.null(method.inference)){ method.inference <- option$method.inference }
     if(is.null(n.resampling)){ n.resampling <- option$n.resampling }
     if(is.null(neutral.as.uninf)){ neutral.as.uninf <- option$neutral.as.uninf }
@@ -135,28 +136,12 @@ initializeArgs <- function(alternative,
     }
     
     ## ** method.tte
+    ## WARNING: choices must be lower cases
+    ##          remember to update check method.tte (in BuyseTest-check.R)
     method.tte <- tolower(method.tte)
-    correction.tte <- switch(method.tte,
-                             "gehan" = FALSE,
-                             "gehan corrected" = TRUE,
-                             "peto" = FALSE,
-                             "peto corrected" = TRUE,
-                             "efron" = FALSE,
-                             "efron corrected" = TRUE,
-                             "peron" = FALSE,
-                             "peron corrected" = TRUE,
-                             NA
-                             )
-
     method.tte <- switch(method.tte,
                          "gehan" = 0,
-                         "gehan corrected" = 0,
-                         "peto" = 1,
-                         "peto corrected" = 1,
-                         "efron" = 2,
-                         "efron corrected" = 2,
-                         "peron" = 3,
-                         "peron corrected" = 3,
+                         "peron" = 1,
                          NA
                          )
 
@@ -167,6 +152,20 @@ initializeArgs <- function(alternative,
         }
     }
 
+
+    ## ** correction.uninf
+    correction.uninf <- as.numeric(correction.uninf)
+
+    ## ## ** model.tte
+    if(method.tte > 0){
+        if((!is.null(model.tte)) && (D.TTE == 1) && inherits(model.tte, "prodlim")){
+            model.tte <- list(model.tte)
+            names(model.tte) <- endpoint[type==3]
+        }
+    }else{
+        model.tte <- NULL
+    }
+
     ## ** alternative
     alternative <- tolower(alternative)
     
@@ -174,21 +173,23 @@ initializeArgs <- function(alternative,
     if (cpus == "all") { 
         cpus <- parallel::detectCores() # this function detect the number of CPU cores 
     }
-    
+
     ## ** export
     return(list(
         alternative = alternative,
         name.call = name.call,
         censoring = censoring,
-        correction.tte = correction.tte,
+        correction.uninf = correction.uninf,
         cpus = cpus,
         D = length(endpoint),
         D.TTE = sum(type == 3),
         data = data,
         endpoint = endpoint,
         formula = formula,
-        keep.comparison = keep.comparison,
+        keep.pairScore = keep.pairScore,
+        keep.survival = option$keep.survival,
         method.tte = method.tte,
+        model.tte = model.tte,
         method.inference = method.inference,
         n.resampling = n.resampling,
         neutral.as.uninf = neutral.as.uninf,
@@ -211,6 +212,7 @@ initializeData <- function(data, type, endpoint, operator, strata, treatment){
     }else{
         data <- data.table::copy(data)
     }
+    n.strata <- length(strata)
 
     ## ** convert character/factor to numeric for binary endpoints
     name.bin <- endpoint[which(type %in% 1)]
@@ -241,17 +243,25 @@ initializeData <- function(data, type, endpoint, operator, strata, treatment){
 
     ## ** treatment
     level.treatment <- levels(as.factor(data[[treatment]]))
+    data[ , c(treatment) := as.numeric(as.character(factor(.SD[[1]], levels = level.treatment, labels = 0:1))), .SDcols = treatment]
 
-    
     ## ** strata
-    if(!is.null(strata) && length(strata) > 0){
-        data[ , c(strata[1]) := interaction(.SD[[1]], drop = TRUE, lex.order = FALSE, sep="."), .SDcols = strata] # combine all strata variable into one
-        level.strata <- levels(data[[strata[1]]])
-        data[ , c(strata[1]) := as.numeric(.SD[[1]]), .SDcols = strata[1]] # convert to numeric
-        allstrata <- strata[1]
-    }else{
+    if(is.null(strata)){
         level.strata <- "1"
         allstrata <- NULL
+    }else {
+        ## data[ , c(".allStrata") := paste0(strata[1],"=",.SD[[strata[1]]])]
+        ## if(n.strata>1){
+            ## for(iStrata in 2:n.strata){ ## add var=value
+                ## data[ , c(".allStrata") := paste0(.SD$.allStrata,".",paste0(strata[iStrata],"=",.SD[[strata[iStrata]]]))]
+            ## }
+        ## }
+        ## data[ , c(".allStrata") := as.factor(.SD$.allStrata)]
+
+        data[ , c(".allStrata") := interaction(.SD, drop = TRUE, lex.order = FALSE, sep = "."), .SDcols = strata]
+        level.strata <- levels(data[[".allStrata"]])        
+        data[ , c(".allStrata") := as.numeric(.SD$.allStrata)] # convert to numeric
+        allstrata <- ".allStrata"
     }
 
     ## ** n.obs
@@ -357,7 +367,7 @@ initializeFormula <- function(x){
     }else{
         strata <- vec.x.rhs[index.strata]
     }
-    
+
     ## ** number of endpoint variables    
     vec.x.endpoint <- vec.x.rhs[index.endpoint]
     n.endpoint <- length(vec.x.endpoint)
@@ -380,7 +390,7 @@ initializeFormula <- function(x){
     for(iE in 1:n.endpoint){
         ## extract type
         type[iE] <- ls.x.endpoint[[iE]][1]
-        
+
         ## get each argument
         iVec.args <- strsplit(gsub(")", replacement = "",ls.x.endpoint[[iE]][2]),
                               split = ",", fixed = TRUE)[[1]]
@@ -427,7 +437,15 @@ initializeFormula <- function(x){
         ## extract arguments
         endpoint[iE] <- gsub("\"","",iArg[iName=="endpoint"])
         if("threshold" %in% iName){
-            threshold[iE] <- as.numeric(iArg[iName=="threshold"])
+            thresholdTempo <- tryCatch(as.numeric(iArg[iName=="threshold"]),
+                                       error = function(c){ "error" },
+                                       warning = function(c){ "warning" }
+                                       )
+            if(thresholdTempo %in% c("error", "warning")){ ## maybe a variable was passed instead of a value
+              thresholdTempo <- eval(expr = parse(text = iArg[iName=="threshold"]))
+            }
+            
+            threshold[iE] <- thresholdTempo
         }
         if("censoring" %in% iName){
             censoring[iE] <- gsub("\"","",iArg[iName=="censoring"])
@@ -448,224 +466,178 @@ initializeFormula <- function(x){
 }
 
 ## * initializeSurvival
-## ** initializeSurvival_Peto
 #' @rdname internal-initialization
-initializeSurvival_Peto <- function(M.Treatment,
-                                    M.Control,
-                                    M.delta.Treatment,
-                                    M.delta.Control,
-                                    D.TTE,
-                                    endpoint,
-                                    type,
-                                    threshold,
-                                    index.strataT,
-                                    index.strataC,
-                                    n.strata){
-
-    D.TTE <- sum(type==3)
-    
-    ## ** conversion to R index
-    index.strataT <- lapply(index.strataT,function(x){x+1})
-    index.strataC <- lapply(index.strataC,function(x){x+1})
-    
-    ## ** preparing 
-    colnamesT <- paste("Survival_TimeT",c("-threshold","_0","+threshold"),sep="")
-    colnamesC <- paste("Survival_TimeC",c("-threshold","_0","+threshold"),sep="")
-
-    ## list of matrix of survival data for each endpoint in the treatment arm
-    list.survivalT <- rep(list(matrix(NA,
-                                      nrow=nrow(M.Treatment),
-                                      ncol=3,
-                                      dimnames=list(1:nrow(M.Treatment),colnamesT))),
-                          times=D.TTE) 
-    ## list of matrix of survival data for each endpoint in the control arm
-    list.survivalC <- rep(list(matrix(NA,
-                                      nrow=nrow(M.Control),
-                                      ncol=3,
-                                      dimnames=list(1:nrow(M.Control),colnamesC))),
-                          times=D.TTE) 
-
-    
-    ## ** Compute survival in each strata 
-    for(iStrata in 1:n.strata){
-
-        Mstrata.Treatment <- M.Treatment[index.strataT[[iStrata]],,drop=FALSE]
-        Mstrata.Control <- M.Control[index.strataC[[iStrata]],,drop=FALSE]
-        Mstrata.delta.Treatment <- M.delta.Treatment[index.strataT[[iStrata]],,drop=FALSE]
-        Mstrata.delta.Control <- M.delta.Control[index.strataC[[iStrata]],,drop=FALSE]
-        
-        for(iEndpoint.TTE in 1:D.TTE){
-            
-            time_treatment <- Mstrata.Treatment[,endpoint[type==3][iEndpoint.TTE]] # store the event times of the treatment arm for a given TTE endpoint
-            time_control <- Mstrata.Control[,endpoint[type==3][iEndpoint.TTE]] # store the event times of the control arm for a given TTE endpoint
-                
-            ## prefer c(time_treatment,time_control) to time_all to avoid rounding error
-            df.all <- data.frame(time = c(time_treatment,time_control),
-                                 status = c(Mstrata.delta.Treatment[,iEndpoint.TTE], Mstrata.delta.Control[,iEndpoint.TTE]))
-
-            ## *** estimate survival
-            resKM_tempo <- prodlim::prodlim(prodlim::Hist(time,status)~1, data = df.all)
-
-            ## *** define interpolation function
-            if(all(df.all$status[which(df.all$time==max(df.all$time))]==1)){ # step interpolation of the survival function
-                survestKM_tempo <- stats::approxfun(x=unique(sort(c(time_treatment,time_control))),y=resKM_tempo$surv,
-                                                    yleft=1,yright=0,f=0, method= "constant") # 0 at infinity if last event is a death
-                    
-            }else{
-                survestKM_tempo <- stats::approxfun(x=unique(sort(c(time_treatment,time_control))),y=resKM_tempo$surv,
-                                                    yleft=1,yright=NA,f=0, method= "constant") # NA at infinity if last event is a death
-            }
-
-            ## *** apply interpolation function to event times (treatment group)
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],1] <- survestKM_tempo(time_treatment-threshold[type==3][iEndpoint.TTE]) # survival at t - tau, tau being the threshold
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],2] <- survestKM_tempo(time_treatment) # survival at t
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],3] <- survestKM_tempo(time_treatment+threshold[type==3][iEndpoint.TTE]) # survival at t + tau
-                
-            rownames(list.survivalT[[iEndpoint.TTE]])[index.strataT[[iStrata]]] <- time_treatment
-                
-            ## *** apply interpolation function to event times (control group)
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],1] <- survestKM_tempo(time_control-threshold[type==3][iEndpoint.TTE]) # survival at t - tau
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],2] <- survestKM_tempo(time_control) # survival at t
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],3] <- survestKM_tempo(time_control+threshold[type==3][iEndpoint.TTE]) # survival at t + tau
-                
-            rownames(list.survivalC[[iEndpoint.TTE]])[index.strataC[[iStrata]]] <- time_control    
-        }        
-        
-    }
-
-    ## ** export
-    return(list(list.survivalT=list.survivalT,
-                list.survivalC=list.survivalC))
-    
-}
-## ** initializeSurvival_Peron
-#' @rdname internal-initialization
-initializeSurvival_Peron <- function(M.Treatment,
-                                     M.Control,
-                                     M.delta.Treatment,
-                                     M.delta.Control,
-                                     D.TTE,
+initializeSurvival_Peron <- function(data, dataT, dataC,
+                                     model.tte,
+                                     n.T, n.C,
+                                     treatment,
+                                     level.treatment,
                                      endpoint,
+                                     censoring,
+                                     D.TTE,
                                      type,
+                                     strata,
                                      threshold,
                                      index.strataT,
                                      index.strataC,
                                      n.strata){
-    
+
+    threshold.TTE <- threshold[type==3]
+    endpoint.TTE <- endpoint[type==3]
+
     ## ** conversion to R index
     index.strataT <- lapply(index.strataT,function(x){x+1})
     index.strataC <- lapply(index.strataC,function(x){x+1})
     
-    ## ** preparing 
-    colnamesT <- c(paste("SurvivalT_TimeT",c("-threshold","_0","+threshold"),sep=""),
-                   paste("SurvivalC_TimeT",c("-threshold","_0","+threshold"),sep=""),
-                   "SurvivalT_TimeT_0(ordered)","SurvivalC_TimeT-threshold(ordered)","SurvivalC_TimeT+threshold(ordered)",
-                   "time_control(ordered)","events(ordered)") 
+    ## ** estimate survival
+    if(is.null(model.tte)){
+        model.tte <- vector(length = D.TTE, mode = "list")
+        names(model.tte) <- endpoint.TTE
+
+        txt.modelTTE <- paste0("prodlim::Hist(",endpoint.TTE,",",censoring,") ~ ",treatment)
+        if(!is.null(strata)){
+            txt.modelTTE <- paste0(txt.modelTTE," + .allStrata")
+        }
         
-    colnamesC <- c(paste("SurvivalC_TimeC",c("-threshold","_0","+threshold"),sep=""),
-                   paste("SurvivalT_TimeC",c("-threshold","_0","+threshold"),sep=""),
-                   "SurvivalC_TimeC_0(ordered)","SurvivalT_TimeC-threshold(ordered)","SurvivalT_TimeC+threshold(ordered)",
-                   "time_control(ordered)","events(ordered)") 
-        
-    list.survivalT <- rep(list(matrix(NA,
-                                      nrow=nrow(M.Treatment),
-                                      ncol=11,
-                                      dimnames=list(1:nrow(M.Treatment),colnamesT))),
-                          times=D.TTE) # list of matrix of survival data for each endpoint in the treatment arm
-    list.survivalC <- rep(list(matrix(NA,
-                                      nrow=nrow(M.Control),
-                                      ncol=11,
-                                      dimnames=list(1:nrow(M.Control),colnamesC))),
-                          times=D.TTE) # list of matrix of survival data for each endpoint in the control arm
-    
-    ## ** Compute survival in each strata 
-    for(iStrata in 1:n.strata){
-
-        Mstrata.Treatment <- M.Treatment[index.strataT[[iStrata]],,drop=FALSE]
-        Mstrata.Control <- M.Control[index.strataC[[iStrata]],,drop=FALSE]
-        Mstrata.delta.Treatment <- M.delta.Treatment[index.strataT[[iStrata]],,drop=FALSE]
-        Mstrata.delta.Control <- M.delta.Control[index.strataC[[iStrata]],,drop=FALSE]
-        
-        for(iEndpoint.TTE in 1:D.TTE){
-
-            ## *** estimate survival
-            ## treatment group
-            df.treatment <- data.frame(time = Mstrata.Treatment[,endpoint[type==3][iEndpoint.TTE]], # store the event times of the treatment arm for a given TTE endpoint
-                                       status = Mstrata.delta.Treatment[,iEndpoint.TTE])
-                
-            resKMT_tempo <- prodlim::prodlim(prodlim::Hist(time,status)~1, data = df.treatment)
-                                        # prefer sort(time_treatment) to resKMT_tempo$time to avoid rounding error
-
-            ## control group
-            df.control <- data.frame(time = Mstrata.Control[,endpoint[type==3][iEndpoint.TTE]], # store the event times of the treatment arm for a given TTE endpoint
-                                     status = Mstrata.delta.Control[,iEndpoint.TTE])
-                
-            resKMC_tempo <- prodlim::prodlim(prodlim::Hist(time,status)~1, data = df.control) 
-
-            ## *** define interpolation function (treatment group)
-            ## treatment group
-            if(all(Mstrata.delta.Treatment[which(df.treatment$time==max(df.treatment$time)),iEndpoint.TTE]==1)){ # step interpolation of the survival function (last = event)
-                    
-                    survestKMT_tempo <- stats::approxfun(x=unique(sort(df.treatment$time)),y=resKMT_tempo$surv,
-                                                         yleft=1,yright=0,f=0, method = "constant") # 0 at infinity if last event is a death      
-                    
-            }else{ # step interpolation of the survival function (last = censoring)
-                    
-                survestKMT_tempo <- stats::approxfun(x=unique(sort(df.treatment$time)),y=resKMT_tempo$surv,
-                                                     yleft=1,yright=NA,f=0, method = "constant") # NA at infinity if last event is censored
-                    
-            }
-
-            ## control group
-            if(all(Mstrata.delta.Control[which(df.control$time==max(df.control$time)),iEndpoint.TTE]==1)){  # step interpolation of the survival function (last = event)
-                    
-                survestKMC_tempo <- stats::approxfun(x=unique(sort(df.control$time)), y=resKMC_tempo$surv,
-                                                     yleft=1,yright=0,f=0, method= "constant") # 0 at infinity if last event is a death
-                    
-            }else{ # step interpolation of the survival function (last = censoring)
-                    
-                survestKMC_tempo <- stats::approxfun(x=unique(sort(df.control$time)),y=resKMC_tempo$surv,
-                                                     yleft=1,yright=NA,f=0, method= "constant") # NA at infinity if last event is censored      
-                    
-            }
-
-            ## *** apply interpolation function to event times
-            ## treatment group
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],1] <- survestKMT_tempo(df.treatment$time-threshold[type==3][iEndpoint.TTE]) # survival at t - tau, tau being the threshold
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],2] <- survestKMT_tempo(df.treatment$time) # survival at t
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],3] <- survestKMT_tempo(df.treatment$time+threshold[type==3][iEndpoint.TTE]) # survival at t + tau
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],4] <- survestKMC_tempo(df.treatment$time-threshold[type==3][iEndpoint.TTE]) # survival at t - tau
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],5] <- survestKMC_tempo(df.treatment$time) # survival at t
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],6] <- survestKMC_tempo(df.treatment$time+threshold[type==3][iEndpoint.TTE]) # survival at t + tau
-                
-            order_time_treatment <- order(df.treatment$time)
-                
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],7:9] <- list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],c(2,4,6),drop=FALSE][order_time_treatment,,drop=FALSE] # St[t_treatment], Sc[t_treatment-threshold,t_treatment+threshold]
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],10] <-  df.treatment$time[order_time_treatment]
-            list.survivalT[[iEndpoint.TTE]][index.strataT[[iStrata]],11] <-   Mstrata.delta.Treatment[order_time_treatment,iEndpoint.TTE] # to compute the integral (Efron)
-                
-            rownames(list.survivalT[[iEndpoint.TTE]])[index.strataT[[iStrata]]] <- df.treatment$time
-
-            ## control group
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],1] <- survestKMC_tempo(df.control$time-threshold[type==3][iEndpoint.TTE]) # survival at t - tau
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],2] <- survestKMC_tempo(df.control$time) # survival at t
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],3] <- survestKMC_tempo(df.control$time+threshold[type==3][iEndpoint.TTE]) # survival at t + tau
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],4] <- survestKMT_tempo(df.control$time-threshold[type==3][iEndpoint.TTE]) # survival at t - tau, tau being the threshold
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],5] <- survestKMT_tempo(df.control$time) # survival at t
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],6] <- survestKMT_tempo(df.control$time+threshold[type==3][iEndpoint.TTE]) # survival at t + tau                                              
-            order_time_control <- order(df.control$time)
-                
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],7:9] <- list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],c(2,4,6),drop=FALSE][order_time_control,,drop=FALSE] # Sc[t_control], St[t_control-threshold,t_control+threshold]
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],10] <- df.control$time[order_time_control]
-            list.survivalC[[iEndpoint.TTE]][index.strataC[[iStrata]],11] <- Mstrata.delta.Control[order_time_control,iEndpoint.TTE] # to compute the integral (Efron)
-                
-            rownames(list.survivalC[[iEndpoint.TTE]])[index.strataC[[iStrata]]] <- df.control$time    
-                            
+        for(iEndpoint.TTE in 1:D.TTE){ ## iEndpoint.TTE <- 1
+            model.tte[[iEndpoint.TTE]] <- prodlim::prodlim(as.formula(txt.modelTTE[iEndpoint.TTE]),
+                                                           data = data)
+        }
+    }else{ ## convert treatment to numeric
+        for(iEndpoint.TTE in 1:D.TTE){ ## iEndpoint.TTE <- 1
+            model.tte[[iEndpoint.TTE]]$X[[treatment]] <- as.numeric(factor(model.tte[[iEndpoint.TTE]]$X[[treatment]], levels = level.treatment))-1
         }
     }
-    
-    return(list(list.survivalT=list.survivalT,
-                list.survivalC=list.survivalC))
+
+    ## ** predict individual survival
+    ## *** dataset
+    colnames.obs <- c("time",
+                      paste("SurvivalC",c("-threshold","_0","+threshold"),sep=""),
+                      paste("SurvivalT",c("-threshold","_0","+threshold"),sep="")) 
+
+    colnames.jump <- c("time","survival","dSurvival") 
+
+    list.survTimeC <- vector(mode = "list", length = D.TTE) # list of matrix of control in the treatment arm at each observation time
+    list.survTimeT <- vector(mode = "list", length = D.TTE) # list of matrix of survival in the treatment arm at each observation time
+    list.survJumpC <- vector(mode = "list", length = D.TTE)  # list of matrix of survival in the control arm at each jump time
+    list.survJumpT <- vector(mode = "list", length = D.TTE)  # list of matrix of survival in the treatment arm at each jump time
+    list.lastSurv <- vector(mode = "list", length = D.TTE)
+
+    ## *** fill
+    for(iEndpoint.TTE in 1:D.TTE){ ## iEndpoint.TTE <- 1
+
+        iModelStrata <- data.table(model.tte[[iEndpoint.TTE]]$X,
+                                   start = model.tte[[iEndpoint.TTE]]$first.strata,
+                                   stop = model.tte[[iEndpoint.TTE]]$first.strata + model.tte[[iEndpoint.TTE]]$size.strata - 1)
+
+        if(is.null(strata)){
+            iModelStrata[,".allStrata" := 1]
+        }
+        setkeyv(iModelStrata, c(treatment,".allStrata"))
+        n.strata <- length(unique(iModelStrata$.allStrata))
+        
+        ## initialization
+        list.survTimeC[[iEndpoint.TTE]] <- vector(mode = "list", length = n.strata)
+        list.survTimeT[[iEndpoint.TTE]] <- vector(mode = "list", length = n.strata)
+        list.survJumpC[[iEndpoint.TTE]] <- vector(mode = "list", length = n.strata)
+        list.survJumpT[[iEndpoint.TTE]] <- vector(mode = "list", length = n.strata)
+
+        list.lastSurv[[iEndpoint.TTE]] <- matrix(NA, ncol = 2, nrow = n.strata,
+                                                 dimnames = list(NULL,c("Control","Treatment")))
+            
+        for(iStrata in 1:n.strata){ ## iStrata <- 1
+
+            ## **** identify jump times and model
+            for(iGroup in 0:1){ ## iGroup <- 0
+
+                iStart <- iModelStrata[list(iGroup,iStrata),.SD$start]
+                iStop <- iModelStrata[list(iGroup,iStrata),.SD$stop]
+                iAllTime <- model.tte[[iEndpoint.TTE]]$time[iStart:iStop]
+                iAllSurv <- model.tte[[iEndpoint.TTE]]$surv[iStart:iStop]
+                i0LastSurv <- (utils::tail(iAllSurv,1)==0)
+                iOrder <- order(iAllTime)
+
+                iIndex.jump <- intersect(iStart:iStop,which(model.tte[[iEndpoint.TTE]]$hazard>0))
+                if(length(iIndex.jump)==0){ ## i.e. no event
+                    iIndex.jump <- iStart
+                }
+                iJump <- model.tte[[iEndpoint.TTE]]$time[iIndex.jump]
+                
+                if(iGroup == 0){
+                    ## 0 at infinity if last event is a death
+                    predSurvC <- stats::approxfun(x = iAllTime[iOrder],
+                                                  y = iAllSurv[iOrder],
+                                                  yleft=1, yright=switch(as.character(i0LastSurv),
+                                                                         "TRUE" = 0,
+                                                                         "FALSE" = NA),
+                                                  f=0,
+                                                  method = "constant")
+                    jumpC <- iJump
+                    list.lastSurv[[iEndpoint.TTE]][iStrata,"Control"] <- tail(iAllSurv,1)
+                }else if(iGroup == 1){
+                    ## 0 at infinity if last event is a death
+                    predSurvT <- stats::approxfun(x = iAllTime[iOrder],
+                                                  y = iAllSurv[iOrder],
+                                                  yleft=1, yright=switch(as.character(i0LastSurv),
+                                                                         "TRUE" = 0,
+                                                                         "FALSE" = NA),
+                                                  f=0,
+                                                  method = "constant")
+
+                    jumpT <- iJump
+                    list.lastSurv[[iEndpoint.TTE]][iStrata,"Treatment"] <- tail(iAllSurv,1)
+                }
+            }
+
+            ## **** survival at jump times
+            list.survJumpC[[iEndpoint.TTE]][[iStrata]] <- cbind(time = jumpC,
+                                                                survival = predSurvT(jumpC + threshold.TTE[iEndpoint.TTE]),
+                                                                dSurvival = predSurvC(jumpC) - predSurvC(jumpC - 1e-10))
+            
+            list.survJumpT[[iEndpoint.TTE]][[iStrata]] <- cbind(time = jumpT,
+                                                                survival = predSurvC(jumpT + threshold.TTE[iEndpoint.TTE]),
+                                                                dSurvival = predSurvT(jumpT) - predSurvT(jumpT-1e-10))
+            
+            ## **** survival at observation time (+/- threshold)
+            list.survTimeC[[iEndpoint.TTE]][[iStrata]] <- matrix(NA,
+                                                                 nrow = length(index.strataC[[iStrata]]), ncol = length(colnames.obs),
+                                                                 dimnames = list(NULL, colnames.obs))
+            list.survTimeT[[iEndpoint.TTE]][[iStrata]] <- matrix(NA,
+                                                                 nrow = length(index.strataT[[iStrata]]), ncol = length(colnames.obs),
+                                                                 dimnames = list(NULL, colnames.obs))
+
+            iControl.time <- dataC[index.strataC[[iStrata]],.SD[[endpoint.TTE[iEndpoint.TTE]]]]
+            iTreatment.time <- dataT[index.strataT[[iStrata]],.SD[[endpoint.TTE[iEndpoint.TTE]]]]
+
+            for(iGroup in 0:1){ ## iGroup <- 0
+
+                if(iGroup==0){
+                    iPredSurv <- predSurvC
+                    iCol <- c("SurvivalC-threshold","SurvivalC_0","SurvivalC+threshold")
+                }else if(iGroup==1){
+                    iPredSurv <- predSurvT
+                    iCol <- c("SurvivalT-threshold","SurvivalT_0","SurvivalT+threshold")
+                }
+                list.survTimeC[[iEndpoint.TTE]][[iStrata]][,"time"] <- iControl.time
+                list.survTimeC[[iEndpoint.TTE]][[iStrata]][,iCol[1]] <- iPredSurv(iControl.time - threshold.TTE[iEndpoint.TTE]) # survival at t - tau
+                list.survTimeC[[iEndpoint.TTE]][[iStrata]][,iCol[2]] <- iPredSurv(iControl.time) # survival at t
+                list.survTimeC[[iEndpoint.TTE]][[iStrata]][,iCol[3]] <- iPredSurv(iControl.time + threshold.TTE[iEndpoint.TTE]) # survival at t + tau
+
+                list.survTimeT[[iEndpoint.TTE]][[iStrata]][,"time"] <- iTreatment.time
+                list.survTimeT[[iEndpoint.TTE]][[iStrata]][,iCol[1]] <- iPredSurv(iTreatment.time - threshold.TTE[iEndpoint.TTE]) # survival at t - tau
+                list.survTimeT[[iEndpoint.TTE]][[iStrata]][,iCol[2]] <- iPredSurv(iTreatment.time) # survival at t
+                list.survTimeT[[iEndpoint.TTE]][[iStrata]][,iCol[3]] <- iPredSurv(iTreatment.time + threshold.TTE[iEndpoint.TTE]) # survival at t + tau
+
+            }
+
+        }
+    }
+
+    return(list(survTimeC = list.survTimeC,
+                survTimeT = list.survTimeT,
+                survJumpC = list.survJumpC,
+                survJumpT = list.survJumpT,
+                lastSurv = list.lastSurv))
     
 }
 

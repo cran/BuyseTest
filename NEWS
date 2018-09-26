@@ -1,13 +1,31 @@
 # -*- mode: org -*-
 
+* Version 1.4
+** User visble changes - BuyseTest function
+  - NEW FEATURE: Instead of estimating the survival curves on the data
+    used for the GPC, BuyseTest can use pre-defined survival models
+    for method "Peron" (argument model.tte).
+  - NEW FEATURE: methods getSurvival to access the survival
+    probability used by BuyseTest.
+  - NEW FEATURE: getPairScore to access the score of each pair.
+  - NEW FEATURE: argument method.uninf in BuyseTest enables to
+    re-attribute the uninformative scores to favorable/unfavorable/neutral.
+
+** Internal change
+- improve initSurvival and the computation of the Peron (C++ code)
+- change the handling of NA in the survival when using method.tte="Peron" (C++ code)
+- change the way neutralAsUninf is implemented (C++ code)
+
 * Version 1.3
 ** User visble changes - BuyseTest function
   - NEW FEATURE: boostrap resampling (method.inference = "boostrap")
   - NEW FEATURE: confint method to extract confidence intervals
+  - NEW FEATURE: BuyseTest can handle competing risks (experimental) 
   - argument n.permutation becomes n.resampling
   - argument method becomes method.tte
   - add argument method.inference to choose how to compute pvalues and
     CI.
+  - option method.tte="Peto" and method.tte="Efron" have been removed.
 
 ** Internal change
   - reorganize BuyseTest into BuyseTest and .BuyseTest. Make

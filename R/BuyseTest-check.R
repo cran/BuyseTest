@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 27 2018 (23:32) 
 ## Version: 
-## Last-Updated: maj 23 2018 (12:25) 
+## Last-Updated: sep 24 2018 (11:08) 
 ##           By: Brice Ozenne
-##     Update #: 60
+##     Update #: 94
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -23,13 +23,14 @@
 testArgs <- function(alternative,
                      name.call,
                      censoring,
-                     correction.tte,
+                     correction.uninf,
                      cpus,
                      data,
                      endpoint,
                      formula,
-                     keep.comparison,
+                     keep.pairScore,
                      method.tte,
+                     model.tte,
                      method.inference,
                      n.resampling,
                      neutral.as.uninf,
@@ -112,7 +113,33 @@ testArgs <- function(alternative,
                      method = "BuyseTest")
     }
 
+    ## ** method.tte
+    ## must be before time to event endpoints
+    if(is.na(method.tte)){
+        stop("BuyseTest: wrong specification of \'method.tte\' \n",
+             "valid values: \"Gehan\" \"Gehan corrected\" \"Peron\" \"Peron corrected\" \n")
+    }
+
+    ## ## ** model.tte
+    if(!is.null(model.tte)){
+        if(!is.list(model.tte) || length(model.tte) != D.TTE){
+            stop("BuyseTest: argument \'model.tte\' must be a list containing ",D.TTE," elements \n",
+                 "(one for each time to event model) \n")
+        }
+
+        vec.class  <- sapply(model.tte, function(iTTE){inherits(iTTE, "prodlim")})
+        if(any(vec.class == FALSE) ){
+            stop("BuyseTest: argument \'model.tte\' must be a list of \"prodlim\" objects \n")
+        }
+
+        vec.predictors  <- sapply(model.tte, function(iTTE){identical(sort(iTTE$discrete.predictors), sort(c(treatment,strata)))})
+        if(any(vec.predictors == FALSE) ){
+            stop("BuyseTest: argument \'model.tte\' must be a list of \"prodlim\" objects with \"",paste0(c(treatment,strata),collapse = "\" \""),"\" as predictors \n")
+        }        
+    }
+    
     ## ** data (endpoints)
+
     ## *** binary endpoints
     index.Bin <- which(type==1)
     if(length(index.Bin)>0){
@@ -121,9 +148,9 @@ testArgs <- function(alternative,
                 stop("Binary endpoint cannot have more than 2 levels \n",
                      "endpoint: ",endpoint[iBin],"\n")
             }
-            if(any(is.na(data[[endpoint[iBin]]]))){                
-                warning("BuyseTest : endpoint ",endpoint[iBin]," contains NA \n")
-            }
+            ## if(any(is.na(data[[endpoint[iBin]]]))){                
+                ## warning("BuyseTest : endpoint ",endpoint[iBin]," contains NA \n")
+            ## }
         }
     }
 
@@ -137,9 +164,9 @@ testArgs <- function(alternative,
                          refuse.NA =  FALSE,
                          method = "BuyseTest")
 
-            if(any(is.na(data[[endpoint[iCont]]]))){                
-                warning("BuyseTest : endpoint ",endpoint[iCont]," contains NA \n")
-            }
+            ## if(any(is.na(data[[endpoint[iCont]]]))){                
+                ## warning("BuyseTest : endpoint ",endpoint[iCont]," contains NA \n")
+            ## }
         }
     }
 
@@ -153,15 +180,20 @@ testArgs <- function(alternative,
                    refuse.NULL = FALSE,
                    method = "BuyseTest")
 
+        if(method.tte==0){ ## Gehan
+            valid.values.censoring <- 0:2
+        }else if(method.tte==1){ ## Peron
+            valid.values.censoring <- 0:1
+        }
         for(iTTE in index.TTE){
             validNumeric(data[[endpoint[iTTE]]],
                          name1 = endpoint[iTTE],
                          valid.length = NULL,
                          refuse.NA = TRUE,
                          method = "BuyseTest")
-            validNumeric(data[[censoring[which(index.TTE == iTTE)]]],
+            validNumeric(unique(data[[censoring[which(index.TTE == iTTE)]]]),
                          name1 = censoring[which(index.TTE == iTTE)],
-                         valid.values = c(0,1),
+                         valid.values = valid.values.censoring,
                          valid.length = NULL,
                          method = "BuyseTest")
         }
@@ -180,20 +212,14 @@ testArgs <- function(alternative,
                 "when specified, only argument \'formula\' is used \n")
     }
 
-    ## ** keep.comparison
-    validLogical(keep.comparison,
+    ## ** keep.pairScore
+    validLogical(keep.pairScore,
                  valid.length = 1,
                  method = "BuyseTest")
  
-    ## ** method.tte
-    if(is.na(method.tte)){
-        stop("BuyseTest: wrong specification of \'method.tte\' \n",
-             "valid values: \"Gehan\" \"Gehan corrected\" \"Peron\" \"Peron corrected\" \n")
-    }
-
-    ## ** correction.tte
-    validLogical(correction.tte,
-                 valid.length = 1,
+    ## ** correction.uninf
+    validInteger(correction.uninf,
+                 valid.length = 1, valid.values = 0:3,
                  method = "BuyseTest")
 
     ## ** method.inference
@@ -249,6 +275,10 @@ testArgs <- function(alternative,
                  "levels(strataT) : ",paste(levels(strataT),collapse=" "),"\n",
                  "levels(strataC) : ",paste(levels(strataC),collapse=" "),"\n")
         }
+
+        if(".allStrata" %in% names(data)){
+            stop("BuyseTest : argument \'data\' should not contain a column \".allStrata\" \n")
+        }
     
     }
 
@@ -301,11 +331,18 @@ testArgs <- function(alternative,
                method = "BuyseTest")
 
     if (length(level.treatment) != 2) {
-        stop("BuyseTest : wrong specification of \'treatment\' \n",
+        stop("BuyseTest: wrong specification of \'treatment\' \n",
              "the corresponding column in \'data\' must have exactly 2 levels \n",
              "proposed levels : ",paste(level.treatment,collapse = " "),"\n")
     }
 
+    if(any(table(data[[treatment]])==0)){
+        txt.stop <- names(which(table(data[[treatment]])==0))
+        stop("BuyseTest: wrong specification of \'data\' \n",
+             "no observation taking level ",txt.stop," in the treatment variable \n")
+        
+    }
+    
     ## ** type
     if(any(type %in% 1:3 == FALSE)){
         txt <- type[type %in% 1:3 == FALSE]

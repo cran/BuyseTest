@@ -25,7 +25,7 @@
 #' @details 
 #' When using a permutation test, the uncertainty associated with the estimator is computed under the null hypothesis.
 #' Thus the confidence interval may not be valid if the null hypothesis is false. \cr
-#' More precisely, the quantiles of the distribution of the statistic are computed under the null hypothesis and then shifted by the punctual estimate of the statistic.
+#' More precisely, the quantiles of the distribution of the statistic are computed under the null hypothesis and then shifted by the point estimate of the statistic.
 #' Therefore it is possible that the limits of the confidence interval
 #' are estimated outside of the interval of definition of the statistic (e.g. outside [-1,1] for the proportion in favor of treatment). \cr \cr
 #' 
@@ -144,11 +144,10 @@ setMethod(f = "summary",
               table[index.global,"strata"] <- "global"
 
               if(statistic=="netChance"){ ##
-                  table[index.global,"delta"] <- colSums(delta)
+                  table[index.global,"delta"] <- (colSums(object@count.favorable)-colSums(object@count.unfavorable))/sum(object@n.pairs)
               }else{
                   table[index.global,"delta"] <- colSums(object@count.favorable)/colSums(object@count.unfavorable)
               }
-
               table[index.global,"Delta"] <- Delta
              
               for(iStrata in 1:n.strata){
@@ -273,7 +272,6 @@ setMethod(f = "summary",
               if(any(is.nan(table.print$delta))){
                   table.print[is.nan(table.print$delta), "delta"] <- NA
               }
-
               if(any(is.infinite(table.print$Delta))){
                   table.print[is.infinite(table.print$Delta), "Delta"] <- NA
               }
@@ -282,6 +280,9 @@ setMethod(f = "summary",
               }
               
               ## *** convert NA to ""
+              if(any(is.na(table.print$Delta))){
+                  table.print[is.na(table.print$Delta), "Delta"] <- ""
+              }
               if(!is.null(table.print$CIinf.Delta) && any(is.na(table.print$CIinf.Delta))){
                   table.print[is.na(table.print$CIinf.Delta), "CIinf.Delta"] <- ""
               }
@@ -368,19 +369,22 @@ setMethod(f = "summary",
                   
                   cat(" > treatment groups: ",object@level.treatment[1]," (control) vs. ",object@level.treatment[2]," (treatment) \n", sep = "")
                   if(any(object@type == "TimeToEvent")){
-                      txt.method.tte <- switch(object@method.tte$method,
+                      txt.method.tte <- switch(object@method.tte,
                                                "Gehan" = "uninformative pairs",
-                                               "Peto" = "imputation using Kaplan Meier",
-                                               "Efron" = "imputation using Kaplan Meier stratified by treatment group",
-                                               "Peron" = "imputation using Kaplan Meier stratified by treatment group"
+                                               "Peron" = "use Kaplan Meier survival curves to compute the score"
                                                ) 
 
                       cat(" > censored pairs  : ",txt.method.tte,"\n", sep = "")
-                      if(object@method.tte$correction){
-                          cat("                     IPW for uninformative pairs\n", sep = "")
-                      }
-                      cat("\n")
                   }
+                  if(!( (object@correction.uninf == 0) && (object@count.uninf==0) )){
+                      txt.uninf <- switch(as.character(object@correction.uninf),
+                                          "0" = "no contribution at the current endpoint, analyzed at later endpoints (if any)",
+                                          "1" = "score equals the averaged score of all informative pairs",
+                                          "2" = "no contribution, their weight is passed to the informative pairs using IPCW"
+                                          )
+                      cat(" > uninformative pairs: ",txt.uninf,"\n", sep = "")
+                  }
+                  
                   cat(" > results\n")
                   print(table.print, row.names = FALSE)
                   if(method.inference %in% c("permutation","stratified permutation")){

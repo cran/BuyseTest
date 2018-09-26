@@ -5,25 +5,21 @@
 \alias{initializeArgs}
 \alias{initializeData}
 \alias{initializeFormula}
-\alias{initializeSurvival_Peto}
 \alias{initializeSurvival_Peron}
 \title{internal functions for BuyseTest - initialization}
 \usage{
 initializeArgs(alternative, name.call, censoring, cpus, data, endpoint, formula,
-  keep.comparison, method.tte, method.inference, n.resampling, neutral.as.uninf,
-  operator, option, prob.alloc, seed, strata, threshold, trace, treatment, type)
+  keep.pairScore, method.tte, correction.uninf, model.tte, method.inference,
+  n.resampling, neutral.as.uninf, operator, option, prob.alloc, seed, strata,
+  threshold, trace, treatment, type)
 
 initializeData(data, type, endpoint, operator, strata, treatment)
 
 initializeFormula(x)
 
-initializeSurvival_Peto(M.Treatment, M.Control, M.delta.Treatment,
-  M.delta.Control, D.TTE, endpoint, type, threshold, index.strataT,
-  index.strataC, n.strata)
-
-initializeSurvival_Peron(M.Treatment, M.Control, M.delta.Treatment,
-  M.delta.Control, D.TTE, endpoint, type, threshold, index.strataT,
-  index.strataC, n.strata)
+initializeSurvival_Peron(data, dataT, dataC, model.tte, n.T, n.C, treatment,
+  level.treatment, endpoint, censoring, D.TTE, type, strata, threshold,
+  index.strataT, index.strataC, n.strata)
 }
 \description{
 Functions called by \code{\link{BuyseTest}} to initialize the arguments.
@@ -31,7 +27,7 @@ Functions called by \code{\link{BuyseTest}} to initialize the arguments.
 \details{
 \code{initializeArgs}: Normalize the argument 
 \itemize{
-\item method.tte, neutral.as.uninf, keep.comparison, n.resampling, seed, cpus, trace: set to default value when not specified.
+\item method.tte, neutral.as.uninf, keep.pairScore, n.resampling, seed, cpus, trace: set to default value when not specified.
 \item formula: call \code{initializeFormula} to extract arguments.
 \item type: convert to numeric.
 \item censoring: only keep censoring relative to TTE endpoint. Set to \code{NULL} if no TTE endpoint.
@@ -49,8 +45,6 @@ from the formula. \cr \cr
 \code{initializeData}: Divide the dataset into two, one relative to the treatment group and the other relative to the control group.
 Merge the strata into one with the interaction variable.
 Extract for each strata the index of the observations within each group.
-Apply Efron correction (when method.tte is set to Efron), i.e. set the last event to an observed event.
-
 \code{initializeSurvival}: Compute the survival via KM.
 }
 \keyword{BuyseTest}

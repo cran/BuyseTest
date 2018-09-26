@@ -4,17 +4,42 @@
 \alias{BuyseTest}
 \title{Generalized Pairwise Comparisons (GPC)}
 \usage{
-BuyseTest(formula, data, treatment = NULL, endpoint = NULL, type = NULL,
-  threshold = NULL, censoring = NULL, operator = NULL, strata = NULL,
-  method.tte = NULL, neutral.as.uninf = NULL, method.inference = NULL,
-  n.resampling = NULL, keep.comparison = NULL, alternative = "two.sided",
-  seed = NULL, cpus = NULL, trace = NULL, n.bootstrap, method)
+BuyseTest(formula, data, method.tte = NULL, correction.uninf = NULL,
+  model.tte = NULL, method.inference = NULL, n.resampling = NULL,
+  neutral.as.uninf = NULL, keep.pairScore = NULL, treatment = NULL,
+  endpoint = NULL, type = NULL, threshold = NULL, censoring = NULL,
+  operator = NULL, strata = NULL, alternative = "two.sided",
+  seed = NULL, cpus = NULL, trace = NULL, keep.comparison)
 }
 \arguments{
 \item{formula}{[formula] a symbolic description of the model to be fitted. The response variable should be a binary variable defining the treatment arms. 
 The rest of the formula should indicate the strata variables (if any) and the endpoints by order of priority.}
 
 \item{data}{[data.frame] dataset.}
+
+\item{method.tte}{[character] defines the method used to handle pairs
+which can not be decidedly classified as favorable, unfavorable, or neutral because of censored observations (see details).
+Can be \code{"Gehan"} or \code{"Peron"}.
+Only relevant when there is one or more time-to-event endpoints.
+Default value read from \code{BuyseTest.options()}.}
+
+\item{correction.uninf}{[logical] should a correction be applied to remove the bias due to the presence of uninformative pairs?
+Default value read from \code{BuyseTest.options()}.}
+
+\item{model.tte}{[list] optionnal survival models relative to each time to each time to event outcome.
+Models must \code{prodlim} objects and stratified on the treatment and strata variable.}
+
+\item{method.inference}{[character] should a permutation test (\code{"permutation"} or \code{"stratified permutation"}),
+or bootstrap resampling (\code{"bootstrap"} or \code{"stratified boostrap"})
+be used to compute p-values and confidence intervals.}
+
+\item{n.resampling}{[integer] the number of simulations used for computing the confidence interval and the p.values. See details.
+Default value read from \code{BuyseTest.options()}.}
+
+\item{neutral.as.uninf}{[logical] should paired classified as neutral be re-analysed using endpoints of lower priority.
+Default value read from \code{BuyseTest.options()}.}
+
+\item{keep.pairScore}{[logical] should the result of each pairwise comparison be kept?}
 
 \item{treatment}{[character] the name of the treatment variable identifying the control and the experimental group.
 Disregarded if the argument \code{formula} is defined.}
@@ -40,24 +65,6 @@ Disregarded if the argument \code{formula} is defined.}
 \item{strata}{[numeric vector] if not \code{NULL}, the GPC will be applied within each group of patient defined by the strata variable(s).
 Disregarded if the argument \code{formula} is defined.}
 
-\item{method.tte}{[character] defines the method used to handle pairs
-which can not be decidedly classified as favorable, unfavorable, or neutral because of censored observations (see details).
-Can be \code{"Gehan"}, \code{"Gehan corrected"}, \code{"Peron"}, or \code{"Peron corrected"}.
-Only relevant when there is one or more time-to-event endpoints.
-Default value read from \code{BuyseTest.options()}.}
-
-\item{neutral.as.uninf}{[logical] should paired classified as neutral be re-analysed using endpoints of lower priority.
-Default value read from \code{BuyseTest.options()}.}
-
-\item{method.inference}{[character] should a permutation test (\code{"permutation"} or \code{"stratified permutation"}),
-or bootstrap resampling (\code{"bootstrap"} or \code{"stratified boostrap"})
-be used to compute p-values and confidence intervals.}
-
-\item{n.resampling}{[integer] the number of simulations used for computing the confidence interval and the p.values. See details.
-Default value read from \code{BuyseTest.options()}.}
-
-\item{keep.comparison}{[logical] should the result of each pairwise comparison be kept?}
-
 \item{alternative}{[character] the alternative hypothesis.
 Must be one of \code{"two.sided"}, \code{"greater"} or \code{"less"}.}
 
@@ -71,9 +78,7 @@ Default value read from \code{BuyseTest.options()}.}
 \item{trace}{[integer] should the execution of the function be traced ? See details.
 Default value read from \code{BuyseTest.options()}.}
 
-\item{n.bootstrap}{Obsolete. Alias for 'n.resampling'.}
-
-\item{method}{Obsolete. Alias for 'method.tte'.}
+\item{keep.comparison}{Obsolete. Alias for 'keep.pairScore'.}
 }
 \value{
 An \R object of class \code{\linkS4class{BuyseRes}}.
@@ -102,7 +107,7 @@ The detection of the number of cpus relies on the \code{detectCores} function fr
 Uninformative pairs correspond to pairs for which the censoring prevent from classifying them into favorable, unfavorable or neutral. Neutral or uninformative pairs for an endpoint with priority \code{l} are, when available, analysed on the endpoint with priority \code{l-1}.
 
 \bold{method.tte:} Pairs which can not be decidedly classified as favorable, unfavorable, or neutral because of censored observations can be classified uninformative (\code{method.tte="Gehan"}, Gehan 1965). 
-Another solution is to estimate the probability for such pair to be classified as favorable, unfavorable, or neutral based on the survival functions.
+Another solution is to estimate the probability for such pair to be classified as favorable, unfavorable, or neutral based on the survival functions (\code{method.tte="Peron"}).
 \code{method.tte="Peron"} estimates these probabilities using separate Kaplan-Meier estimators of the survival functions for the two groups of patients. 
 Probabilities of survival beyond the last observation are set NA, resulting in a non null probability that the pair is informative.
 See Peron et al. (2016) for more details. \cr
@@ -118,10 +123,10 @@ BuyseTest.options(method.inference = "none") # no permutation test
 #### simulate some data ####
 df.data <- simBuyseTest(1e2, n.strata = 2)
 
-                                        # display 
+                                       # display 
 if(require(survival)){
-    resKM_tempo <- survfit(Surv(eventtime,status)~Treatment, data = df.data)
-    plot(resKM_tempo)
+   resKM_tempo <- survfit(Surv(eventtime,status)~Treatment, data = df.data)
+   plot(resKM_tempo)
 }
 
 #### one time to event endpoint ####
@@ -202,7 +207,6 @@ Marc Buyse (2010). \bold{Generalized pairwise comparisons of prioritized endpoin
 D. Wang, S. Pocock (2016). \bold{A win ratio approach to comparing continuous non-normal outcomes in clinical trials}. \emph{Pharmaceutical Statistics} 15:238-245 \cr
 J. Peron, M. Buyse, B. Ozenne, L. Roche and P. Roy (2016). \bold{An extension of generalized pairwise comparisons for prioritized outcomes in the presence of censoring}. Statistical Methods in Medical Research. \cr
 Efron B (1967). \bold{The two sample problem with censored data}. \emph{Proceedings of the Fifth Berkeley Symposium on Mathematical Statistics and Probability} 4:831-583 \cr
-Peto R, Peto J (1972). \bold{Asymptotically efficient rank invariant test procedures}. \emph{Journal of the Royal Statistical Society - series A} 135(2):185-198 \cr
 Gehan EA (1965). \bold{A generalized two-sample Wilcoxon test for doubly censored data}. \emph{Biometrika}  52(3):650-653 \cr
 }
 \seealso{

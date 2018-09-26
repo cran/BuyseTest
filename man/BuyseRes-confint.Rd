@@ -33,12 +33,12 @@ When using resampling methods,
 an attribute \code{n.resampling} specified how many samples have been used to compute the confidence intervals and the p-values.
 }
 \description{
-Computes confidence intervals for net chance statistic or the win ratio statisitc.
+Computes confidence intervals for net chance statistic or the win ratio statistic.
 }
 \details{
 When using a permutation test, the uncertainty associated with the estimator is computed under the null hypothesis.
 Thus the confidence interval may not be valid if the null hypothesis is false. \cr
-More precisely, the quantiles of the distribution of the statistic are computed under the null hypothesis and then shifted by the punctual estimate of the statistic.
+More precisely, the quantiles of the distribution of the statistic are computed under the null hypothesis and then shifted by the point estimate of the statistic.
 Therefore it is possible that the limits of the confidence interval
 are estimated outside of the interval of definition of the statistic (e.g. outside [-1,1] for the proportion in favor of treatment).
 }

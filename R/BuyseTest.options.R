@@ -35,12 +35,13 @@ BuyseTest.options <- function(..., reinitialise = FALSE){
                check = TRUE,
                conf.level = 0.95,
                cpus = 1,
-               keep.comparison = FALSE,               
+               keep.pairScore = FALSE,
+               keep.survival = FALSE,
                method.inference = "stratified permutation",
                method.tte = "Peron",               
+               correction.uninf = FALSE,               
                n.resampling = 1000,
                neutral.as.uninf = TRUE,
-               return.index = TRUE,
                seed = 10,
                statistic = "netChance",               
                trace = 2), 
@@ -54,7 +55,6 @@ BuyseTest.options <- function(..., reinitialise = FALSE){
     object <- get(".BuyseTest-options", envir = BuyseTest.env)
     
     if (!is.null(names(args))) { # write
-      
       validCharacter(names(args),
                      name1 = "...",
                      valid.length = NULL,

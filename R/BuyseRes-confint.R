@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: maj 19 2018 (23:37) 
 ## Version: 
-## Last-Updated: maj 28 2018 (08:51) 
+## Last-Updated: sep 24 2018 (15:09) 
 ##           By: Brice Ozenne
-##     Update #: 130
+##     Update #: 143
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -22,7 +22,7 @@
 #' @aliases confing confint,BuyseRes-method
 #' @include BuyseRes-object.R BuyseRes-summary.R
 #' 
-#' @description Computes confidence intervals for net chance statistic or the win ratio statisitc.
+#' @description Computes confidence intervals for net chance statistic or the win ratio statistic.
 #' 
 #' @param object an \R object of class \code{\linkS4class{BuyseRes}}, i.e., output of \code{\link{BuyseTest}}
 #' @param statistic [character] the statistic summarizing the pairwise comparison:
@@ -41,7 +41,7 @@
 #' @details 
 #' When using a permutation test, the uncertainty associated with the estimator is computed under the null hypothesis.
 #' Thus the confidence interval may not be valid if the null hypothesis is false. \cr
-#' More precisely, the quantiles of the distribution of the statistic are computed under the null hypothesis and then shifted by the punctual estimate of the statistic.
+#' More precisely, the quantiles of the distribution of the statistic are computed under the null hypothesis and then shifted by the point estimate of the statistic.
 #' Therefore it is possible that the limits of the confidence interval
 #' are estimated outside of the interval of definition of the statistic (e.g. outside [-1,1] for the proportion in favor of treatment).
 #'
@@ -154,7 +154,7 @@ confint_permutation <- function(Delta, Delta.permutation,
     outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 4,
                        dimnames = list(endpoint, c("estimate","lower.ci","upper.ci","p.value")))
 
-    ## ** punctual estimate
+    ## ** point estimate
     outTable[,"estimate"] <- Delta
 
     ## ** computations
@@ -170,7 +170,7 @@ confint_permutation <- function(Delta, Delta.permutation,
         outTable[iE,c("lower.ci","upper.ci")] <- Delta[iE] + (qDelta_H0 - null)
 
         ## *** p.value
-        outTable[iE,"p.value"] <- switch(alternative, # test whether each sample is has a cumulative proportions in favor of treatment more extreme than the punctual estimate
+        outTable[iE,"p.value"] <- switch(alternative, # test whether each sample is has a cumulative proportions in favor of treatment more extreme than the point estimate
                                          "two.sided" = mean(abs(Delta[iE] - null) < abs(Delta.permutation[iE,] - null)),
                                          "less" = mean((Delta[iE] - null) > (Delta.permutation[iE,] - null)),
                                          "greater" = mean((Delta[iE] - null) < (Delta.permutation[iE,] - null))
@@ -191,7 +191,7 @@ confint_percentileBootstrap <- function(Delta, Delta.permutation,
     outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 4,
                        dimnames = list(endpoint, c("estimate","lower.ci","upper.ci","p.value")))
 
-    ## ** punctual estimate
+    ## ** point estimate
     outTable[,"estimate"] <- Delta
 
     ## ** computations
@@ -204,19 +204,12 @@ confint_percentileBootstrap <- function(Delta, Delta.permutation,
                                                         "less" = c(stats::quantile(Delta.permutation[iE,], probs = alpha,na.rm = TRUE), Inf),
                                                         "greater" = c(-Inf,stats::quantile(Delta.permutation[iE,], probs = 1 - alpha,na.rm = TRUE))
                                                         )
-
         ## *** p.values
-        outTable[iE, "p.value"] <- switch(alternative, # test whether each sample is has a cumulative proportions in favor of treatment more extreme than the punctual estimate
-                                          "two.sided" = if(Delta[iE]>null){
-                                                            mean(Delta.permutation[iE,] > null)
-                                                        }else if(Delta[iE]<null){
-                                                            mean(Delta.permutation[iE,] < null)
-                                                        }else{
-                                                            1
-                                                        },
-                                          "less" = mean(Delta.permutation[iE,] < null),
-                                          "greater" = mean(Delta.permutation[iE,] > null)
-                                          )
+        outTable[iE, "p.value"] <- boot2pvalue(Delta.permutation[iE,], null = null, estimate = Delta[iE],
+                                               alternative = alternative, FUN.ci = quantileCI)
+        ## quantileCI(Delta.permutation[iE,], alternative = "two.sided", p.value = 0.64, sign.estimate = 1)
+        ## quantileCI(Delta.permutation[iE,], alternative = "two.sided", p.value = 0.66, sign.estimate = 1)
+
     }
 
     ## ** export
@@ -233,7 +226,7 @@ confint_gaussianBootstrap <- function(Delta, Delta.permutation,
     outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 4,
                        dimnames = list(endpoint, c("estimate","lower.ci","upper.ci","p.value")))
 
-    ## ** punctual estimate
+    ## ** point estimate
     outTable[,"estimate"] <- Delta
     
     ## ** CI + p
@@ -275,7 +268,7 @@ confint_Ustatistic <- function(Delta, covariance,
     outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 4,
                        dimnames = list(endpoint, c("estimate","lower.ci","upper.ci","p.value")))
 
-    ## ** punctual estimate
+    ## ** point estimate
     outTable[,"estimate"] <- Delta
     
     ## ** CI + p
@@ -311,7 +304,7 @@ confint_none <- function(Delta, endpoint, ...){
     outTable <- matrix(NA, nrow = n.endpoint, ncol = 4,
                        dimnames = list(endpoint, c("estimate","lower.ci","upper.ci","p.value")))
 
-    ## ** punctual estimate
+    ## ** point estimate
     outTable[,"estimate"] <- Delta
 
     ## ** return

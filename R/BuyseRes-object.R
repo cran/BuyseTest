@@ -29,15 +29,12 @@ setClass(
       delta.winRatio = "matrix",
       Delta.netChance = "vector",
       Delta.winRatio = "vector",
-      index.neutralT = "vector",
-      index.neutralC = "vector",
-      index.uninfT = "vector",
-      index.uninfC = "vector",
       type = "vector",
       endpoint = "vector",
       level.treatment = "vector",
       level.strata = "vector",
-      method.tte = "data.frame",
+      method.tte = "character",
+      correction.uninf = "numeric",
       method.inference = "character",
       strata = "vector",
       threshold = "numeric",
@@ -47,7 +44,9 @@ setClass(
       DeltaResampling.netChance = "matrix",
       DeltaResampling.winRatio = "matrix",
       covariance = "matrix",
-      tableComparison = "list")
+      tablePairScore = "list",
+      tableSurvival = "list"
+      )
 
 )
 
@@ -65,15 +64,12 @@ methods::setMethod(
                                    delta.winRatio,
                                    Delta.netChance,
                                    Delta.winRatio,
-                                   index.neutralT,
-                                   index.neutralC,
-                                   index.uninfT,
-                                   index.uninfC,
                                    type,
                                    endpoint,
                                    level.strata,
                                    level.treatment,
                                    method.tte,
+                                   correction.uninf,
                                    method.inference,
                                    strata,
                                    threshold,
@@ -83,7 +79,8 @@ methods::setMethod(
                                    DeltaResampling.netChance,
                                    DeltaResampling.winRatio,
                                    covariance,
-                                   tableComparison,
+                                   tablePairScore,
+                                   tableSurvival,
                                    args){
 
                  name.endpoint <- paste0(endpoint,"_",threshold)
@@ -121,16 +118,12 @@ methods::setMethod(
                  .Object@Delta.netChance <- Delta.netChance
                  .Object@Delta.winRatio <- Delta.winRatio
 
-                 .Object@index.neutralT <- index.neutralT
-                 .Object@index.neutralC <- index.neutralC
-                 .Object@index.uninfT <- index.uninfT
-                 .Object@index.uninfC <- index.uninfC
-                 
                  .Object@type <- type
                  .Object@endpoint <- endpoint
                  .Object@level.strata <- level.strata
                  .Object@level.treatment <- level.treatment
                  .Object@method.tte <- method.tte
+                 .Object@correction.uninf <- correction.uninf
                  .Object@method.inference <- method.inference
                  .Object@strata <- strata
                  .Object@threshold <- threshold
@@ -144,7 +137,8 @@ methods::setMethod(
 
                  .Object@covariance <- covariance
 
-                 .Object@tableComparison <- tableComparison
+                 .Object@tablePairScore <- tablePairScore
+                 .Object@tableSurvival <- tableSurvival
                  
                  ## validObject(.Object)
                  return(.Object)

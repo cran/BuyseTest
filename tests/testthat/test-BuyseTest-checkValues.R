@@ -8,7 +8,7 @@ context("Check BuyseTest without strata")
 ## * Settings
 n.patients <- c(90,100)
 BuyseTest.options(check = FALSE,
-                  keep.comparison = TRUE,
+                  keep.pairScore = TRUE,
                   method.inference = "none",
                   trace = 0)
 
@@ -87,7 +87,7 @@ test_that("BuyseTest - binary (strata)", {
     expect_equal(dt.tableS[,n.uninf], c(0, 0, 0, 0))
 
     ## *** test summary statistic
-    expect_equal(dt.tableS[,delta], c(0.1266667, 0.0422222, 0.0422222, 0.0422222), tol = 1e-6)
+    expect_equal(dt.tableS[,delta], c(0.1266667, 0.1266667, 0.1266667, 0.1266667), tol = 1e-6)
     expect_equal(dt.tableS[,Delta], c(0.1266667, NA, NA, NA), tol = 1e-6)
 })
 
@@ -151,27 +151,31 @@ test_that("BuyseTest - continuous (strata)", {
     expect_equal(dt.tableS[,n.uninf], c(0, 0, 0, 0, 0, 0, 0, 0))
 
     ## *** test summary statistic
-    expect_equal(dt.tableS[,delta], c(-0.1253333, -0.0417778, -0.0417778, -0.0417778, -0.0084444, -0.0028148, -0.0028148, -0.0028148), tol = 1e-6)
+    expect_equal(dt.tableS[,delta], c(-0.1253333, -0.1253333, -0.1253333, -0.1253333, -0.0084444, -0.0084444, -0.0084444, -0.0084444), tol = 1e-6)
     expect_equal(dt.tableS[,Delta], c(-0.1253333, NA, NA, NA, -0.1337778, NA, NA, NA), tol = 1e-6)
 })
 
 
 ## * Time to event endpoint
 ## ** No strata - same endpoint
-for(method in c("Gehan","Peto","Efron","Peron")){ ## method <- "Gehan"
+## for(method in c("Gehan","Peron")){ ## method <- "Peron"
+for(method in c("Gehan","Peron")){ ## method <- "Peron"
     test_that(paste0("BuyseTest - tte (same, ",method,", no strata)"),{ 
 
         BT.tte <- BuyseTest(Treatment ~ tte(eventtime1, 1, status1) + tte(eventtime1, 0.5, status1) + tte(eventtime1, 0.25, status1),
                             data = dt.sim,
-                            method.tte = method)
-
+                            method.tte = method,
+                            correction.uninf = FALSE
+                            )
+        
         BT2 <- BuyseTest(data = dt.sim,
                          endpoint = c("eventtime1","eventtime1","eventtime1"),
                          censoring = c("status1","status1","status1"),
                          treatment = "Treatment",
                          type = c("tte","tte","tte"),
                          threshold = c(1,0.5,0.25),
-                         method.tte = method
+                         method.tte = method,
+                         correction.uninf = FALSE
                          )
     
         ## *** test against fixed value
@@ -191,27 +195,11 @@ for(method in c("Gehan","Peto","Efron","Peron")){ ## method <- "Gehan"
                        winRatio = c(0.8959391, 1.0070352, 1.0276094) )
             ## butils::object2script(test, digit = 8)
             
-        }else if(method == "Peto"){
-            GS <- list(favorable = c(1964.36496521, 1098.10041074, 681.86042726) ,
-                       unfavorable = c(1666.85528833, 1124.39800571, 716.53785464) ,
-                       neutral = c(1931, 1294, 789) ,
-                       uninf = c(3437.77974645, 1852.28133001, 958.88304811) ,
-                       netChange = c(0.03305663, 0.03013468, 0.02628163) ,
-                       winRatio = c(1.17848561, 1.09716498, 1.06743123) )
-            
-        }else if(method == "Efron"){
-            GS <- list(favorable = c(2443.46245011, 979.48638589, 629.90517919) ,
-                       unfavorable = c(1395.18398457, 1113.5745081, 723.5751254) ,
-                       neutral = c(1931, 1294, 789) ,
-                       uninf = c(3230.35356532, 1774.29267133, 925.81236674) ,
-                       netChange = c(0.11647539, 0.1015767, 0.09116893) ,
-                       winRatio = c(1.751355, 1.3643995, 1.25384768) )
-
         }else if(method == "Peron"){
             GS <- list(favorable = c(2443.46245011, 979.48638589, 629.90517919) ,
                        unfavorable = c(1395.18398457, 1113.5745081, 723.5751254) ,
-                       neutral = c(1931, 1294, 789) ,
-                       uninf = c(3230.35356532, 1774.29267133, 925.81236674) ,
+                       neutral = c(5161.35356532, 3068.29267133, 1714.81236674) ,
+                       uninf = c(0, 0, 0) ,
                        netChange = c(0.11647539, 0.1015767, 0.09116893) ,
                        winRatio = c(1.751355, 1.3643995, 1.25384768) )
         }
@@ -224,17 +212,19 @@ for(method in c("Gehan","Peto","Efron","Peron")){ ## method <- "Gehan"
         dt.tableS <- as.data.table(tableS)[strata == "global"]
         expect_equal(dt.tableS[,n.total],
                      unname(dt.tableS[,n.favorable + n.unfavorable + n.neutral + n.uninf]),
-                     tolerance = 1e-1, scale = 1) ## inexact for Efron/Peron
+                     tolerance = 1e-1, scale = 1) ## inexact for Peron
                      
     })
 }
 
 ## ** No strata - different endpoints
-for(method in c("Gehan","Peto","Efron","Peron")){ ## method <- "Gehan"
+## for(method in c("Gehan","Peron")){ ## method <- "Peron"
+for(method in c("Gehan","Peron")){ ## method <- "Peron"
     test_that(paste0("BuyseTest - tte (different, ",method,", no strata)"),{ 
     
         BT.tte <- BuyseTest(Treatment ~ tte(eventtime1, 1, status1) + tte(eventtime2, 0.5, status2) + tte(eventtime3, 0.25, status3),
-                            data = dt.sim, method.tte = method)
+                            data = dt.sim, method.tte = method,
+                            correction.uninf = FALSE)
 
         BT2 <- BuyseTest(data = dt.sim,
                          endpoint = c("eventtime1","eventtime2","eventtime3"),
@@ -242,7 +232,8 @@ for(method in c("Gehan","Peto","Efron","Peron")){ ## method <- "Gehan"
                          treatment = "Treatment",
                          type = c("tte","tte","tte"),
                          threshold = c(1,0.5,0.25),
-                         method.tte = method
+                         method.tte = method,
+                         correction.uninf = FALSE
                          )
     
         ## *** test against fixed value
@@ -262,29 +253,13 @@ for(method in c("Gehan","Peto","Efron","Peron")){ ## method <- "Gehan"
                        winRatio = c(0.89593909, 0.88608696, 1.18692731) )
             ## butils::object2script(test, digit = 8)
             
-        }else if(method == "Peto"){
-            GS <- list(favorable = c(1964.36496521, 2043.80882335, 606.29622507) ,
-                       unfavorable = c(1666.85528833, 2152.32946986, 416.53070861) ,
-                       neutral = c(1931, 379.7158347, 43.96719692) ,
-                       uninf = c(3437.77974645, 792.92561855, 105.84732265) ,
-                       netChange = c(0.03305663, 0.02099878, 0.04208384) ,
-                       winRatio = c(1.17848561, 1.04948413, 1.08941926) )
-            
-        }else if(method == "Efron"){
-            GS <- list(favorable = c(2443.46245011, 1988.35190003, 729.79366974) ,
-                       unfavorable = c(1395.18398457, 2064.87616713, 258.96519794) ,
-                       neutral = c(1931, 379.28386907, 42.17038331) ,
-                       uninf = c(3230.35356532, 728.84162909, 77.19624717) ,
-                       netChange = c(0.11647539, 0.10797269, 0.16028696) ,
-                       winRatio = c(1.751355, 1.28084893, 1.38789267) )
-
         }else if(method == "Peron"){
-            GS <- list(favorable = c(2443.46245011, 1988.35190003, 828.35580754) ,
-                       unfavorable = c(1395.18398457, 1816.30639483, 318.33164813) ,
-                       neutral = c(1931, 378.8988108, 47.91368251) ,
-                       uninf = c(3230.35356532, 977.79645966, 162.09413227) ,
-                       netChange = c(0.11647539, 0.13559155, 0.1922609) ,
-                       winRatio = c(1.751355, 1.37998681, 1.49020832) )
+            GS <- list(favorable = c(2443.46245011, 1988.35190003, 825.36704825) ,
+                       unfavorable = c(1395.18398457, 1845.87475171, 310.74049374) ,
+                       neutral = c(5161.35356532, 1303.03523326, 188.63749106) ,
+                       uninf = c(0, 24.09168032, 2.38188053) ,
+                       netChange = c(0.11647539, 0.13230618, 0.18948691) ,
+                       winRatio = c(1.751355, 1.36739711, 1.48014599) )
         }
         
         expect_equal(test, GS, tolerance = 1e-6, scale = 1)
@@ -295,12 +270,13 @@ for(method in c("Gehan","Peto","Efron","Peron")){ ## method <- "Gehan"
         dt.tableS <- as.data.table(tableS)[strata == "global"]
         expect_equal(dt.tableS[,n.total],
                      unname(dt.tableS[,n.favorable + n.unfavorable + n.neutral + n.uninf]),
-                     tolerance = 1e-1, scale = 1) ## inexact for Efron/Peron
+                     tolerance = 1e-1, scale = 1) ## inexact for Peron
     })
 }
 
 ## ** Strata - same endpoint
-method <- "Efron"
+if(FALSE){
+method <- "Peron"
 test_that(paste0("BuyseTest - tte (same, ",method,", strata)"),{ 
     
         BT.tte <- BuyseTest(Treatment ~ tte(eventtime1, 1, status1) + tte(eventtime1, 0.5, status1) + tte(eventtime1, 0.25, status1) + strata,
@@ -335,11 +311,13 @@ test_that(paste0("BuyseTest - tte (same, ",method,", strata)"),{
         dt.tableS <- as.data.table(tableS)[strata == "global"]
         expect_equal(dt.tableS[,n.total],
                      unname(dt.tableS[,n.favorable + n.unfavorable + n.neutral + n.uninf]),
-                     tolerance = 1e-1, scale = 1) ## inexact for Efron/Peron
+                     tolerance = 1e-1, scale = 1) ## inexact for Peron
 })
+}
 
 ## * Mixed endpoints 
-for(method in c("Gehan","Peto","Efron","Peron")){ ## method <- "Peron"
+## for(method in c("Gehan","Peron")){ ## method <- "Peron"
+for(method in c("Gehan")){ ## method <- "Peron"
     test_that(paste0("BuyseTest - mixed (",method,", no strata)"),{ 
     
         BT.mixed <- BuyseTest(Treatment ~ tte(eventtime1, 0.5, status1) + cont(score1, 1) + bin(toxicity1) + tte(eventtime1, 0.25, status1) + cont(score1, 0.5),
@@ -370,22 +348,6 @@ for(method in c("Gehan","Peto","Efron","Peron")){ ## method <- "Peron"
                        winRatio = c(1.00703518, 0.77541371, 0.9444898, 0.95234334, 0.93870278) )
             ## butils::object2script(test, digit = 8)
             
-        }else if(method == "Peto"){
-            GS <- list(favorable = c(3062.46537595, 538.66400011, 496.45208474, 193.99292402, 87.35234931) ,
-                       unfavorable = c(2791.25329404, 956.22726799, 325.02566223, 186.6693571, 120.81524266) ,
-                       neutral = c(1294, 1651.3900619, 829.91231494, 186, 241.08244185) ,
-                       uninf = c(1852.28133001, 0, 0, 263.25003382, 0) ,
-                       netChange = c(0.03013468, -0.01626124, 0.00278614, 0.00359987, -0.00011823) ,
-                       winRatio = c(1.09716498, 0.96094678, 1.0061572, 1.00760683, 0.99975706) )
-
-        }else if(method == "Efron"){
-            GS <- list(favorable = c(3422.94883599, 523.83682056, 486.58403996, 179.36802198, 84.40050237) ,
-                       unfavorable = c(2508.75849267, 940.43278022, 311.753946, 189.11524727, 118.87398395) ,
-                       neutral = c(1294, 1604.02307056, 805.6850846, 186, 233.92732904) ,
-                       uninf = c(1774.29267133, 0, 0, 251.20181536, 0) ,
-                       netChange = c(0.1015767, 0.05528826, 0.07471383, 0.07363081, 0.06980042) ,
-                       winRatio = c(1.3643995, 1.14426407, 1.17879135, 1.16776382, 1.15439024) )
-
         }else if(method == "Peron"){
             GS <- list(favorable = c(3422.94883599, 523.83682056, 486.58403996, 179.36802198, 84.40050237) ,
                        unfavorable = c(2508.75849267, 940.43278022, 311.753946, 189.11524727, 118.87398395) ,
@@ -422,4 +384,5 @@ for(method in c("Gehan","Peto","Efron","Peron")){ ## method <- "Peron"
            ## "status2" = c(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0), 
            ## "eventtime3" = c(0.293733014310895, 2.99448384259032, 1.33980963104124, 0.496300941943964, 1.22099704012309, 0.0373721538212026, 0.187137345501571, 0.323353691247819, 0.780978115280896, 0.310442431933021, 1.03796020197828, 1.24147211309831, 0.723207099456172, 1.34698546721254, 0.496082238658226, 1.44827529079895, 0.521865161625976, 0.68353467186253, 0.0198144012665529, 0.18416592198316, 2.31754726208254, 1.77382739085223, 0.333985198539388, 0.201898095701069, 0.037804703116014, 0.451823603145119, 0.537318116873933, 0.0232303865342007, 0.208453658687415, 0.529862782119121, 1.69534262583851, 0.739995644446326, 0.584670890400981, 0.660194671591075, 2.43692159047791, 0.321378717095711, 0.470858907291999, 0.300885586737895, 0.0849040174277981, 0.346258729789037, 2.18121012735058, 1.46578570695944, 0.619693384243129, 4.42551925063202, 0.000597661984300133, 1.00932679616087, 0.359839679192164, 0.240645438675249, 1.08569678415356, 1.45416021630186, 1.6789996741874, 1.69425750511157, 0.00653236821680537, 0.51073806177961, 0.369948552020504, 1.59945127194625, 1.3236125713606, 1.48425067326426, 0.836247284887988, 0.893571488741335, 0.578189318532236, 0.0358568453949352, 0.210830021086216, 0.0155471175212725, 0.394160619241234, 0.0326274558475622, 0.266731382084703, 0.669753493153975, 0.717969431771765, 0.88286046637068, 0.791108651161664, 0.898976499057733, 0.524081920308154, 2.70977349940292, 1.3893057822478, 3.03969626306362, 0.73321636007742, 1.92017961391452, 0.124273130677993, 0.945653065011673, 0.00825042251846677, 0.658779176139988, 0.767451781761614, 1.90638352080968, 1.58163544871625, 0.10784913954513, 0.949147655286187, 0.168078340234353, 0.593803958726638, 1.54462579103663, 0.186956513160319, 0.629283258841148, 0.0873049052077904, 0.733068239947979, 1.40420931094632, 0.192337129955149, 0.333401945283805, 0.0344329731559355, 0.274189826651433, 0.910836697306516, 0.303391134016558, 0.0357706691919942, 3.29871717520528, 0.0630263274790764, 0.870804234130271, 0.697519244529544, 0.575385421918495, 0.534992787498408, 0.246228993287661, 0.856935582483809, 0.397308648829461, 0.652084221032082, 0.748507989143236, 1.01316574482707, 0.436163629031014, 0.838827345700121, 0.355026910826948, 0.0226469858363734, 0.207005798093843, 0.143966032607798, 0.103899316845053, 0.460289468073832, 0.636746770010642, 0.00925149206114618, 0.697405223382561, 0.153286469753514, 0.231242138311338, 0.773299188841039, 0.186848489963772, 0.110831690172533, 2.62681005866194, 0.200019215644149, 0.210402688604894, 1.19494880583752, 1.06805406720807, 1.907865681834, 1.11206305537185, 0.618034748898127, 0.314894371331222, 0.216433776042293, 0.138175934415695, 0.0223831497736912, 1.0080281416691, 0.000886687715363389, 0.149976647673442, 0.587403117291067, 0.763739129916681, 1.13659499025919, 0.337817817638958, 2.5394672812709, 0.438141548521403, 0.545826010773546, 0.123791923007256, 0.221596126459003, 0.262950329269119, 0.0594304439601256, 1.85251812173937, 1.14050193820485, 0.207557858461683, 0.139412620676529, 0.412037497960816, 0.572701674131632, 0.482605565484431, 0.931729755352493, 0.578474308680047, 0.217751594386994, 0.400383897661771, 0.995068312969113, 0.0731883850535335, 0.707260090899151, 0.630421212270399, 0.219220847146326, 0.769801122154004, 1.28525629916782, 0.114169640433724, 0.442909041647634, 0.411128758763132, 0.611387496129468, 0.569868990840883, 1.12728015256685, 1.08061234409855, 0.389625906632013, 0.542099314514301, 0.798104775082986, 0.394623881474312, 0.675502904922754, 0.0858133655206339, 0.129660053960637, 0.268116405477624, 0.694271357435761), 
            ## "status3" = c(0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0))
+
 

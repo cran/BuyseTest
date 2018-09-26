@@ -40,8 +40,7 @@ inferenceResampling <- function(envir){
                                   args = list(X = 1:n.resampling,
                                               FUN = function(iB){
                                                   .BuyseTest(envir = envir,
-                                                             return.index = FALSE,
-                                                             keep.comparison = FALSE,
+                                                             keep.pairScore = FALSE,
                                                              method.inference = envir$outArgs$method.inference
                                                              )
                                               })
@@ -63,7 +62,7 @@ inferenceResampling <- function(envir){
             suppressPackageStartupMessages(library(BuyseTest, quietly = TRUE, warn.conflicts = FALSE, verbose = FALSE))
         })
         ## export functions
-        toExport <- c(".BuyseTest","initializeSurvival_Peto","initializeSurvival_Peron")
+        toExport <- c(".BuyseTest","initializeSurvival_Peron")
 
         iB <- NULL ## [:forCRANcheck:] foreach        
         ls.permutation <- foreach::`%dopar%`(
@@ -73,8 +72,7 @@ inferenceResampling <- function(envir){
                                            if(trace>0){utils::setTxtProgressBar(pb, iB)}
 
                                            return(.BuyseTest(envir = envir,
-                                                      return.index = FALSE,
-                                                      keep.comparison = FALSE,
+                                                      keep.pairScore = FALSE,
                                                       method.inference = envir$outArgs$method.inference))
                       
                                        })
@@ -126,9 +124,10 @@ inferenceUstatistic <- function(envir){
     if (trace > 1) {cat("Moments of the U-statistic")}
         
     ## ** extract informations
-    endpoint <- names(envir$outPunctual$tableComparison)
+    endpoint <- names(envir$outPoint$tablePairScore)
     D <- length(endpoint)
-    col.id <- names(envir$outPunctual$tableComparison[[1]])[1:3]
+    col.id <- names(envir$outPoint$tablePairScore[[1]])[1:3]
+    keep.col <- c(col.id,"favorable","unfavorable","neutral","uninformative")
     
     ## ** fct
     myFct_T <- function(favorable,unfavorable){
@@ -175,24 +174,26 @@ inferenceUstatistic <- function(envir){
     
     for(iE in 1:D){ ## iE <- 1
 
-        iTable <- data.table::copy(envir$outPunctual$tableComparison[[iE]][,.SD,.SDcols = c(col.id,"favorable","unfavorable","neutral","uninformative")])
+        iTable <- data.table::copy(envir$outPoint$tablePairScore[[iE]][,.SD,.SDcols = keep.col])
         data.table::setnames(iTable, old = col.id, new = c("strata","indexT","indexC"))
 
         ## *** perform correction
-        if(envir$outArgs$correction.tte){
-            vec.tempo <- unlist(iTable[,.(favorable = sum(favorable),
-                                          unfavorable = sum(unfavorable),
-                                          neutral = sum(neutral),
-                                          uninformative = sum(uninformative))])
-            factor <- sum(vec.tempo)/sum(vec.tempo[1:3])
+        if(envir$outArgs$correction.uninf){
+            stop("Inference U statistic in presence of correction.uninf needs to be updated!!!")
+            ## vec.tempo <- unlist(iTable[,.(favorable = sum(favorable),
+            ##                               unfavorable = sum(unfavorable),
+            ##                               neutral = sum(neutral),
+            ##                               uninformative = sum(uninformative))])
+            ## factor <- sum(vec.tempo)/sum(vec.tempo[1:3])
             
-            iTable[, favorable := favorable * factor]
-            iTable[, unfavorable := unfavorable * factor]
-            iTable[, neutral := neutral * factor]
-            iTable[, uninformative := 0]
+            ## iTable[, favorable := favorable * factor]
+            ## iTable[, unfavorable := unfavorable * factor]
+            ## iTable[, neutral := neutral * factor]
+            ## iTable[, uninformative := 0]
         }
 
-        ## *** compute sufficient statisitcs
+        ## *** compute sufficient statistics
+        browser()
         ls.count_T <- iTable[,.(list = .(myFct_T(favorable, unfavorable))), by = c("strata","indexT") ][["list"]]
         M.sufficient[iE,1:4] <- colSums(do.call(rbind,ls.count_T))
     
@@ -204,10 +205,10 @@ inferenceUstatistic <- function(envir){
     ## ** compute sigma for each endpoint
 
     ## *** P[X1>Y1 & X1>Y1']
-    p1.favorable <- cumsum(envir$outPunctual$count_favorable)/envir$outPunctual$n_pairs
+    p1.favorable <- cumsum(envir$outPoint$count_favorable)/envir$outPoint$n_pairs
     
     ## *** P[X1<Y1 & X1<Y1']
-    p1.unfavorable <- cumsum(envir$outPunctual$count_unfavorable)/envir$outPunctual$n_pairs
+    p1.unfavorable <- cumsum(envir$outPoint$count_unfavorable)/envir$outPoint$n_pairs
     
     ## *** P[X1>Y1 & X1>Y1']
     p2.favorableT <- cumsum(M.sufficient[,"sum.favorableT"])/cumsum(M.sufficient[,"n.pairT"])
