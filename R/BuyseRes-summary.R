@@ -2,7 +2,7 @@
 #' @docType methods
 #' @name BuyseRes-summary
 #' @title Summary Method for Class "BuyseRes"
-#' @aliases summary summary,BuyseRes-method
+#' @aliases summary,BuyseRes-method
 #' @include BuyseRes-object.R
 #' 
 #' @description Summarize the results from the \code{\link{BuyseTest}} function.
@@ -11,16 +11,14 @@
 #' @param print [logical] Should the table be displayed?.
 #' @param percentage [logical] Should the percentage of pairs of each type be displayed ? Otherwise the number of pairs is displayed.
 #' @param statistic [character] the statistic summarizing the pairwise comparison:
-#' \code{"netChance"} displays the net chance in favor of treatment, as described in Buyse (2010) and Peron et al. (2016)),
+#' \code{"netBenefit"} displays the net benefit, as described in Buyse (2010) and Peron et al. (2016)),
 #' whereas \code{"winRatio"} displays the win ratio, as described in Wang et al. (2016).
+#' Default value read from \code{BuyseTest.options()}.
 #' @param conf.level [numeric] confidence level for the confidence intervals.
-#' @param alternative [character] the type of alternative hypothesis: \code{"two.sided"}, \code{"greater"}, or \code{"less"}.
-#' @param method.boot [character] the method used to compute the boostrap confidence intervals and p-values.
-#' Can be \code{"percentile"} for computing the CI using the quantiles of the boostrap distribution or
-#' \code{"gaussian"} for using a Gaussian approximation to compute the CI where the standard error is computed using the bootstrap samples.
+#' Default value read from \code{BuyseTest.options()}.
 #' @param strata [character vector] the name of the strata to be displayed. Can also be \code{"global"} to display the average over all strata.
 #' @param digit [integer vector] the number of digit to use for printing the counts and the delta.  
-#' @param ... arguments to be passed from the generic method to the class specific method [not relevant to the user]
+#' @param ... arguments to be passed to \code{confint}
 #'
 #' @details 
 #' When using a permutation test, the uncertainty associated with the estimator is computed under the null hypothesis.
@@ -58,14 +56,20 @@
 #' @exportMethod summary
 setMethod(f = "summary",
           signature = "BuyseRes",
-          definition = function(object, print = TRUE, percentage = TRUE,
-                                statistic = BuyseTest.options()$statistic,
-                                conf.level = 0.95, alternative = "two.sided",
-                                method.boot = "percentile",
+          definition = function(object, print = TRUE, percentage = TRUE, statistic = NULL,
+                                conf.level = NULL,
                                 strata = if(length(object@level.strata)==1){"global"}else{NULL},                                
-                                digit = c(2,4)){
+                                digit = c(2,4), ...){
 
               ## ** normalize and check arguments
+              option <- BuyseTest.options()
+              if(is.null(statistic)){
+                  statistic <- option$statistic
+              }
+              if(is.null(conf.level)){
+                  conf.level <- option$conf.level
+              }
+              
               validLogical(print,
                            name1 = "print",
                            valid.length = 1,
@@ -78,13 +82,13 @@ setMethod(f = "summary",
                            method = "summary[BuyseRes]")
 
               statistic <- switch(gsub("[[:blank:]]", "", tolower(statistic)),
-                                  "netchance" = "netChance",
+                                  "netbenefit" = "netBenefit",
                                   "winratio" = "winRatio",
                                   statistic)
 
               validCharacter(statistic,
                              name1 = "statistic",
-                             valid.values = c("netChance","winRatio"),
+                             valid.values = c("netBenefit","winRatio"),
                              valid.length = 1,
                              method = "summary[BuyseRes]")
 
@@ -115,14 +119,23 @@ setMethod(f = "summary",
               }else{
                   method.inference <- "none"
               }
-              alpha <- 1-conf.level
 
+              ## safety
+              if(method.inference == "asymptotic"){
+                  if(object@method.tte == "Peron"){
+                      warning("The current implementation of the asymptotic distribution is not valid for method.tte=\"Peron\" \n",
+                              "Standard errors / confidence intervals / p-values will not be displayed \n")
+                      conf.level <- NA
+                  }else if(object@correction.uninf > 0){
+                      warning("The current implementation of the asymptotic distribution is not valid when a correction is used \n",
+                              "Standard errors / confidence intervals / p-values will not be displayed \n")
+                      conf.level <- NA
+                  }
+              }
+              alpha <- 1-conf.level
+              
               ## ** compute confidence intervals and p-values
-              outConfint <- confint(object,
-                                    method.boot = method.boot,
-                                    statistic = statistic,
-                                    conf.level = conf.level,
-                                    alternative = alternative)
+              outConfint <- confint(object, conf.level = conf.level, statistic = statistic, ...)
           
               ## ** generate summary table
               ## *** prepare
@@ -143,7 +156,7 @@ setMethod(f = "summary",
               table[index.global,"threshold"] <- object@threshold
               table[index.global,"strata"] <- "global"
 
-              if(statistic=="netChance"){ ##
+              if(statistic=="netBenefit"){ ##
                   table[index.global,"delta"] <- (colSums(object@count.favorable)-colSums(object@count.unfavorable))/sum(object@n.pairs)
               }else{
                   table[index.global,"delta"] <- colSums(object@count.favorable)/colSums(object@count.unfavorable)
@@ -240,16 +253,7 @@ setMethod(f = "summary",
                       param.signif <- c(param.signif, "CIinf.Delta","CIsup.Delta")
 
                       ## take care of the p.value
-                      p.min <- 10^(-digit[2])
-                      table.print[,"p.value"] <- sapply(table.print[,"p.value"], function(x){
-                          if(is.na(x)){
-                              return(NA)
-                          }else if(x<p.min){
-                              return(paste0("<10^{-",digit[2],"}"))
-                          }else{
-                              return(round(x, digits = digit[2]))
-                          }
-                      })
+                      table.print[,"p.value"] <- format.pval(table.print[,"p.value"], digits = digit[2])
                       
                   }
                   table.print[,param.signif] <- sapply(table.print[,param.signif], round, digits = digit[2])
@@ -345,7 +349,7 @@ setMethod(f = "summary",
                       cat(" > statistic       : win ratio (delta: endpoint specific, Delta: global) \n",
                           " > null hypothesis : Delta == 1 \n", sep = "")
                   }else {
-                      cat(" > statistic       : net chance of a better outcome (delta: endpoint specific, Delta: global) \n",
+                      cat(" > statistic       : net benefit (delta: endpoint specific, Delta: global) \n",
                           " > null hypothesis : Delta == 0 \n", sep = "")
                   }
                   if(method.inference %in% c("permutation","bootstrap", "stratified permutation", "stratified bootstrap")){

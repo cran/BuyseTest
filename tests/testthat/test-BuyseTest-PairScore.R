@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: maj 26 2018 (14:33) 
 ## Version: 
-## Last-Updated: sep 24 2018 (16:00) 
+## Last-Updated: okt 16 2018 (23:00) 
 ##           By: Brice Ozenne
-##     Update #: 39
+##     Update #: 45
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -27,6 +27,7 @@ context("Check tableComparison matches the summary of BuyseTest objects")
 n.patients <- c(90,100)
 BuyseTest.options(check = FALSE,
                   keep.pairScore = TRUE,
+                  keep.survival = TRUE,
                   method.inference = "none",
                   trace = 0)
 
@@ -57,7 +58,7 @@ test_that("Full data - no correction", {
         iScore <- getPairScore(BT.mixed, endpoint = iEndpoint)[,.(favorable = sum(favorable*weight),
                                                                   unfavorable = sum(unfavorable*weight),
                                                                   neutral = sum(neutral*weight),
-                                                                  uninformative = sum(uninformative*weight))]
+                                                                  uninf = sum(uninf*weight))]
         manualScore <- rbind(manualScore,iScore)
     }
     expect_equal(as.double(manualScore$favorable),
@@ -66,11 +67,11 @@ test_that("Full data - no correction", {
                  as.double(BT.mixed@count.unfavorable))
     expect_equal(as.double(manualScore$neutral),
                  as.double(BT.mixed@count.neutral))
-    expect_equal(as.double(manualScore$uninformative),
+    expect_equal(as.double(manualScore$uninf),
                  as.double(BT.mixed@count.uninf))
 
     expect_equal(as.double(cumsum(BT.mixed@count.favorable-BT.mixed@count.unfavorable)/BT.mixed@n.pairs),
-                 as.double(BT.mixed@Delta.netChance))
+                 as.double(BT.mixed@Delta.netBenefit))
     expect_equal(as.double(cumsum(BT.mixed@count.favorable)/cumsum(BT.mixed@count.unfavorable)),
                  as.double(BT.mixed@Delta.winRatio))
 })
@@ -88,13 +89,13 @@ test_that("Full data", {
 
     manualScore <- NULL
     for(iEndpoint in 1:length(BT.mixed@endpoint)){
-        iScore <- getPairScore(BT.mixed, endpoint = iEndpoint)[,.(favorable = sum(favorable.corrected),
-                                                                  unfavorable = sum(unfavorable.corrected),
-                                                                  neutral = sum(neutral.corrected))]
+        iScore <- getPairScore(BT.mixed, endpoint = iEndpoint)[,.(favorable = sum(favorableC),
+                                                                  unfavorable = sum(unfavorableC),
+                                                                  neutral = sum(neutralC))]
         manualScore <- rbind(manualScore,iScore)
     }
 
-    expect_equal(unname(BT.mixed@Delta.netChance),manualScore[,cumsum(favorable-unfavorable)]/BT.mixed@n.pairs)
+    expect_equal(unname(BT.mixed@Delta.netBenefit),manualScore[,cumsum(favorable-unfavorable)]/BT.mixed@n.pairs)
     expect_equal(unname(BT.mixed@Delta.winRatio),manualScore[,cumsum(favorable)/cumsum(unfavorable)])
 })
 

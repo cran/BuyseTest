@@ -42,7 +42,7 @@ test_that("BuyseTest - binary (no strata)", {
                  unfavorable = as.double(BT.bin@count.unfavorable),
                  neutral = as.double(BT.bin@count.neutral),
                  uninf = as.double(BT.bin@count.uninf),
-                 netChange = as.double(BT.bin@Delta.netChance),
+                 netChange = as.double(BT.bin@Delta.netBenefit),
                  winRatio = as.double(BT.bin@Delta.winRatio)
                  )
 
@@ -109,7 +109,7 @@ test_that("BuyseTest - continuous (no strata)", {
                  unfavorable = as.double(BT.cont@count.unfavorable),
                  neutral = as.double(BT.cont@count.neutral),
                  uninf = as.double(BT.cont@count.uninf),
-                 netChange = as.double(BT.cont@Delta.netChance),
+                 netChange = as.double(BT.cont@Delta.netBenefit),
                  winRatio = as.double(BT.cont@Delta.winRatio)
                  )
     GS <- list(favorable = c(1562, 2336) ,
@@ -183,7 +183,7 @@ for(method in c("Gehan","Peron")){ ## method <- "Peron"
                      unfavorable = as.double(BT.tte@count.unfavorable),
                      neutral = as.double(BT.tte@count.neutral),
                      uninf = as.double(BT.tte@count.uninf),
-                     netChange = as.double(BT.tte@Delta.netChance),
+                     netChange = as.double(BT.tte@Delta.netBenefit),
                      winRatio = as.double(BT.tte@Delta.winRatio)
                      )
         if(method == "Gehan"){
@@ -235,13 +235,13 @@ for(method in c("Gehan","Peron")){ ## method <- "Peron"
                          method.tte = method,
                          correction.uninf = FALSE
                          )
-    
+
         ## *** test against fixed value
         test <- list(favorable = as.double(BT.tte@count.favorable),
                      unfavorable = as.double(BT.tte@count.unfavorable),
                      neutral = as.double(BT.tte@count.neutral),
                      uninf = as.double(BT.tte@count.uninf),
-                     netChange = as.double(BT.tte@Delta.netChance),
+                     netChange = as.double(BT.tte@Delta.netBenefit),
                      winRatio = as.double(BT.tte@Delta.winRatio)
                      )
         if(method == "Gehan"){
@@ -288,7 +288,7 @@ test_that(paste0("BuyseTest - tte (same, ",method,", strata)"),{
                      unfavorable = as.double(BT.tte@count.unfavorable),
                      neutral = as.double(BT.tte@count.neutral),
                      uninf = as.double(BT.tte@count.uninf),
-                     netChange = as.double(BT.tte@Delta.netChance),
+                     netChange = as.double(BT.tte@Delta.netBenefit),
                      winRatio = as.double(BT.tte@Delta.winRatio)
                      )
 
@@ -325,7 +325,7 @@ for(method in c("Gehan")){ ## method <- "Peron"
 
         BT2 <- BuyseTest(data=dt.sim,
                          endpoint=c("eventtime1","score1","toxicity1","eventtime1","score1"),
-                         censoring=c("status1",NA,NA,"status1",NA),
+                         censoring=c("status1","..NA..","..NA..","status1","..NA.."),
                          treatment="Treatment",
                          type=c("timeToEvent","continuous","binary","timeToEvent","continuous"),
                          threshold=c(0.5,1,NA,0.25,0.5),
@@ -336,7 +336,7 @@ for(method in c("Gehan")){ ## method <- "Peron"
                      unfavorable = as.double(BT.mixed@count.unfavorable),
                      neutral = as.double(BT.mixed@count.neutral),
                      uninf = as.double(BT.mixed@count.uninf),
-                     netChange = as.double(BT.mixed@Delta.netChance),
+                     netChange = as.double(BT.mixed@Delta.netBenefit),
                      winRatio = as.double(BT.mixed@Delta.winRatio)
                      )
         if(method == "Gehan"){

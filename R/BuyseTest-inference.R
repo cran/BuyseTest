@@ -10,23 +10,8 @@ inferenceResampling <- function(envir){
     seed <- envir$outArgs$seed
     trace <- envir$outArgs$trace
 
-    ## ** display
-    if (trace > 1) {
-        txt.type <- switch(envir$outArgs$method.inference,
-                           "bootstrap" = "Bootstrap resampling",
-                           "stratified bootstrap" = "Stratified bootstrap resampling",
-                           "permutation" = "Permutation test",
-                           "stratified permutation" = "Stratified permutation test")
-
-            cat(txt.type, " (",cpus," cpu",if (cpus > 1) {"s"}, sep = "")
-            if (!is.null(seed)) {
-                cat(", seed", if (cpus > 1) {"s"}, " ",paste(seq(seed,seed + cpus - 1), collapse = " "), sep = "")       
-            }
-            cat(")\n")         
-        }
-    
     ## ** computation
-    if (cpus == 1) { ## *** sequential permutation test
+    if (cpus == 1) { ## *** sequential resampling test
            
         if (!is.null(seed)) {set.seed(seed)} # set the seed
 
@@ -36,7 +21,7 @@ inferenceResampling <- function(envir){
         }else{
             method.loop <- lapply
         }
-        ls.permutation <- do.call(method.loop,
+        ls.resampling <- do.call(method.loop,
                                   args = list(X = 1:n.resampling,
                                               FUN = function(iB){
                                                   .BuyseTest(envir = envir,
@@ -45,7 +30,7 @@ inferenceResampling <- function(envir){
                                                              )
                                               })
                                   )
-    }else { ## *** parallel permutation test
+    }else { ## *** parallel resampling test
 
         ## define cluster
         if(trace>0){
@@ -65,7 +50,7 @@ inferenceResampling <- function(envir){
         toExport <- c(".BuyseTest","initializeSurvival_Peron")
 
         iB <- NULL ## [:forCRANcheck:] foreach        
-        ls.permutation <- foreach::`%dopar%`(
+        ls.resampling <- foreach::`%dopar%`(
                                        foreach::foreach(iB=1:n.resampling,
                                                         .export = toExport),                                            
                                        {                                           
@@ -82,7 +67,7 @@ inferenceResampling <- function(envir){
     }
 
     ## ** post treatment
-    test.resampling <- which(unlist(lapply(ls.permutation,is.null)) == FALSE)
+    test.resampling <- which(unlist(lapply(ls.resampling,is.null)) == FALSE)
     if(length(test.resampling) != n.resampling){
         n.failure <- n.resampling - length(test.resampling) 
         warning("The resampling procedure failed for ",n.failure," samples (",round(100*n.failure/n.resampling,2),"%)")
@@ -91,20 +76,20 @@ inferenceResampling <- function(envir){
     dim.delta <- c(n.strata, D, n.resampling)
     dimnames.delta <- list(level.strata, endpoint, as.character(1:n.resampling))
 
-    out <- list(deltaResampling.netChance = array(NA, dim = dim.delta, dimnames = dimnames.delta),
+    out <- list(deltaResampling.netBenefit = array(NA, dim = dim.delta, dimnames = dimnames.delta),
                 deltaResampling.winRatio = array(NA, dim = dim.delta, dimnames = dimnames.delta),
-                DeltaResampling.netChance = matrix(NA, nrow = D, ncol = n.resampling,
+                DeltaResampling.netBenefit = matrix(NA, nrow = D, ncol = n.resampling,
                                                    dimnames = list(endpoint, as.character(1:n.resampling))),
                 DeltaResampling.winRatio = matrix(NA, nrow = D, ncol = n.resampling,
                                                   dimnames = list(endpoint, as.character(1:n.resampling)))
                 )
 
     for(iR in test.resampling){
-        out$deltaResampling.netChance[,,iR] <- ls.permutation[[iR]][paste0("delta.",1:n.strata),paste0("netChance.",1:D)]
-        out$deltaResampling.winRatio[,,iR] <- ls.permutation[[iR]][paste0("delta.",1:n.strata),paste0("winRatio.",1:D)]
+        out$deltaResampling.netBenefit[,,iR] <- ls.resampling[[iR]]$delta_netBenefit
+        out$deltaResampling.winRatio[,,iR] <- ls.resampling[[iR]]$delta_winRatio
 
-        out$DeltaResampling.netChance[,iR] <- ls.permutation[[iR]][paste0("Delta"),paste0("netChance.",1:D)]
-        out$DeltaResampling.winRatio[,iR] <- ls.permutation[[iR]][paste0("Delta"),paste0("winRatio.",1:D)]
+        out$DeltaResampling.netBenefit[,iR] <- ls.resampling[[iR]]$Delta_netBenefit
+        out$DeltaResampling.winRatio[,iR] <- ls.resampling[[iR]]$Delta_winRatio
 
     }
 
@@ -113,134 +98,177 @@ inferenceResampling <- function(envir){
 }
 
 
-## * Inference U-statistic
-inferenceUstatistic <- function(envir){
-
-    warning("In development - do not trust the results \n")
-    favorable <- unfavorable <- neutral <- uninformative <- . <- NULL ## [:forCRANcheck:] data.table
+## * inference U-statistic
+inferenceUstatistic <- function(tablePairScore, count.favorable, count.unfavorable,
+                                n.pairs, n.C, n.T, n.strata, n.endpoint, endpoint){
+    . <- NULL ## for CRAN test
     
-    trace <- envir$outArgs$trace
-
-    if (trace > 1) {cat("Moments of the U-statistic")}
-        
     ## ** extract informations
-    endpoint <- names(envir$outPoint$tablePairScore)
-    D <- length(endpoint)
-    col.id <- names(envir$outPoint$tablePairScore[[1]])[1:3]
-    keep.col <- c(col.id,"favorable","unfavorable","neutral","uninformative")
-    
-    ## ** fct
-    myFct_T <- function(favorable,unfavorable){
-        iN.pairs <- length(favorable)
-        if(iN.pairs>1){
-            iCombination <- utils::combn(1:iN.pairs, 2)
-            return(c(NCOL(iCombination),
-                     sum( favorable[iCombination[1,]] * favorable[iCombination[2,]] ),  ## > >
-                     sum( unfavorable[iCombination[1,]] * unfavorable[iCombination[2,]] ), ## < <
-                     sum( favorable[iCombination[1,]] * unfavorable[iCombination[2,]] ) ## > <
-                     ))
-        }else{
-            return(c(0,
-                     0,  ## > >
-                     0, ## < <
-                     0 ## > <
-                     ))
-        }
-    }
+    n.endpoint <- length(endpoint)
 
-    myFct_C <- function(favorable,unfavorable){
-        iN.pairs <- length(favorable)
-        if(iN.pairs>1){
-            iCombination <- utils::combn(1:iN.pairs, 2)
-            return(c(NCOL(iCombination),
-                     sum( favorable[iCombination[1,]] * favorable[iCombination[2,]] ),  ## > >
-                     sum( unfavorable[iCombination[1,]] * unfavorable[iCombination[2,]] ), ## < <
-                     sum( unfavorable[iCombination[1,]] * favorable[iCombination[2,]] ) ## > <
-                     ))
-        }else{
-            return(c(0,
-                     0,  ## > >
-                     0, ## < <
-                     0 ## > <
-                     ))
+    ## ** merge tables
+    keep.col <- c("strata","index.C","index.T","indexWithinStrata.C", "indexWithinStrata.T","favorableC","unfavorableC")
+    old.col <- c("favorableC","unfavorableC")
+    new.col <- c("favorable","unfavorable")
+
+    ## first endpoint
+    ls.table <- vector(mode = "list", length = n.endpoint)
+    ls.table[[1]] <- tablePairScore[[1]][,.SD,.SDcols = keep.col]
+    setnames(ls.table[[1]], old = old.col, new = new.col)
+    
+    if(n.endpoint>1){
+        ##
+        n.TCstrata <- tablePairScore[[1]][,length(unique(.SD$indexWithinStrata.C)), by = "strata"][[2]]
+
+        for(iE in 2:n.endpoint){ ## iE <- 2
+            iTable <- tablePairScore[[iE]][,.SD,.SDcols = keep.col]
+            setnames(iTable, old = old.col, new = new.col)
+            iTable[, c("indexTable") := (.SD$indexWithinStrata.T-1) * n.TCstrata[.GRP] + .SD$indexWithinStrata.C, by="strata"]
+
+            ls.table[[iE]] <- data.table::copy(ls.table[[iE-1]])
+            ls.table[[iE]][iTable$indexTable, c("favorable") := .SD$favorable + iTable$favorable]
+            ls.table[[iE]][iTable$indexTable, c("unfavorable") := .SD$unfavorable + iTable$unfavorable]
         }
     }
+    ## ls.table[[1]][, mean(favorable)-mean(unfavorable)]
+    ## ls.table[[2]][, mean(favorable)-mean(unfavorable)]
+
+
     
     ## ** compute sufficient statistic for each endpoint
-    M.sufficient <- matrix(NA, nrow = D, ncol = 8,
-                           dimnames = list(endpoint, c("n.pairT","sum.favorableT","sum.unfavorableT","sum.mixedT",
-                                                       "n.pairC","sum.favorableC","sum.unfavorableC","sum.mixedC")
-                                           ))
     
-    for(iE in 1:D){ ## iE <- 1
+    ## *** compute sufficient statistics
+    ## X1 Y1 X1 Y1' ie 10
+    strataSum.favorableT <- matrix(NA, nrow = n.strata, ncol = n.endpoint,
+                                  dimnames = list(NULL, endpoint))
+    strataSum.unfavorableT <- matrix(NA, nrow = n.strata, ncol = n.endpoint,
+                                    dimnames = list(NULL, endpoint))
+    strataSum.mixedT <- matrix(NA, nrow = n.strata, ncol = n.endpoint,
+                               dimnames = list(NULL, endpoint))
+    strataSum.setT <- matrix(NA, nrow = n.strata, ncol = n.endpoint,
+                            dimnames = list(NULL, endpoint))
 
-        iTable <- data.table::copy(envir$outPoint$tablePairScore[[iE]][,.SD,.SDcols = keep.col])
-        data.table::setnames(iTable, old = col.id, new = c("strata","indexT","indexC"))
+    ## X1 Y1 X1' Y1 ie 01
+    strataSum.favorableC <- matrix(NA, nrow = n.strata, ncol = n.endpoint,
+                                   dimnames = list(NULL, endpoint))
+    strataSum.unfavorableC <- matrix(NA, nrow = n.strata, ncol = n.endpoint,
+                                     dimnames = list(NULL, endpoint))
+    strataSum.mixedC <- matrix(NA, nrow = n.strata, ncol = n.endpoint,
+                               dimnames = list(NULL, endpoint))
+    strataSum.setC <- matrix(NA, nrow = n.strata, ncol = n.endpoint,
+                            dimnames = list(NULL, endpoint))
 
-        ## *** perform correction
-        if(envir$outArgs$correction.uninf){
-            stop("Inference U statistic in presence of correction.uninf needs to be updated!!!")
-            ## vec.tempo <- unlist(iTable[,.(favorable = sum(favorable),
-            ##                               unfavorable = sum(unfavorable),
-            ##                               neutral = sum(neutral),
-            ##                               uninformative = sum(uninformative))])
-            ## factor <- sum(vec.tempo)/sum(vec.tempo[1:3])
+    colname.tempo <- c("set","favorable","unfavorable","mixed")
+    M.iid.favorable <- matrix(NA, nrow = n.T+n.C, ncol = n.endpoint)
+    M.iid.unfavorable <- matrix(NA, nrow = n.T+n.C, ncol = n.endpoint)
+    
+    for(iE in 1:n.endpoint){ ## iStrata <- 1
+        for(iStrata in 1:n.strata){ ## iStrata <- 1
+
+            ## P[1(X_i,Y_j)1(X_i,Y_k)] = 1/nm(m-1) sum_i sum_j 1(X_i,Y_j) sum_k neq j 1(X_i,Y_j)
+            ##                         = 1/nm(m-1) sum_i sum_j 1(X_i,Y_j) ( sum_k 1(X_i,Y_k) - 1(X_i,Y_j) )
+            ## here we compute sum_k 1(X_i,Y_k) and m-1
+            iTable <- ls.table[[iE]][ls.table[[iE]]$strata == iStrata]
             
-            ## iTable[, favorable := favorable * factor]
-            ## iTable[, unfavorable := unfavorable * factor]
-            ## iTable[, neutral := neutral * factor]
-            ## iTable[, uninformative := 0]
+            sumPair.T <- iTable[, .(favorable = sum(.SD$favorable), unfavorable = sum(.SD$unfavorable)), by = "indexWithinStrata.T"]
+            sumPair.C <- iTable[, .(favorable = sum(.SD$favorable), unfavorable = sum(.SD$unfavorable)), by = "indexWithinStrata.C"]
+
+            iTable[, c("sumFavorable.T") := sumPair.T$favorable[.SD$indexWithinStrata.T]]
+            iTable[, c("sumUnfavorable.T") := sumPair.T$unfavorable[.SD$indexWithinStrata.T]]
+            
+            iTable[, c("sumFavorable.C") := sumPair.C$favorable[.SD$indexWithinStrata.C]]
+            iTable[, c("sumUnfavorable.C") := sumPair.C$unfavorable[.SD$indexWithinStrata.C]]
+
+            iN.strata <- NROW(iTable)
+            iN.setT <- NROW(sumPair.T) - 1
+            iN.setC <- NROW(sumPair.C) - 1
+
+            ## 1/iN.strata =  nm
+            if(iN.setT > 0){
+                ## E[ 1(X_i>Y_j) 1(X_i>Y_k) ]
+                strataSum.favorableT[iStrata,iE] <- iTable[,sum((.SD$sumFavorable.T  - .SD$favorable) * .SD$favorable) / (iN.strata*iN.setT)]
+                ## E[ 1(X_i<Y_j) 1(X_i<Y_k) ]
+                strataSum.unfavorableT[iStrata,iE] <- iTable[,sum((.SD$sumUnfavorable.T  - .SD$unfavorable) * .SD$unfavorable) / (iN.strata*iN.setT)]
+                ## E[ 1(X_i>Y_j) 1(X_i<Y_k) ]
+                strataSum.mixedT[iStrata,iE] <- iTable[,sum((.SD$sumUnfavorable.T  - .SD$unfavorable) * .SD$favorable) / (iN.strata*iN.setT)]
+                ## strataSum.mixedT[iStrata,iE] <- iTable[,sum((sumFavorable.T  - favorable) * unfavorable) / (iN.strata*iN.setT)]
+            }
+            if(iN.setC > 0){
+                ## E[ 1(X_i>Y_j) 1(X_k>Y_j) ]
+                strataSum.favorableC[iStrata,iE] <- iTable[,sum((.SD$sumFavorable.C  - .SD$favorable) * .SD$favorable) / (iN.strata*iN.setC)]
+                ## E[ 1(X_i<Y_j) 1(X_k<Y_j) ]
+                strataSum.unfavorableC[iStrata,iE] <- iTable[,sum((.SD$sumUnfavorable.C  - .SD$unfavorable) * .SD$unfavorable) / (iN.strata*iN.setC)]
+                ## E[ 1(X_i>Y_j) 1(X_k<Y_j) ]
+                strataSum.mixedC[iStrata,iE] <- iTable[,sum((.SD$sumUnfavorable.C  - .SD$unfavorable) * .SD$favorable) / (iN.strata*iN.setC)]
+                ## strataSum.mixedC[iStrata,iE] <- iTable[,sum((sumFavorable.C  - favorable) * unfavorable) / (iN.strata*iN.setC)]
+            }
+
+            ## iid decomposition
+            dt.iid.T <- iTable[,.(favorable = sum((.SD$sumFavorable.T  - .SD$favorable) * .SD$favorable) / (iN.strata*iN.setT),
+                                  unfavorable = sum((.SD$sumUnfavorable.T  - .SD$unfavorable) * .SD$unfavorable) / (iN.strata*iN.setT)),by = "index.T"]
+            dt.iid.C <- iTable[,.(favorable = sum((.SD$sumFavorable.C  - .SD$favorable) * .SD$favorable) / (iN.strata*iN.setC),
+                                  unfavorable = sum((.SD$sumUnfavorable.C  - .SD$unfavorable) * .SD$unfavorable) / (iN.strata*iN.setC)),by = "index.C"]
+
+            centering.tempo <- mean(c(dt.iid.T$favorable, dt.iid.C$favorable))
+            M.iid.favorable[dt.iid.T$index.T,iE] <- dt.iid.T$favorable - centering.tempo
+            M.iid.favorable[dt.iid.C$index.C,iE] <- dt.iid.C$favorable - centering.tempo
+
+            centering.tempo <- mean(c(dt.iid.T$unfavorable, dt.iid.C$unfavorable))
+            M.iid.unfavorable[dt.iid.T$index.T,iE] <- dt.iid.T$unfavorable - centering.tempo
+            M.iid.unfavorable[dt.iid.C$index.C,iE] <- dt.iid.C$unfavorable - centering.tempo
+
+            ## sum(M.iid.favorable^2)
+            ## sum(M.iid.unfavorable^2)
         }
+    }    
 
-        ## *** compute sufficient statistics
-        browser()
-        ls.count_T <- iTable[,.(list = .(myFct_T(favorable, unfavorable))), by = c("strata","indexT") ][["list"]]
-        M.sufficient[iE,1:4] <- colSums(do.call(rbind,ls.count_T))
+    sum.favorableT <- colSums(strataSum.favorableT)
+    sum.unfavorableT <- colSums(strataSum.unfavorableT)
+    sum.mixedT <- colSums(strataSum.mixedT)
+    n.setT <- strataSum.setT[1,]
+
+    sum.favorableC <- colSums(strataSum.favorableC)
+    sum.unfavorableC <- colSums(strataSum.unfavorableC)
+    sum.mixedC <- colSums(strataSum.mixedC)
+    n.setC <- strataSum.setC[1,]
+
+    ## ** compute xi
+    ## pre-compute
+    p1.favorable <- cumsum(count.favorable)/n.pairs ## same as percentage favorable
+    p1.unfavorable <- cumsum(count.unfavorable)/n.pairs ## same as percentage unfavorable
+
+    ## P[X1>Y1 & X1>Y1'] - P[X1>Y1]^2
+    xi_10_11 <- cumsum(sum.favorableT) - p1.favorable^2
+    ## P[X1>Y1 & X1'>Y1] - P[X1>Y1]^2
+    xi_01_11 <- cumsum(sum.favorableC) - p1.favorable^2
     
-        ls.count_C <- iTable[,.(list = .(myFct_C(favorable, unfavorable))), by = c("strata","indexC") ][["list"]]
-        M.sufficient[iE,5:8] <- colSums(do.call(rbind,ls.count_C))
-        
-    }
-
-    ## ** compute sigma for each endpoint
-
-    ## *** P[X1>Y1 & X1>Y1']
-    p1.favorable <- cumsum(envir$outPoint$count_favorable)/envir$outPoint$n_pairs
+    ## P[X1<Y1 & X1<Y1'] - P[X1<Y1]^2
+    xi_10_22 <- cumsum(sum.unfavorableT) - p1.unfavorable^2
+    ## P[X1<Y1 & X1'<Y1] - P[X1<Y1]^2
+    xi_01_22 <- cumsum(sum.unfavorableC) - p1.unfavorable^2
     
-    ## *** P[X1<Y1 & X1<Y1']
-    p1.unfavorable <- cumsum(envir$outPoint$count_unfavorable)/envir$outPoint$n_pairs
-    
-    ## *** P[X1>Y1 & X1>Y1']
-    p2.favorableT <- cumsum(M.sufficient[,"sum.favorableT"])/cumsum(M.sufficient[,"n.pairT"])
-    p2.favorableC <- cumsum(M.sufficient[,"sum.favorableC"])/cumsum(M.sufficient[,"n.pairC"])
-
-    ## *** P[X1<Y1 & X1<Y1']
-    p2.unfavorableT <- cumsum(M.sufficient[,"sum.unfavorableT"])/cumsum(M.sufficient[,"n.pairT"])
-    p2.unfavorableC <- cumsum(M.sufficient[,"sum.unfavorableC"])/cumsum(M.sufficient[,"n.pairC"])
-
-    ## *** P[X1>Y1 & X1<Y1']
-    p2.mixedT <- cumsum(M.sufficient[,"sum.mixedT"])/cumsum(M.sufficient[,"n.pairT"])
-    p2.mixedC <- cumsum(M.sufficient[,"sum.mixedC"])/cumsum(M.sufficient[,"n.pairC"])
-
-    ## *** compute xi
-    xi_10_11 <- p2.favorableT - p1.favorable^2
-    xi_01_11 <- p2.favorableC - p1.favorable^2
-    
-    xi_10_22 <- p2.unfavorableT - p1.unfavorable^2
-    xi_01_22 <- p2.unfavorableC - p1.unfavorable^2
-    
-    xi_10_12 <- p2.mixedT - p1.favorable*p1.unfavorable ## not a mistake to have C here - see formula
-    xi_01_12 <- p2.mixedC - p1.favorable*p1.unfavorable
+    ## P[X1>Y1 & X1<Y1'] - P[X1>Y1]*P[X1<Y1]
+    xi_10_12 <- cumsum(sum.mixedT) - p1.favorable * p1.unfavorable
+    ## P[X1>Y1 & X1'<Y1] - P[X1>Y1]*P[X1<Y1]
+    xi_01_12 <- cumsum(sum.mixedC) - p1.favorable * p1.unfavorable
 
     ## ** compute sigma
-    n <- length(envir$indexT)
-    m <- length(envir$indexC)
+    n <- n.T
+    m <- n.C
     N <- n+m
 
-    M.cov <- cbind(favorable = N/m * xi_10_11 + N/n *xi_01_11,
-                   unfavorable = N/m * xi_10_22 + N/n *xi_01_22,
-                   covariance = N/m * xi_10_12 + N/n *xi_01_12)
-    if (trace > 1) {cat(" (done) \n")}
+    ## asymptotic variance i.e. sqrt(n+m)(Uhat - U) \sim N(0,Sigma)
+    ## scaled asymptotic variance i.e. (Uhat - U) \sim N(0,Sigma/N)
+    M.cov <- cbind(favorable = 1/m * xi_10_11 + 1/n * xi_01_11,
+                   unfavorable = 1/m * xi_10_22 + 1/n * xi_01_22,
+                   covariance = 1/m * xi_10_12 + 1/n * xi_01_12)
+    ## crossprod(cbind(M.iid.favorable,M.iid.unfavorable))
 
-    return(M.cov)
+    if(any((M.cov[,"favorable"] + M.cov[,"unfavorable"] - 2 * M.cov[,"covariance"]) <= 0)){
+        warning("Non positive definite covariance matrix")
+    }
+
+    return(list(Sigma = M.cov,
+                iid.favorable = M.iid.favorable,
+                iid.unfavorable = M.iid.unfavorable))
 }

@@ -2,43 +2,38 @@
 % Please edit documentation in R/RcppExports.R
 \name{GPC_cpp}
 \alias{GPC_cpp}
-\alias{GPC_cpp}
 \title{C++ function performing the pairwise comparison over several endpoints.}
 \usage{
-GPC_cpp(Control, Treatment, threshold, survEndpoint, delta_Control,
-  delta_Treatment, D, strataC, strataT, n_strata, n_TTE, Wscheme,
-  index_survivalM1, threshold_TTEM1, list_survTimeC, list_survTimeT,
-  list_survJumpC, list_survJumpT, list_lastSurv, methodTTE, correctionUninf,
-  neutralAsUninf, keepScore)
+GPC_cpp(endpoint, censoring, indexC, indexT, threshold, method, D,
+  n_strata, n_TTE, Wscheme, index_survival_M1, threshold_M1,
+  list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT,
+  list_lastSurv, correctionUninf, neutralAsUninf, keepScore, reserve,
+  returnOnlyDelta)
 }
 \arguments{
-\item{Control}{A matrix containing the values of each endpoint (in columns) for the control group (in rows). \emph{const arma::mat&}.}
+\item{endpoint}{A matrix containing the values of each endpoint (in columns) for each observation (in rows). \emph{const arma::mat&}.}
 
-\item{Treatment}{A matrix containing the values of each endpoint (in columns) for the treatment group (in rows). \emph{const arma::mat&}.}
+\item{censoring}{A matrix containing the values of the censoring variables relative to each endpoint (in columns) for each observation (in rows). \emph{const arma::mat&}.}
+
+\item{indexC}{A list containing the indexes of control observations belonging for each strata. \emph{List&}  of vector containing positive integers.}
+
+\item{indexT}{A list containing the indexes of treatment observations belonging for each strata. \emph{List&} of vector containing positive integers.}
 
 \item{threshold}{Store the thresholds associated to each endpoint. \emph{const NumericVector&}. Must have length D. The threshold is ignored for binary endpoints. Must have D columns.}
 
-\item{survEndpoint}{Does each endpoint is a time to event. \emph{const LogicalVector&}. Must have length D.}
-
-\item{delta_Control}{A matrix containing the nature of observations in the control group (in rows) (0 censoring, 1 event) for each TTE endpoint (in columns) . \emph{const arma::mat&} containing binary integers. Must have n_TTE columns. Ignored if n_TTE equals 0.}
-
-\item{delta_Treatment}{A matrix containing in the type of event (0 censoring, 1 event) for each TTE endpoint (in columns) and treatment observations (in rows). \emph{const arma::mat&} containing binary integers. Must have n_TTE columns. Ignored if n_TTE equals 0.}
+\item{method}{The index of the method used to score the pairs. \emph{const IntegerVector&}. Must have length D. 1 for continuous, 2 for Gehan, and 3 for Peron.}
 
 \item{D}{The number of endpoints. Strictly positive \emph{const int}.}
-
-\item{strataC}{A list containing the indexes of control observations belonging for each strata. \emph{List&}  of vector containing positive integers.}
-
-\item{strataT}{A list containing the indexes of treatment observations belonging for each strata. \emph{List&} of vector containing positive integers.}
 
 \item{n_strata}{The number of strata . Strictly positive \emph{const int}.}
 
 \item{n_TTE}{The number of time-to-event endpoints. Positive \emph{const int}.}
 
-\item{Wscheme}{The matrix describing the weighting strategy. For each endpoint (except the first) in column, weights of each pair are initialized at 1 and multiplied by the weight of the endpoints in rows where there is a 1. \emph{const arma::mat&}. Must have n_TTE lines and D-1 columns.}
+\item{Wscheme}{The matrix describing the weighting strategy. For each endpoint (except the first) in column, weights of each pair are initialized at 1 and multiplied by the weight of the endpoints in rows where there is a 1. \emph{const arma::mat&}. Must have D lines and D columns.}
 
-\item{index_survivalM1}{The position, among all the survival endpoints, of the last same endpoint (computed with a different threshold). If it is the first time that the TTE endpoint is used it is set to -1. \emph{const IntegerVector}. Must have length n_TTE.}
+\item{index_survival_M1}{The position, among all the survival endpoints, of the last same endpoint (computed with a different threshold). If it is the first time that the TTE endpoint is used it is set to -1. \emph{const IntegerVector}. Must have length n_TTE.}
 
-\item{threshold_TTEM1}{The previous latest threshold of each TTE endpoint. When it is the first time that the TTE endpoint is used it is set to -1. \emph{const NumericVector}. Must have length n_TTE.}
+\item{threshold_M1}{The previous latest threshold of each TTE endpoint. When it is the first time that the TTE endpoint is used it is set to -1. \emph{const NumericVector}. Must have length n_TTE.}
 
 \item{list_survTimeC}{A list of matrix containing the survival estimates (-threshold, 0, +threshold ...) for each event of the control group (in rows). \emph{List&}.}
 
@@ -50,16 +45,18 @@ GPC_cpp(Control, Treatment, threshold, survEndpoint, delta_Control,
 
 \item{list_lastSurv}{A list of matrix containing the last survival estimate in each strata (rows) and treatment group (columns). \emph{List&}.}
 
-\item{methodTTE}{The type of method used to compare censored pairs (0 Gehan 1 Peron).}
-
 \item{correctionUninf}{Should the uninformative weight be re-distributed to favorable and unfavorable?}
 
 \item{neutralAsUninf}{Should paired classified as neutral be re-analyzed using endpoints of lower priority?  \emph{logical}.}
 
 \item{keepScore}{Should the result of each pairwise comparison be kept? \emph{logical}.}
+
+\item{reserve}{Should vector storing neutral pairs and uninformative pairs be initialized at their maximum possible length? \emph{logical}.}
+
+\item{returnOnlyDelta}{Should only the net benefit and win ratio be output? \emph{logical}.}
 }
 \description{
-\code{GPC_cpp} call for each endpoint and each strata the pairwise comparison function suited to the type of endpoint and store the resuts.
+\code{GPC_cpp} call for each endpoint and each strata the pairwise comparison function suited to the type of endpoint and store the results.
 }
 \keyword{BuyseTest}
 \keyword{Cpp}

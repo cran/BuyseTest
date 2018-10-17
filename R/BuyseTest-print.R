@@ -16,10 +16,12 @@ printGeneral <- function(censoring,
                          level.treatment,
                          method.tte,
                          neutral.as.uninf,
+                         correction.uninf,
                          operator,
                          strata,
                          threshold,
-                         threshold.TTEM1,
+                         threshold.TTE_M1,
+                         trace,
                          treatment,
                          type,
                          Wscheme,
@@ -44,9 +46,15 @@ printGeneral <- function(censoring,
     df.endpoint$type <- c("binary","continuous","time to event")[type]
     df.endpoint$operator <- c("lower is favorable","higher is favorable")[1 + (operator == ">0")]
     df.endpoint$threshold[type!=1] <- threshold[type!=1]
-    df.endpoint$censoring[type==3] <- censoring
+    df.endpoint$censoring[type==3] <- censoring[type==3]
 
     df.endpoint[is.na(df.endpoint)] <- ""
+    ## add white space
+    df.endpoint$endpoint <- paste0(df.endpoint$endpoint," ")
+    df.endpoint$type <- paste0(df.endpoint$type," ")
+    df.endpoint$operator <- paste0(df.endpoint$operator," ")
+    df.endpoint$threshold <- paste0(df.endpoint$threshold," ")
+
     if(all(type!=3)){
         df.endpoint$censoring <- NULL
         if(all(type!=2)){
@@ -55,55 +63,78 @@ printGeneral <- function(censoring,
     }
     
     ## threshold
-    if(any(type==3)){
-        if (length(threshold.TTEM1) > 0) {
-            threshold.TTEM1.display <- threshold.TTEM1
-            threshold.TTEM1.display[threshold.TTEM1.display < 0] <- +Inf
-        }else{
-            threshold.TTEM1.display <- +Inf
-        }
+    if(D.TTE>0){
+        threshold.TTE_M1.display <- threshold.TTE_M1
+        threshold.TTE_M1.display[threshold.TTE_M1.display < 0] <- +Inf
         
         threshold.display <- rbind(sapply(1:D.TTE,
                                           function(x){paste(c("[",round(threshold[type == 3][x],4),
-                                                              " ; ",round(threshold.TTEM1.display[x],4),
+                                                              " ; ",round(threshold.TTE_M1.display[x],4),
                                                               "] "), collapse = "")}))
-        colnames(threshold.display) <- endpoint[type == 3]      
+        colnames(threshold.display) <- paste0(endpoint[type == 3], "(",threshold[type==3],")")
         rownames(threshold.display) <- "threshold interval"
     }
     
     ## ** Display
-    cat("Settings (point estimation) \n")
-    cat("   > treatment groups: Control = ",level.treatment[1]," and Treatment = ",level.treatment[2],"\n", sep = "")
-    cat("   > ",D," endpoint",if(D>1){"s"},": \n", sep = "")
+    cat("Settings \n")
+    cat("   - treatment groups: Control = ",level.treatment[1]," and Treatment = ",level.treatment[2],"\n", sep = "")
+    cat("   - ",D," endpoint",if(D>1){"s"},": \n", sep = "")
     print(df.endpoint, row.names = FALSE, quote = FALSE, right = FALSE)
     if(n.strata>1){
         txt.variable <- switch(as.character(length(strata)),
                                "0" = " variable",
                                "variables")        
-        cat("   > ", n.strata, " strata with levels: ",paste(level.strata, collapse = " ") , "\n", sep = "")
+        cat("   - ", n.strata, " strata with levels: ",paste(level.strata, collapse = " ") , "\n", sep = "")
         cat("                ",txt.variable,": ",paste(strata, collapse = " ")," \n", sep = "")
     }
-    cat("   > management of neutral pairs: ")
+    cat("   - management of neutral pairs: ")
     if(neutral.as.uninf){
         cat("re-analyzed using endpoints of lower priority (if any) \n")
     }else{
         cat("ignore endpoints of lower priority \n")
     }
-    if(any(type==3)){
-        cat("   > management of censored survival pairs: ")
+    if(D.TTE>0){
+        cat("   - management of censored survival pairs: ")
         switch(as.character(method.tte),
                "0" = cat("uninformative pairs \n"),
                "1" = cat("use Kaplan Meier survival curves to compute the score \n")
-               ) 
-        if (method.tte %in% c("1","2","3") && D.TTE>1) {
-            
-            cat("   > weights of the pairs relatively to the enpoints: \n")
+               )
+    }
+    if(trace>2){
+        if ( (method.tte == "1" || correction.uninf) && D > 1) {            
+            cat("   - Current contribution of a pair based on the weights computed at previous enpoints: \n")
             print(Wscheme)
-            
-            cat("   > intervals thresholds for survival endpoints: \n")    
+        }
+
+    
+        if ( method.tte == "1" && D.TTE > 1) {            
+            cat("   - thresholds for survival endpoints: \n")    
             print(threshold.display)
         }
     }
-    cat("\n")
+
+    return(NULL)
 }
 
+## * Function printInference
+#' @rdname internal-print
+printInference <- function(method.inference, n.resampling, cpus, seed, ...){
+
+    txt.type <- switch(method.inference,
+                       "asymptotic" = "moments of the U-statistic",
+                       "bootstrap" = paste0("non parametric bootstrap with ",n.resampling," samples"),
+                       "stratified bootstrap" = paste0("stratified non-parametric bootstrap with ",n.resampling," samples"),
+                       "permutation" = paste0("permutation test with ", n.resampling, " permutations"),
+                       "stratified permutation" = paste0("stratified permutation test with ", n.resampling, " permutations"))
+
+    cat("Estimation of the asymptotic distribution \n",
+        "   - method: ",txt.type,"\n", sep = "")
+    if(method.inference != "asymptotic"){
+        cat("   - cpus  : ",cpus,"\n", sep = "")
+        if (!is.null(seed)) {
+            cat("   - seeds : ",paste(seq(seed,seed + cpus - 1), collapse = " "),"\n", sep = "")       
+        }
+    }
+
+    return(NULL)
+}

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: maj 19 2018 (23:37) 
 ## Version: 
-## Last-Updated: sep 24 2018 (15:09) 
+## Last-Updated: okt 11 2018 (12:19) 
 ##           By: Brice Ozenne
-##     Update #: 143
+##     Update #: 210
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -22,14 +22,20 @@
 #' @aliases confing confint,BuyseRes-method
 #' @include BuyseRes-object.R BuyseRes-summary.R
 #' 
-#' @description Computes confidence intervals for net chance statistic or the win ratio statistic.
+#' @description Computes confidence intervals for net benefit statistic or the win ratio statistic.
 #' 
 #' @param object an \R object of class \code{\linkS4class{BuyseRes}}, i.e., output of \code{\link{BuyseTest}}
 #' @param statistic [character] the statistic summarizing the pairwise comparison:
-#' \code{"netChance"} displays the net chance in favor of treatment, as described in Buyse (2010) and Peron et al. (2016)),
+#' \code{"netBenefit"} displays the net benefit, as described in Buyse (2010) and Peron et al. (2016)),
 #' whereas \code{"winRatio"} displays the win ratio, as described in Wang et al. (2016).
+#' Default value read from \code{BuyseTest.options()}.
 #' @param conf.level [numeric] confidence level for the confidence intervals.
+#' Default value read from \code{BuyseTest.options()}.
 #' @param alternative [character] the type of alternative hypothesis: \code{"two.sided"}, \code{"greater"}, or \code{"less"}.
+#' Default value read from \code{BuyseTest.options()}.
+#' @param transformation [logical]  should the CI be computed on the logit scale / log scale for the net benefit / win ratio and backtransformed.
+#' Otherwise they are computed without any transformation.
+#' Default value read from \code{BuyseTest.options()}.
 #' @param method.boot [character] the method used to compute the boostrap confidence intervals and p-values.
 #' Can be \code{"percentile"} for computing the CI using the quantiles of the boostrap distribution or
 #' \code{"gaussian"} for using a Gaussian approximation to compute the CI where the standard error is computed using the bootstrap samples.
@@ -46,7 +52,7 @@
 #' are estimated outside of the interval of definition of the statistic (e.g. outside [-1,1] for the proportion in favor of treatment).
 #'
 #'
-#' @return A matrix containing a column for the estimated statstic (over all strata),
+#' @return A matrix containing a column for the estimated statistic (over all strata),
 #' the lower bound and upper bound of the confidence intervals, and the associated p-values.
 #' When using resampling methods,
 #' an attribute \code{n.resampling} specified how many samples have been used to compute the confidence intervals and the p-values.
@@ -60,20 +66,35 @@
 setMethod(f = "confint",
           signature = "BuyseRes",
           definition = function(object,
-                                statistic = BuyseTest.options()$statistic,
-                                conf.level = 0.95,
-                                alternative = "two.sided",
-                                method.boot = "percentile"){
+                                statistic = NULL,
+                                conf.level = NULL,
+                                alternative = NULL,
+                                method.boot = "percentile",
+                                transformation = NULL){
 
+              option <- BuyseTest.options()
+              if(is.null(statistic)){
+                  statistic <- option$statistic
+              }
+              if(is.null(transformation)){
+                  transformation <- option$transformation
+              }
+              if(is.null(conf.level)){
+                  conf.level <- option$conf.level
+              }
+              if(is.null(alternative)){
+                  alternative <- option$alternative
+              }
+              
               ## ** normalize and check arguments
               statistic <- switch(gsub("[[:blank:]]", "", tolower(statistic)),
-                                  "netchance" = "netChance",
+                                  "netbenefit" = "netBenefit",
                                   "winratio" = "winRatio",
                                   statistic)
 
               validCharacter(statistic,
                              name1 = "statistic",
-                             valid.values = c("netChance","winRatio"),
+                             valid.values = c("netBenefit","winRatio"),
                              valid.length = 1,
                              method = "confint[BuyseRes]")
 
@@ -97,21 +118,39 @@ setMethod(f = "confint",
                              valid.length = 1,
                              method = "confint[BuyseRes]")
 
+              validLogical(transformation,
+                           name1 = "transformation",
+                           valid.length = 1,
+                           method = "confint[BuyseRes]")
+              
               ## ** extract information
               method.inference <- object@method.inference
               if(is.na(conf.level)){
                   method.inference <- "none"
               }
 
+              count.favorable <- slot(object, name = paste0("count.favorable"))
+              count.unfavorable <- slot(object, name = paste0("count.unfavorable"))
+              n.pairs <- slot(object, name = paste0("n.pairs"))
               Delta <- slot(object, name = paste0("Delta.",statistic))
               Delta.permutation <- slot(object, name = paste0("DeltaResampling.",statistic))
               covariance <- object@covariance
               endpoint <- object@endpoint
               alpha <- 1-conf.level
-              
+
+              if(object@method.inference == "asymptotic"){
+                  if(object@method.tte == "Peron"){
+                      warning("The current implementation of the asymptotic distribution is not valid for method.tte=\"Peron\" \n",
+                              "Standard errors / confidence intervals / p-values should not be trusted \n")
+                  }else if(object@correction.uninf > 0){
+                      warning("The current implementation of the asymptotic distribution is not valid when a correction is used \n",
+                              "Standard errors / confidence intervals / p-values should not be trusted \n")
+                  }
+              }
+
               ## ** null hypothesis
               null <- switch(statistic,
-                             "netChance" = 0,
+                             "netBenefit" = 0,
                              "winRatio" = 1)
 
 
@@ -127,11 +166,15 @@ setMethod(f = "confint",
               ## ** compute the confidence intervals
               outConfint <- do.call(method.confint, args = list(Delta = Delta,
                                                                 Delta.permutation = Delta.permutation,
+                                                                pc.favorable = count.favorable / n.pairs,
+                                                                pc.unfavorable = count.unfavorable / n.pairs,
+                                                                statistic = statistic,
                                                                 covariance = covariance,
                                                                 alternative = alternative,
                                                                 null = null,
                                                                 alpha = alpha,
-                                                                endpoint = endpoint))
+                                                                endpoint = endpoint,
+                                                                transformation = transformation))
 
               ## ** number of permutations
               if(method.inference %in%  c("permutation","stratified permutation","bootstrap","stratified bootstrap")){
@@ -258,15 +301,13 @@ confint_gaussianBootstrap <- function(Delta, Delta.permutation,
                   
 
 ## * confint_Ustatistic (called by confint)
-confint_Ustatistic <- function(Delta, covariance,
-                               null, alternative, alpha,
-                               endpoint, ...){
+confint_Ustatistic <- function(Delta, pc.favorable, pc.unfavorable, covariance, statistic,
+                               alternative, alpha,
+                               endpoint, transformation, ...){
 
-    warning("In development - do not trust the results \n")
-    
     n.endpoint <- length(endpoint)
-    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 4,
-                       dimnames = list(endpoint, c("estimate","lower.ci","upper.ci","p.value")))
+    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 5,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","p.value")))
 
     ## ** point estimate
     outTable[,"estimate"] <- Delta
@@ -276,20 +317,52 @@ confint_Ustatistic <- function(Delta, covariance,
         if(is.infinite(Delta[iE]) || is.na(Delta[iE])){next} ## do not compute CI or p-value when the estimate has not been identified
 
         ## *** standard error
-        iSE <- sqrt(covariance[iE,"favorable"] + covariance[iE,"unfavorable"] - 2*covariance[iE,"covariance"])
-        
-        ## *** confidence interval
-        outTable[iE,c("lower.ci","upper.ci")] <- switch(alternative,
-                                                        "two.sided" = Delta[iE] + stats::qnorm(c(alpha/2,1 - alpha/2)) * iSE,
-                                                        "less" = c(Delta[iE] + stats::qnorm(alpha) * iSE, Inf),
-                                                        "greater" = c(-Inf,Delta[iE] + stats::qnorm(1-alpha) * iSE)
-                                                        )
+        if(statistic == "netBenefit"){
+            outTable[iE,"se"] <- sqrt(covariance[iE,"favorable"] + covariance[iE,"unfavorable"] - 2 * covariance[iE,"covariance"])
+            
+            if(transformation){ ## atanh transform (also called fisher transform)
+                iSE <- outTable[iE,"se"] / (1+Delta[iE]^2)
+                iDelta <-  atanh(Delta[iE])
+                backtransform <- tanh
+                null <- atanh(0)
+            }else{ ## on the original scale
+                iSE <- outTable[iE,"se"]
+                iDelta <- Delta[iE]
+                backtransform <- function(x){x}
+                null <- 0
+            }
+            
+            ## on the logit scale
+        }else if(statistic == "winRatio"){
+            
+            outTable[iE,"se"] <- sqrt(covariance[iE,"favorable"]/pc.unfavorable[iE]^2 + covariance[iE,"unfavorable"]*Delta[iE]^2/pc.unfavorable[iE]^2 - 2 * covariance[iE,"covariance"]*Delta[iE]/pc.unfavorable[iE]^2)
 
+            if(transformation){ ## log transform
+                iSE <- outTable[iE,"se"] / Delta[iE]
+                iDelta <-  log(Delta[iE])
+                backtransform <- exp
+                null <- log(1)
+            }else{ ## on the original scale
+                iSE <- outTable[iE,"se"]
+                iDelta <- Delta[iE]
+                backtransform <- function(x){x}
+                null <- 1
+            }
+
+        }
+
+        ## *** confidence interval
+        outTable[iE,c("lower.ci","upper.ci")] <- backtransform(switch(alternative,
+                                                                      "two.sided" = iDelta + stats::qnorm(c(alpha/2,1 - alpha/2)) * iSE,
+                                                                      "less" = c(iDelta + stats::qnorm(alpha) * iSE, Inf),
+                                                                      "greater" = c(-Inf,iDelta + stats::qnorm(1-alpha) * iSE)
+                                                                      ))
+        
         ## *** p.value
         outTable[iE,"p.value"] <- switch(alternative,
-                                         "two.sided" = 2*(1-stats::pnorm(abs(Delta[iE]/iSE - null))), ## 2*(1-pnorm(1.96))
-                                         "less" = stats::pnorm(Delta[iE]/iSE - null), ## pnorm(1.96)
-                                         "greater" = 1-stats::pnorm(Delta[iE]/iSE - null)
+                                         "two.sided" = 2*(1-stats::pnorm(abs((iDelta-null)/iSE))), ## 2*(1-pnorm(1.96))
+                                         "less" = stats::pnorm((iDelta-null)/iSE), ## pnorm(1.96)
+                                         "greater" = 1-stats::pnorm((iDelta-null)/iSE)
                                          )
     }
 

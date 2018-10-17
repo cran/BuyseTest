@@ -70,7 +70,7 @@ setMethod(f = "getCount",
 #' \item \code{"unfavorable"}: the probability that the endpoint is worse in the treatment arm vs. in the control arm.
 #' \item \code{"neutral"}: the probability that the endpoint is no different in the treatment arm vs. in the control arm.
 #' \item \code{"uninformative"}: the weight of the pair that cannot be attributed to favorable/unfavorable/neutral.
-#' \item \code{"weight"}: the residual weight of the pair to be analysed at the current outcome. Each pair starts with a weight of 1.
+#' \item \code{"weight"}: the residual weight of the pair to be analyzed at the current outcome. Each pair starts with a weight of 1.
 #' \item \code{"favorable.corrected"}: same as \code{"favorable"}  after weighting.
 #' \item \code{"unfavorable.corrected"}: same as \code{"favorable"} after weighting.
 #' \item \code{"neutral.corrected"}: same as \code{"favorable"} after weighting.
@@ -138,14 +138,14 @@ setMethod(f = "getPairScore",
 
               if(length(object@tablePairScore)==0){
                   if(trace){
-                      cat("Survival was not exported from the object \n",
-                          "Consider setting the argument \'keep.survival\' to \"TRUE\" in BuyseTest.options \n", sep = "")
+                      cat("pairScore was not exported from the object \n",
+                          "Consider setting the argument \'keep.pairScore\' to \"TRUE\" in BuyseTest.options \n", sep = "")
                   }
                   return(invisible(NULL))
               }else{
                   out <- data.table::copy(object@tablePairScore)
 
-                  endpoint.names <- names(object@Delta.netChance)
+                  endpoint.names <- names(object@Delta.netBenefit)
                   strata.names <- object@level.strata
                   
                   if(!is.null(endpoint)){
@@ -243,16 +243,16 @@ setMethod(f = "getPairScore",
 setMethod(f = "getSurvival",
           signature = "BuyseRes",
           definition = function(object, type, endpoint, strata, unlist, trace){
-              
+
               if(length(object@tableSurvival)==0){
                   
                   if(trace>0){
                       if(all(tolower(object@type)!="timetoevent")){
                           add.txt <- "No endpoint of type time to event \n"
-                      }else if(tolower(object@method.tte$method)!="peron"){
+                      }else if(tolower(object@method.tte)!="peron"){
                           add.txt <- "Consider setting the argument \'method.tte\' to \"Peron\" when calling BuyseTest \n"
                       }else{
-                          add.txt <- "Consider setting the argument \'keep.survival\' to \"TRUE\" in BuyseTest.options \n"
+                          add.txt <- "Consider setting the argument \'keep.survival\' to TRUE in BuyseTest.options \n"
                       }
                       cat("Survival was not exported from the object \n",
                           add.txt, sep = "")    
@@ -272,7 +272,7 @@ setMethod(f = "getSurvival",
                       out <- data.table::copy(object@tableSurvival)
                   }
                   
-                  endpoint.names <- names(object@Delta.netChance)
+                  endpoint.names <- names(object@Delta.netBenefit)
                   strata.names <- object@level.strata
                   
                   if(!is.null(endpoint)){

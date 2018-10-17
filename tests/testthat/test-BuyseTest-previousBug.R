@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 17 2018 (16:46) 
 ## Version: 
-## Last-Updated: sep 24 2018 (15:03) 
+## Last-Updated: okt 16 2018 (18:47) 
 ##           By: Brice Ozenne
-##     Update #: 59
+##     Update #: 76
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -73,27 +73,27 @@ test_that("number of pairs - argument neutral.as.uninf", {
 
         ## compared to known value
         if(iCorrection == FALSE){
-        test <- as.data.table(summary(BT.T, print = FALSE)$table)
-        GS <- data.table("endpoint" = c("timeOS", "timeOS", "Mgrade.tox", "Mgrade.tox"), 
-                         "threshold" = c(1e-12, 1e-12, 1e-12, 1e-12), 
-                         "strata" = c("global", "1", "global", "1"), 
-                         "pc.total" = c(100.00000, 100.00000,  44.44444,  44.44444), 
-                         "pc.favorable" = c(44.44444, 44.44444, 22.22222, 22.22222), 
-                         "pc.unfavorable" = c(11.11111, 11.11111, 11.11111, 11.11111), 
-                         "pc.neutral" = c(11.11111, 11.11111, 11.11111, 11.11111), 
-                         "pc.uninf" = c(33.33333, 33.33333,  0.00000,  0.00000), 
-                         "delta" = c(0.3333333, 0.3333333, 0.1111111, 0.1111111), 
-                         "Delta" = c(0.3333333, NA, 0.4444444, NA), 
-                         "CIinf.Delta" = as.numeric(c(NA, NA, NA, NA)), 
-                         "CIsup.Delta" = as.numeric(c(NA, NA, NA, NA)), 
-                         "p.value" = as.numeric(c(NA, NA, NA, NA)), 
-                         "n.resampling" = as.numeric(c(NA, NA, NA, NA)))
-        ##    butils::object2script(test)
+            test <- as.data.table(summary(BT.T, print = FALSE)$table)
+            GS <- data.table("endpoint" = c("timeOS", "timeOS", "Mgrade.tox", "Mgrade.tox"), 
+                             "threshold" = c(1e-12, 1e-12, 1e-12, 1e-12), 
+                             "strata" = c("global", "1", "global", "1"), 
+                             "pc.total" = c(100.00000, 100.00000,  44.44444,  44.44444), 
+                             "pc.favorable" = c(44.44444, 44.44444, 22.22222, 22.22222), 
+                             "pc.unfavorable" = c(11.11111, 11.11111, 11.11111, 11.11111), 
+                             "pc.neutral" = c(11.11111, 11.11111, 11.11111, 11.11111), 
+                             "pc.uninf" = c(33.33333, 33.33333,  0.00000,  0.00000), 
+                             "delta" = c(0.3333333, 0.3333333, 0.1111111, 0.1111111), 
+                             "Delta" = c(0.3333333, NA, 0.4444444, NA), 
+                             "CIinf.Delta" = as.numeric(c(NA, NA, NA, NA)), 
+                             "CIsup.Delta" = as.numeric(c(NA, NA, NA, NA)), 
+                             "p.value" = as.numeric(c(NA, NA, NA, NA)), 
+                             "n.resampling" = as.numeric(c(NA, NA, NA, NA)))
+            ##    butils::object2script(test)
 
-        attr(test,"index") <- NULL
-        expect_equal(test, GS, tol = 1e-6)
-        ## class(BTS.T[["n.resampling"]])
-        ## class(GS[["n.resampling"]])
+            attr(test,"index") <- NULL
+            expect_equal(test, GS, tol = 1e-6)
+            ## class(BTS.T[["n.resampling"]])
+            ## class(GS[["n.resampling"]])
         }
     }
 
@@ -121,29 +121,6 @@ BT_tau0 <- BuyseTest(data=data,
                      method.tte="Peron",
                      method.inference = "none",
                      cpus=1)
-
-## * Joris: jeudi 31 mai 2018
-## Beware of a bug in this new CRAN version (1.3.2)
-## pvalues computed through bootstrap and stratified bootstrap seem to be reversed, while associated confidence intervals are correct
-if(FALSE){
-    dt <- data.table(
-        ttt = rep(c(0,0,0,0,0,1,1,1,1,1),10),
-        y1 = rep(c(1,2,3,4,5,0,3,4,5,6),10),
-        strat = rep(1:5,each=20)
-    )
-
-    BT.boot <- BuyseTest(data = dt, formula = ttt ~ cont(y1, threshold=1),
-                         method.inference = "bootstrap",
-                         n.resampling = 500)
-
-    summary(BT.boot)
-
-    BT.perm <- BuyseTest(data = dt, formula = ttt ~ cont(y1, threshold=1),
-                         method.inference = "permutation",
-                         n.resampling = 500)
-    summary(BT.perm)
-}
-
 
 ## * Brice: 09/06/18 6:51 (Tied event with tte endpoint)
 ## when computing the integral for peron with double censoring
@@ -193,4 +170,92 @@ test_that("ordering of tied event does not affect BuyseTest", {
     expect_equal(as.double(BT.all@Delta.winRatio), 0.8384569, tol = 1e-5)
     
 
+})
+
+
+## * Brice: 10/12/18 3:02 (Wscheme)
+
+BuyseTest_buildWscheme <- BuyseTest:::buildWscheme
+## BuyseTest_buildWscheme <- buildWscheme
+
+endpoint <- c("time","time","time")
+threshold <- c(3:1)
+D <- length(endpoint)
+type <- rep(3, D)
+D.TTE <- sum(type==3)
+
+test_that("Wscheme: 3 times the same endpoint",{
+    Wtest <- BuyseTest_buildWscheme(method.tte = 1,
+                                    endpoint = endpoint,
+                                    D.TTE = D.TTE,
+                                    D = D,
+                                    type = type,
+                                    n.strata = 1,
+                                    threshold = threshold)
+
+    ## butils::object2script(Wtest)
+    GS <- list(Wscheme = matrix(c(0, NA, NA, 0, 0, NA, 0, 0, 0),
+                                nrow = 3, ncol = 3,
+                                dimnames = list(c("weigth of time(3)", "weigth of time(2)", "weigth of time(1)"),
+                                                c("for time(3)", "for time(2)", "for time(1)")) ),
+               index.survival_M1 = c(-1, 0, 1),
+               threshold_M1 = c(-1, 3, 2) )
+
+    expect_equal(Wtest[c("Wscheme","index.survival_M1","threshold_M1")], GS)
+})
+
+endpoint <- c("time","time1","time","time","time2","time1")
+threshold <- c(6:1)
+D <- length(endpoint)
+type <- rep(3, D)
+D.TTE <- sum(type==3)
+
+test_that("Wscheme: 6 tte endpoint",{
+    Wtest <- BuyseTest_buildWscheme(method.tte = 1,
+                                    endpoint = endpoint,
+                                    D.TTE = D.TTE,
+                                    D = D,
+                                    type = type,
+                                    n.strata = 1,
+                                    threshold = threshold)
+
+    ## butils::object2script(Wtest)
+    GS <- list(Wscheme = matrix(c(0, NA, NA, NA, NA, NA, 1, 0, NA, NA, NA, NA, 0, 1, 0, NA, NA, NA, 0, 1, 0, 0, NA, NA, 1, 1, 1, 1, 0, NA, 1, 0, 1, 1, 1, 0), 
+                                nrow = 6, 
+                                ncol = 6, 
+                                dimnames = list(c("weigth of time(6)", "weigth of time1(5)", "weigth of time(4)", "weigth of time(3)", "weigth of time2(2)", "weigth of time1(1)"),
+                                                c("for time(6)", "for time1(5)", "for time(4)", "for time(3)", "for time2(2)", "for time1(1)")) 
+                                ),
+               index.survival_M1 = c(-1, -1, 0, 2, -1, 1) ,
+               threshold_M1 = c(-1, -1, 6, 4, -1, 5) )
+
+    expect_equal(Wtest[c("Wscheme","index.survival_M1","threshold_M1")], GS)
+})
+
+endpoint <- c("time","bin","bin","time","bin","time")
+threshold <- c(6:1)
+D <- length(endpoint)
+type <- 1+(endpoint=="time")*2
+D.TTE <- sum(type==3)
+
+test_that("Wscheme: 6 mixed endpoint",{
+    Wtest <- BuyseTest_buildWscheme(method.tte = 1,
+                                    endpoint = endpoint,
+                                    D.TTE = D.TTE,
+                                    D = D,
+                                    type = type,
+                                    n.strata = 1,
+                                    threshold = threshold)
+
+    ## butils::object2script(Wtest)
+    GS <- list(Wscheme = matrix(c(0, NA, NA, NA, NA, NA, 1, 0, NA, NA, NA, NA, 1, 1, 0, NA, NA, NA, 0, 1, 1, 0, NA, NA, 1, 1, 1, 1, 0, NA, 0, 1, 1, 0, 1, 0), 
+                                nrow = 6, 
+                                ncol = 6, 
+                                dimnames = list(c("weigth of time(6)", "weigth of bin(5)", "weigth of bin(4)", "weigth of time(3)", "weigth of bin(2)", "weigth of time(1)"),
+                                                c("for time(6)", "for bin(5)", "for bin(4)", "for time(3)", "for bin(2)", "for time(1)")) 
+                                ),
+               index.survival_M1 = c(-1, 0, 3),
+               threshold_M1 = c(-1, 6, 3) )
+
+    expect_equal(Wtest[c("Wscheme","index.survival_M1","threshold_M1")], GS)
 })

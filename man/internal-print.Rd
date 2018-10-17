@@ -3,11 +3,15 @@
 \name{internal-print}
 \alias{internal-print}
 \alias{printGeneral}
+\alias{printInference}
 \title{internal functions for BuyseTest - display}
 \usage{
-printGeneral(censoring, D, D.TTE, data, endpoint, level.strata, level.treatment,
-  method.tte, neutral.as.uninf, operator, strata, threshold, threshold.TTEM1,
-  treatment, type, Wscheme, ...)
+printGeneral(censoring, D, D.TTE, data, endpoint, level.strata,
+  level.treatment, method.tte, neutral.as.uninf, correction.uninf,
+  operator, strata, threshold, threshold.TTE_M1, trace, treatment, type,
+  Wscheme, ...)
+
+printInference(method.inference, n.resampling, cpus, seed, ...)
 }
 \description{
 Functions called by \code{\link{BuyseTest}} to display the settings.

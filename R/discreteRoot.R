@@ -3,13 +3,13 @@
 ## Author: Brice Ozenne
 ## Created: nov 22 2017 (13:39) 
 ## Version: 
-## Last-Updated: sep 25 2018 (15:30) 
+## Last-Updated: okt 15 2018 (21:52) 
 ##           By: Brice Ozenne
-##     Update #: 230
+##     Update #: 241
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
-## Copied from riskRegression 07/09/18 11:29 
+## 
 ### Change Log:
 ##----------------------------------------------------------------------
 ## 
@@ -26,12 +26,6 @@
 #' @param check [logical] should the program check that fn takes a different sign for the first vs. the last value of the grid?
 #' @param tol [numeric] the absolute convergence tolerance.
 #'
-#' @examples
-#'
-#' ### find the position of a value in a vector
-#' f <- function(x){abs(vec[x]-1)}
-#' discreteRoot(function(x){x},grid = seq(-20,10,1))
-#' 
 
 ## * discreteRoot
 #' @rdname dicreteRoot
@@ -119,7 +113,7 @@ discreteRoot <- function(fn, grid, increasing = TRUE, check = TRUE,
                 value = value,
                 ## grid = setNames(value.grid,grid),
                 counts = iter,
-                cv = !ncv,
+                cv = ncv,
                 message = NULL))
 }
 
@@ -238,23 +232,30 @@ boot2pvalue <- function(x, null, estimate = NULL, alternative = "two.sided",
         increasing = increasing,
         check = FALSE)
 
-        ##
-        if(resSearch$cv == FALSE || is.na(resSearch$value) || length(resSearch$value)==0 || abs(resSearch$value)>10/n.boot){
+        ## check change sign
+        sign.before <- sign(FUN.ci(x = x.boot,
+                                   p.value = max(0,resSearch$par-1/n.boot),
+                                   alternative = alternative,
+                                   sign.estimate = sign.statistic)-null)
 
+        sign.after <- sign(FUN.ci(x = x.boot,
+                                  p.value = min(1,resSearch$par+1/n.boot),
+                                  alternative = alternative,
+                                  sign.estimate = sign.statistic)-null)
+
+        ##
+        if(is.na(resSearch$value) || length(resSearch$value)==0 || resSearch$par<0 || resSearch$par>1 || sign.before==sign.after){
             warning("incorrect convergence of the algorithm finding the critical quantile \n",
                     "p-value may not be reliable \n")
 
-            ## allCI <- lapply(grid, FUN.ci, x = x.boot,
-            ##                 alternative = alternative,
-            ##                 sign.estimate = sign.statistic)
-            ## M.allCI <- do.call(rbind,allCI)
-            ## colnames(M.allCI) <- c("lower","upper")
-            ## matplot(M.allCI)
         }
         p.value <- resSearch$par
     }
-  
-  return(p.value)
+
+    if(p.value %in% c(0,1)){
+        message("Estimated p-value of ",p.value," - consider increasing the number of boostrap samples \n")
+    }
+    return(p.value)
 }
 
 ## * quantileCI
