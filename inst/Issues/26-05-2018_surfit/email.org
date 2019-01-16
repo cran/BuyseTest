@@ -1,0 +1,19 @@
+Le : 26 mai 2018 à 14:39 (GMT +02:00)
+De : "emeline.thunus@student.uliege.be" <emeline.thunus@student.uliege.be>
+À : "brice" <brice.ozenne@orange.fr>
+Objet : Re: RE : Fwd: Extension of generalized paiwise comparisons
+
+
+Bonjour Brice,
+
+vous trouverez ci-joint un type de données pour lequel cela produit une erreur.
+
+J'ai de plus ajouter le code pour que vous puissiez le tester comme je le met dans mon programme. Il faut changer "path" par le chemin du dossier data.
+
+De plus, j'ai remarqué que l'erreur pourrait être dû à la fonction "surfit" du package survival qui arrondi à 5 chiffres après la virgule les "time". Or le vecteur "time" de mes données contient des valeurs à plus de 5 chiffres après la virgule. Donc quand dans la fonction "surfit" est appliquée, j'ai deux valeurs qui sont les mêmes donc la valeur "surv" de "surfit" est de longueur : length(time$treatment)-1. Et lorsque vous faites dans votre fonction "unique(sort(time_treatment))" j'ai un vecteur de longueur : length(time$treatment). D'où les longueurs des vecteurs diffèrent pour la fonction "xy.coord".
+
+Pour conclure, pour moi l'erreur est du à la fonction "survfit" qui arrondi le vecteur "time" à 5 chiffres après la virgule.
+
+Bien à vous,
+
+Emeline

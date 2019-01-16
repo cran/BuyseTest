@@ -22,6 +22,7 @@ setClass(
       alternative = "character",
       check = "logical",
       conf.level = "numeric",
+      continuity.correction = "logical",
       correction.uninf = "logical",
       cpus = "numeric",
       keep.pairScore = "logical",
@@ -30,6 +31,7 @@ setClass(
       method.tte = "character",
       n.resampling = "numeric",
       neutral.as.uninf = "logical",
+      order.Hprojection = "numeric",
       statistic = "character",
       trace = "numeric",
       transformation = "logical"
@@ -88,6 +90,12 @@ setClass(
                    method = "Class BuyseTest.options")
       validLogical(object@neutral.as.uninf,
                    name1 = "@neutral.as.uninf",
+                   valid.length = 1,
+                   method = "Class BuyseTest.options")
+      validInteger(object@order.Hprojection,
+                   name1 = "@order.Hprojection",
+                   min = 1,
+                   max = 2,
                    valid.length = 1,
                    method = "Class BuyseTest.options")
       validCharacter(object@statistic,

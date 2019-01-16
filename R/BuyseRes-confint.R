@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: maj 19 2018 (23:37) 
 ## Version: 
-## Last-Updated: okt 11 2018 (12:19) 
+## Last-Updated: jan 15 2019 (15:47) 
 ##           By: Brice Ozenne
-##     Update #: 210
+##     Update #: 244
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -20,7 +20,7 @@
 #' @name BuyseRes-confint
 #' @title  Confidence Intervals for Model Parameters
 #' @aliases confing confint,BuyseRes-method
-#' @include BuyseRes-object.R BuyseRes-summary.R
+#' @include BuyseRes-object.R
 #' 
 #' @description Computes confidence intervals for net benefit statistic or the win ratio statistic.
 #' 
@@ -133,12 +133,12 @@ setMethod(f = "confint",
               count.unfavorable <- slot(object, name = paste0("count.unfavorable"))
               n.pairs <- slot(object, name = paste0("n.pairs"))
               Delta <- slot(object, name = paste0("Delta.",statistic))
-              Delta.permutation <- slot(object, name = paste0("DeltaResampling.",statistic))
+              Delta.resampling <- slot(object, name = paste0("DeltaResampling.",statistic))
               covariance <- object@covariance
               endpoint <- object@endpoint
               alpha <- 1-conf.level
 
-              if(object@method.inference == "asymptotic"){
+              if(object@method.inference %in% c("asymptotic","asymptotic-beta")){
                   if(object@method.tte == "Peron"){
                       warning("The current implementation of the asymptotic distribution is not valid for method.tte=\"Peron\" \n",
                               "Standard errors / confidence intervals / p-values should not be trusted \n")
@@ -160,12 +160,13 @@ setMethod(f = "confint",
                                        "bootstrap" = if(method.boot == "percentile"){confint_percentileBootstrap}else{confint_gaussianBootstrap},
                                        "stratified bootstrap" = if(method.boot == "percentile"){confint_percentileBootstrap}else{confint_gaussianBootstrap},
                                        "asymptotic" = confint_Ustatistic,
+                                       "asymptotic-bebu" = confint_Ustatistic,
                                        "none" = confint_none 
                                        )
 
               ## ** compute the confidence intervals
               outConfint <- do.call(method.confint, args = list(Delta = Delta,
-                                                                Delta.permutation = Delta.permutation,
+                                                                Delta.resampling = Delta.resampling,
                                                                 pc.favorable = count.favorable / n.pairs,
                                                                 pc.unfavorable = count.unfavorable / n.pairs,
                                                                 statistic = statistic,
@@ -174,11 +175,13 @@ setMethod(f = "confint",
                                                                 null = null,
                                                                 alpha = alpha,
                                                                 endpoint = endpoint,
-                                                                transformation = transformation))
+                                                                transformation = transformation,
+                                                                continuity.correction = option$continuity.correction,
+                                                                n.pairs = n.pairs))
 
               ## ** number of permutations
               if(method.inference %in%  c("permutation","stratified permutation","bootstrap","stratified bootstrap")){
-                  attr(outConfint, "n.resampling")  <- rowSums(!is.na(Delta.permutation))
+                  attr(outConfint, "n.resampling")  <- rowSums(!is.na(Delta.resampling))
               }else{
                   attr(outConfint, "n.resampling")  <- setNames(rep(as.numeric(NA), length(endpoint)), endpoint)
               }
@@ -189,13 +192,13 @@ setMethod(f = "confint",
           })
 
 ## * confint_permutation (called by confint)
-confint_permutation <- function(Delta, Delta.permutation,
+confint_permutation <- function(Delta, Delta.resampling,
                                 null, alternative, alpha,
                                 endpoint, ...){
 
     n.endpoint <- length(endpoint)
-    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 4,
-                       dimnames = list(endpoint, c("estimate","lower.ci","upper.ci","p.value")))
+    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 5,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","p.value")))
 
     ## ** point estimate
     outTable[,"estimate"] <- Delta
@@ -203,20 +206,23 @@ confint_permutation <- function(Delta, Delta.permutation,
     ## ** computations
     for(iE in 1:n.endpoint){
         if(is.infinite(Delta[iE]) || is.na(Delta[iE])){next} ## do not compute CI or p-value when the estimate has not been identified
+
+        ## *** standard error
+        outTable[iE,"se"] <- stats::sd(Delta.resampling[iE,], na.rm = TRUE)
         
         ## *** confidence interval
         qDelta_H0 <- switch(alternative,
-                            "two.sided" = stats::quantile(Delta.permutation[iE,], probs = c(alpha/2,1 - alpha/2),na.rm = TRUE),
-                            "less" = c(stats::quantile(Delta.permutation[iE,], probs = alpha,na.rm = TRUE), Inf),
-                            "greater" = c(-Inf,stats::quantile(Delta.permutation[iE,], probs = 1 - alpha,na.rm = TRUE))
+                            "two.sided" = stats::quantile(Delta.resampling[iE,], probs = c(alpha/2,1 - alpha/2),na.rm = TRUE),
+                            "less" = c(stats::quantile(Delta.resampling[iE,], probs = alpha,na.rm = TRUE), Inf),
+                            "greater" = c(-Inf,stats::quantile(Delta.resampling[iE,], probs = 1 - alpha,na.rm = TRUE))
                             )
         outTable[iE,c("lower.ci","upper.ci")] <- Delta[iE] + (qDelta_H0 - null)
 
         ## *** p.value
         outTable[iE,"p.value"] <- switch(alternative, # test whether each sample is has a cumulative proportions in favor of treatment more extreme than the point estimate
-                                         "two.sided" = mean(abs(Delta[iE] - null) < abs(Delta.permutation[iE,] - null)),
-                                         "less" = mean((Delta[iE] - null) > (Delta.permutation[iE,] - null)),
-                                         "greater" = mean((Delta[iE] - null) < (Delta.permutation[iE,] - null))
+                                         "two.sided" = mean(abs(Delta[iE] - null) < abs(Delta.resampling[iE,] - null)),
+                                         "less" = mean((Delta[iE] - null) > (Delta.resampling[iE,] - null)),
+                                         "greater" = mean((Delta[iE] - null) < (Delta.resampling[iE,] - null))
                                          )
     
     }
@@ -226,13 +232,13 @@ confint_permutation <- function(Delta, Delta.permutation,
 }
 
 ## * confint_percentileBootstrap (called by confint)
-confint_percentileBootstrap <- function(Delta, Delta.permutation,
+confint_percentileBootstrap <- function(Delta, Delta.resampling,
                                         null, alternative, alpha,
                                         endpoint, ...){
 
     n.endpoint <- length(endpoint)
-    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 4,
-                       dimnames = list(endpoint, c("estimate","lower.ci","upper.ci","p.value")))
+    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 5,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","p.value")))
 
     ## ** point estimate
     outTable[,"estimate"] <- Delta
@@ -241,17 +247,20 @@ confint_percentileBootstrap <- function(Delta, Delta.permutation,
     for(iE in 1:n.endpoint){
         if(is.infinite(Delta[iE]) || is.na(Delta[iE])){next} ## do not compute CI or p-value when the estimate has not been identified
 
+        ## *** standard error
+        outTable[iE,"se"] <- stats::sd(Delta.resampling[iE,], na.rm = TRUE)
+
         ## *** confidence interval
         outTable[iE,c("lower.ci","upper.ci")] <- switch(alternative,
-                                                        "two.sided" = stats::quantile(Delta.permutation[iE,], probs = c(alpha/2,1 - alpha/2),na.rm = TRUE),
-                                                        "less" = c(stats::quantile(Delta.permutation[iE,], probs = alpha,na.rm = TRUE), Inf),
-                                                        "greater" = c(-Inf,stats::quantile(Delta.permutation[iE,], probs = 1 - alpha,na.rm = TRUE))
+                                                        "two.sided" = stats::quantile(Delta.resampling[iE,], probs = c(alpha/2,1 - alpha/2),na.rm = TRUE),
+                                                        "less" = c(stats::quantile(Delta.resampling[iE,], probs = alpha,na.rm = TRUE), Inf),
+                                                        "greater" = c(-Inf,stats::quantile(Delta.resampling[iE,], probs = 1 - alpha,na.rm = TRUE))
                                                         )
         ## *** p.values
-        outTable[iE, "p.value"] <- boot2pvalue(Delta.permutation[iE,], null = null, estimate = Delta[iE],
+        outTable[iE, "p.value"] <- boot2pvalue(Delta.resampling[iE,], null = null, estimate = Delta[iE],
                                                alternative = alternative, FUN.ci = quantileCI)
-        ## quantileCI(Delta.permutation[iE,], alternative = "two.sided", p.value = 0.64, sign.estimate = 1)
-        ## quantileCI(Delta.permutation[iE,], alternative = "two.sided", p.value = 0.66, sign.estimate = 1)
+        ## quantileCI(Delta.resampling[iE,], alternative = "two.sided", p.value = 0.64, sign.estimate = 1)
+        ## quantileCI(Delta.resampling[iE,], alternative = "two.sided", p.value = 0.66, sign.estimate = 1)
 
     }
 
@@ -261,13 +270,13 @@ confint_percentileBootstrap <- function(Delta, Delta.permutation,
 
 
 ## * confint_gaussianBootstrap (called by confint)
-confint_gaussianBootstrap <- function(Delta, Delta.permutation,
+confint_gaussianBootstrap <- function(Delta, Delta.resampling,
                                       null, alternative, alpha,
                                       endpoint, ...){
 
     n.endpoint <- length(endpoint)
-    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 4,
-                       dimnames = list(endpoint, c("estimate","lower.ci","upper.ci","p.value")))
+    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 5,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","p.value")))
 
     ## ** point estimate
     outTable[,"estimate"] <- Delta
@@ -277,7 +286,8 @@ confint_gaussianBootstrap <- function(Delta, Delta.permutation,
         if(is.infinite(Delta[iE]) || is.na(Delta[iE])){next} ## do not compute CI or p-value when the estimate has not been identified
         
         ## *** standard error
-        iSE <- stats::sd(Delta.permutation[iE,], na.rm = TRUE)
+        iSE <- stats::sd(Delta.resampling[iE,], na.rm = TRUE)
+        outTable[iE,"se"] <- iSE
         
         ## *** confidence interval
         outTable[iE,c("lower.ci","upper.ci")] <- switch(alternative,
@@ -301,9 +311,9 @@ confint_gaussianBootstrap <- function(Delta, Delta.permutation,
                   
 
 ## * confint_Ustatistic (called by confint)
-confint_Ustatistic <- function(Delta, pc.favorable, pc.unfavorable, covariance, statistic,
+confint_Ustatistic <- function(Delta, pc.favorable, pc.unfavorable, covariance, statistic, null,
                                alternative, alpha,
-                               endpoint, transformation, ...){
+                               endpoint, transformation, continuity.correction, n.pairs, ...){
 
     n.endpoint <- length(endpoint)
     outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 5,
@@ -319,17 +329,20 @@ confint_Ustatistic <- function(Delta, pc.favorable, pc.unfavorable, covariance, 
         ## *** standard error
         if(statistic == "netBenefit"){
             outTable[iE,"se"] <- sqrt(covariance[iE,"favorable"] + covariance[iE,"unfavorable"] - 2 * covariance[iE,"covariance"])
-            
+
+            if(continuity.correction){
+                Delta[iE] <- Delta[iE] - sign(Delta[iE])/(2*n.pairs)
+            }
+
             if(transformation){ ## atanh transform (also called fisher transform)
-                iSE <- outTable[iE,"se"] / (1+Delta[iE]^2)
+                iSE <- outTable[iE,"se"] / (1-Delta[iE]^2)
                 iDelta <-  atanh(Delta[iE])
                 backtransform <- tanh
-                null <- atanh(0)
+                null <- atanh(null)
             }else{ ## on the original scale
                 iSE <- outTable[iE,"se"]
-                iDelta <- Delta[iE]
+                iDelta <- Delta[iE] ## 0.5/(n.y * n.x)
                 backtransform <- function(x){x}
-                null <- 0
             }
             
             ## on the logit scale
@@ -341,12 +354,11 @@ confint_Ustatistic <- function(Delta, pc.favorable, pc.unfavorable, covariance, 
                 iSE <- outTable[iE,"se"] / Delta[iE]
                 iDelta <-  log(Delta[iE])
                 backtransform <- exp
-                null <- log(1)
+                null <- log(null)
             }else{ ## on the original scale
                 iSE <- outTable[iE,"se"]
                 iDelta <- Delta[iE]
                 backtransform <- function(x){x}
-                null <- 1
             }
 
         }
@@ -357,7 +369,7 @@ confint_Ustatistic <- function(Delta, pc.favorable, pc.unfavorable, covariance, 
                                                                       "less" = c(iDelta + stats::qnorm(alpha) * iSE, Inf),
                                                                       "greater" = c(-Inf,iDelta + stats::qnorm(1-alpha) * iSE)
                                                                       ))
-        
+
         ## *** p.value
         outTable[iE,"p.value"] <- switch(alternative,
                                          "two.sided" = 2*(1-stats::pnorm(abs((iDelta-null)/iSE))), ## 2*(1-pnorm(1.96))

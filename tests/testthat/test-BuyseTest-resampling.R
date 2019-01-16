@@ -3,9 +3,9 @@
 ## author: Brice
 ## created: maj 12 2017 (14:34) 
 ## Version: 
-## last-updated: okt 16 2018 (17:47) 
+## last-updated: okt 30 2018 (16:19) 
 ##           By: Brice Ozenne
-##     Update #: 84
+##     Update #: 93
 #----------------------------------------------------------------------
 ## 
 ### Commentary: Check 
@@ -23,7 +23,7 @@ if(FALSE){
 
 
 ## * settings
-BuyseTest.options(check = FALSE,
+BuyseTest.options(check = TRUE,
                   keep.pairScore = TRUE,                  
                   trace = 0)
 n.patients <- 100
@@ -92,6 +92,8 @@ test_that("permutation", {
     set.seed(10)
     for(iResample in 1:2){
         dt.perm <- copy(dt.sim)
+        setkeyv(dt.perm, cols = c("strata","Treatment"))
+
         dt.perm[, Treatment := Treatment[sample.int(.N, size = .N, replace = FALSE)] ]
         expect_equal(table(dt.perm$Treatment), table(dt.sim$Treatment))
 
@@ -172,8 +174,10 @@ test_that("stratified permutation", {
     
     ## ** check permutation
     set.seed(10)
-    for(iResample in 1:2){
+    for(iResample in 1:2){ ## iResample <- 1 
         dt.perm <- copy(dt.sim)
+        setkeyv(dt.perm, cols = c("strata","Treatment"))
+        
         dt.perm[, Treatment := Treatment[sample.int(.N, size = .N, replace = FALSE)], by = "strata"]
 
         iBT.perm <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
@@ -214,6 +218,7 @@ test_that("stratified permutation", {
     }
 
 })
+
 ## * Bootstrap
 test_that("Bootstrap", {
 
@@ -248,8 +253,10 @@ test_that("Bootstrap", {
 
     ## ** check bootsrap
     set.seed(10)
-    for(iResample in 1:2){ ## iResample <- 1 
-        dt.boot <- dt.sim[sample.int(.N, size = .N, replace = TRUE)]
+    for(iResample in 1:2){ ## iResample <- 1
+        dt.boot <- copy(dt.sim)
+        setkeyv(dt.boot, cols = c("strata","Treatment"))
+        dt.boot <- dt.boot[sample.int(.N, size = .N, replace = TRUE)]
         
         ## BT.boot <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
         iBT.boot <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
@@ -302,7 +309,9 @@ test_that("Stratified bootstrap", {
     ## ** check bootsrap
     set.seed(10)
     for(iResample in 1:2){ ## iResample <- 1
-        dt.boot <- dt.sim[, .SD[sample.int(.N, size = .N, replace = TRUE)], by = "strata"]
+        dt.boot <- copy(dt.sim)
+        setkeyv(dt.boot, cols = c("strata","Treatment"))
+        dt.boot <- dt.boot[, .SD[sample.int(.N, size = .N, replace = TRUE)], by = "strata"]
         
         ## BT.boot <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,
         BT.boot <- BuyseTest(Treatment ~ tte(eventtime1, 0, status1) + bin(toxicity1) + strata,

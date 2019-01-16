@@ -58,7 +58,7 @@ setMethod(f = "summary",
           signature = "BuyseRes",
           definition = function(object, print = TRUE, percentage = TRUE, statistic = NULL,
                                 conf.level = NULL,
-                                strata = if(length(object@level.strata)==1){"global"}else{NULL},                                
+                                strata = if(length(object@level.strata)==1){"global"}else{NULL},
                                 digit = c(2,4), ...){
 
               ## ** normalize and check arguments
@@ -121,7 +121,7 @@ setMethod(f = "summary",
               }
 
               ## safety
-              if(method.inference == "asymptotic"){
+              if(method.inference %in% c("asymptotic","asymptotic-bebu")){
                   if(object@method.tte == "Peron"){
                       warning("The current implementation of the asymptotic distribution is not valid for method.tte=\"Peron\" \n",
                               "Standard errors / confidence intervals / p-values will not be displayed \n")
@@ -202,7 +202,7 @@ setMethod(f = "summary",
                   colStars[index.global] <- sapply(table.print[index.global,"p.value"],function(x){
                       if(is.na(x)){""}else if(x<0.001){"***"}else if(x<0.01){"**"}else if(x<0.05){"*"}else if(x<0.1){"."}else{""}
                   })
-                  if(method.inference == "asymptotic"){
+                  if(method.inference %in% c("asymptotic","asymptotic-bebu")){
                       table.print <- cbind(table.print[,setdiff(names(table.print), "n.resampling")],
                                            "significance" = colStars)
                   }else{
@@ -230,7 +230,7 @@ setMethod(f = "summary",
                   keep.cols <- setdiff(names(table.print),
                                        c("CIinf.Delta","CIsup.Delta","n.resampling","p.value"))
                   table.print <- table.print[,keep.cols, drop = FALSE]
-              }else if(method.inference == "asymptotic"){
+              }else if(method.inference %in% c("asymptotic","asymptotic-bebu")){
                   keep.cols <- setdiff(names(table.print), "n.resampling")
                   table.print <- table.print[,keep.cols, drop = FALSE]
               }
@@ -352,6 +352,9 @@ setMethod(f = "summary",
                       cat(" > statistic       : net benefit (delta: endpoint specific, Delta: global) \n",
                           " > null hypothesis : Delta == 0 \n", sep = "")
                   }
+                  if(method.inference != "none"){
+                      cat(" > confidence level: ",1-alpha," \n", sep = "")
+                  }
                   if(method.inference %in% c("permutation","bootstrap", "stratified permutation", "stratified bootstrap")){
                       ok.permutation <- all(n.resampling[1]==n.resampling)
                       if(ok.permutation){
@@ -366,9 +369,16 @@ setMethod(f = "summary",
                                            "bootstrap" = "bootstrap resampling",
                                            "stratified bootstrap" = "stratified bootstrap resampling"
                                            )
-                      cat(" > ",txt.method,": ",txt.permutation," samples, confidence level ",1-alpha," \n", sep = "")
-                  }else if(method.inference == "asymptotic"){
-                      cat(" >  asymptotic confidence intervals and p-values, confidence level ",1-alpha," \n", sep = "")
+                      cat(" > inference       : ",txt.method," with ",txt.permutation," samples", sep = "")
+                  }else if(method.inference %in% c("asymptotic","asymptotic-bebu")){
+                      if(statistic == "netBenefit" && option$continuity.correction){
+                          add.text <- " with continuity correction"
+                      }else{
+                          add.text <- NULL
+                      }
+                      
+                      cat(" > inference       : H-projection of order ",attr(method.inference,"Hprojection"),add.text,"\n", sep = "")
+
                   }
                   
                   cat(" > treatment groups: ",object@level.treatment[1]," (control) vs. ",object@level.treatment[2]," (treatment) \n", sep = "")
@@ -380,7 +390,7 @@ setMethod(f = "summary",
 
                       cat(" > censored pairs  : ",txt.method.tte,"\n", sep = "")
                   }
-                  if(!( (object@correction.uninf == 0) && (object@count.uninf==0) )){
+                  if(!( (object@correction.uninf == 0) && (all(object@count.uninf==0)) )){
                       txt.uninf <- switch(as.character(object@correction.uninf),
                                           "0" = "no contribution at the current endpoint, analyzed at later endpoints (if any)",
                                           "1" = "score equals the averaged score of all informative pairs",
