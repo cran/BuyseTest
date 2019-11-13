@@ -5,9 +5,9 @@
 \title{Performing simulation studies with BuyseTest}
 \usage{
 powerBuyseTest(sim, sample.size, sample.sizeC = NULL,
-  sample.sizeT = NULL, n.rep, null = c(0, 1), cpus = 1,
-  alternative = NULL, seed = 10, conf.level = NULL,
-  order.Hprojection = NULL, transformation = NULL, trace = 1, ...)
+  sample.sizeT = NULL, n.rep, null = c(0, 1), cpus = 1, seed = 10,
+  conf.level = NULL, order.Hprojection = NULL, transformation = NULL,
+  trace = 1, ...)
 }
 \arguments{
 \item{sim}{[function] take two arguments:
@@ -29,16 +29,12 @@ Disregarded if any of the arguments \code{sample.sizeC} or \code{sample.sizeT} a
 Only the permutation test can use parallel computation.
 Default value read from \code{BuyseTest.options()}.}
 
-\item{alternative}{[character] the alternative hypothesis.
-Must be one of \code{"two.sided"}, \code{"greater"} or \code{"less"}. 
-Default value read from \code{BuyseTest.options()}.}
-
 \item{seed}{[integer, >0] the seed to consider for the simulation study.}
 
 \item{conf.level}{[numeric] confidence level for the confidence intervals.
 Default value read from \code{BuyseTest.options()}.}
 
-\item{order.Hprojection}{[integer 1,2] the order of the H-project to be used to compute the asymptotic variance.}
+\item{order.Hprojection}{[integer 1,2] the order of the H-project to be used to compute the variance of the net benefit/win ratio.}
 
 \item{transformation}{[logical] should the CI be computed on the logit scale / log scale for the net benefit / win ratio and backtransformed.
 Otherwise they are computed without any transformation.
@@ -53,11 +49,12 @@ Performs a simulation studies for several sample sizes.
 Returns estimates, standard errors, confidence intervals and p.values.
 }
 \examples{
+library(data.table)
 
 ## using simBuyseTest
 powerBuyseTest(sim = simBuyseTest, sample.size = c(100), n.rep = 2,
-              formula = Treatment ~ tte(eventtime, censoring = status),
-              method.inference = "asymptotic", trace = 4)
+               formula = treatment ~ bin(toxicity),
+               method.inference = "u-statistic", trace = 4)
 
 ## using user defined simulation function
 simFCT <- function(n.C, n.T){
@@ -68,6 +65,6 @@ return(out)
 }
 
 powerBuyseTest(sim = simFCT, sample.size = c(100), n.rep = 2,
-              formula = T ~ cont(Y), method.inference = "asymptotic", trace = 4)
+              formula = T ~ cont(Y), method.inference = "u-statistic", trace = 4)
 
 }

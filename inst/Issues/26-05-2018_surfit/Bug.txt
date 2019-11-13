@@ -1,4 +1,0 @@
-data<-read.csv2("path",header=TRUE,sep=";")
-data3<-as.data.frame(cbind(time=data$time,event=data$event,trt=data$trt))
-BT_tau0<-BuyseTest(data=data3,treatment="trt",endpoint="time",type="timeToEvent",threshold=as.numeric(0),censoring="event",method="Peron",n.bootstrap=1000,cpus=8)
-BT2s_0<-BT_tau0@p.value

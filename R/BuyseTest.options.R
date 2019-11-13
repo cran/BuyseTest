@@ -10,7 +10,9 @@
 #'         
 #' @details It only affects the \code{\link{BuyseTest}} function
 #' 
-#' @examples  
+#' @examples
+#' library(data.table)
+#' 
 #' ## see all global parameters
 #' BuyseTest.options()
 #' 
@@ -35,18 +37,23 @@ BuyseTest.options <- function(..., reinitialise = FALSE){
                    alternative = "two.sided",
                    check = TRUE,
                    conf.level = 0.95,
-                   continuity.correction = FALSE,
                    cpus = 1,
+                   debug = -1,
+                   hierarchical = TRUE,
                    keep.pairScore = FALSE,
                    keep.survival = FALSE,
-                   method.inference = "stratified permutation",
-                   method.tte = "Peron",               
-                   correction.uninf = FALSE,               
+                   method.inference = "permutation",
+                   scoring.rule = "Peron",               
+                   correction.uninf = 0,               
                    n.resampling = 1000,
+                   strata.resampling = as.character(NA),
                    neutral.as.uninf = TRUE,
                    order.Hprojection = 1,
+                   print.display = c("endpoint","threshold","delta","Delta"),
                    statistic = "netBenefit",               
-                   transformation = FALSE,               
+                   summary.display = list(c("endpoint","threshold","weight","total","favorable","unfavorable","neutral","uninf","delta","Delta","CI","p.value","significance"),
+                                          c("endpoint","threshold","weight","favorable","unfavorable","delta","Delta","Delta(%)","information(%)")),
+                   transformation = TRUE,
                    trace = 2), 
                envir = BuyseTest.env)
     

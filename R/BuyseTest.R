@@ -4,96 +4,145 @@
 #' @aliases BuyseTest
 #' 
 #' @description Performs Generalized Pairwise Comparisons for binary, continuous and time-to-event endpoints.
-#' @param formula [formula] a symbolic description of the model to be fitted. The response variable should be a binary variable defining the treatment arms. 
-#' The rest of the formula should indicate the strata variables (if any) and the endpoints by order of priority. 
+#' @param formula [formula] a symbolic description of the GPC model,
+#' typically \code{treatment ~ type1(endpoint1) + type2(endpoint2, threshold2) + strata}.
+#' See Details, section "Specification of the GPC model".
+#' @param treatment,endpoint,type,threshold,censoring,operator,strata Alternative to \code{formula} for describing the GPC model.
+#' See Details, section "Specification of the GPC model".
 #' @param data [data.frame] dataset.
-#' @param treatment [character] the name of the treatment variable identifying the control and the experimental group.
-#' Disregarded if the argument \code{formula} is defined.
-#' @param endpoint [character vector] the name of the endpoint variable(s).
-#' Disregarded if the argument \code{formula} is defined.
-#' @param operator [character vector] the sign defining a favorable endpoint:
-#' ">0" indicates that higher values are favorable while "<0" indicates the opposite.
-#' Disregarded if the argument \code{formula} is defined.
-#' @param threshold [numeric vector] critical values used to compare the pairs (threshold of minimal important difference).
-#' There must be one threshold for each endpoint variable.
-#' Disregarded if the argument \code{formula} is defined.
-#' @param strata [numeric vector] if not \code{NULL}, the GPC will be applied within each group of patient defined by the strata variable(s).
-#' Disregarded if the argument \code{formula} is defined.
-#' @param censoring [character vector] the name of the binary variable(s) indicating whether the endpoint was observed or censored.
-#' There must be one threshold for each endpoint variable.
-#' Must value \code{NA} when the endpoint is not a time to event.
-#' Disregarded if the argument \code{formula} is defined.
-#' @param type [character vector] the type of each endpoint: \code{"binary"}, \code{"continuous"} or \code{"timeToEvent"}.
-#' @param method.tte [character] defines the method used to compare the observations of a pair in presence of right censoring (i.e. \code{"timeToEvent"} endpoints).
-#' Can be \code{"Gehan"} or \code{"Peron"}. \code{"Gehan"} only scores pairs that can be decidedly classified as favorable, unfavorable, or neutral.
-#' \code{"Peron"} uses the empirical survival curves of each group to also score the pairs that cannot be decidedly classified (see Peron et al. for more details).
-#' Default value read from \code{BuyseTest.options()}.
+#' @param scoring.rule [character] method used to compare the observations of a pair in presence of right censoring (i.e. \code{"timeToEvent"} endpoints).
+#' Can be \code{"Gehan"} or \code{"Peron"}.
+#' See Details, section "Handling missing values".
 #' @param correction.uninf [integer] should a correction be applied to remove the bias due to the presence of uninformative pairs?
-#' 0 indicates no correction, 1 impute the average score of the informative pair, and 2 performs inverse probability of censoring weights.
-#' Default value read from \code{BuyseTest.options()}.
+#' 0 indicates no correction, 1 impute the average score of the informative pairs, and 2 performs IPCW.
+#' See Details, section "Handling missing values".
 #' @param model.tte [list] optional survival models relative to each time to each time to event endpoint.
-#' Models must \code{prodlim} objects and stratified on the treatment and strata variable.
-#' @param method.inference [character] should the asymptotic theory (\code{"asymptotic"}),
-#' or a permutation test (\code{"permutation"} or \code{"stratified permutation"}),
-#' or bootstrap resampling (\code{"bootstrap"} or \code{"stratified boostrap"})
-#' be used to compute p-values and confidence intervals.
-#' @param neutral.as.uninf [logical] should paired classified as neutral be re-analyzed using endpoints of lower priority.
-#' Default value read from \code{BuyseTest.options()}.
-#' @param n.resampling [integer] the number of simulations used for computing the confidence interval and the p.values. See details.
-#' Default value read from \code{BuyseTest.options()}.
+#' Models must \code{prodlim} objects and stratified on the treatment and strata variable. When used, the uncertainty from the estimates of these survival models is ignored.
+#' @param method.inference [character] method used to compute confidence intervals and p-values.
+#' Can be \code{"none"}, \code{"u-statistic"}, \code{"permutation"}, \code{"bootstrap"}, \code{"bootstrap"}, \code{"studentized bootstrap"}.
+#' See Details, section "Statistical inference".
+#' @param n.resampling [integer] the number of permutations/samples used for computing the confidence intervals and the p.values. 
+#' See Details, section "Statistical inference".
+#' @param strata.resampling [character] the variable on which the permutation/sampling should be stratified. 
+#' See Details, section "Statistical inference".
+#' @param hierarchical [logical] should only the uninformative pairs be analyzed at the lower priority endpoints (hierarchical GPC)?
+#' Otherwise all pairs will be compaired for all endpoint (full GPC).
+#' @param weight [numeric vector] weights used to cumulating the pairwise scores over the endpoints.
+#' Only used when \code{hierarchical=FALSE}. Disregarded if the argument \code{formula} is defined.
+#' @param neutral.as.uninf [logical] should paired classified as neutral be re-analyzed using endpoints of lower priority (as it is done for uninformative pairs).
+#' See Details, section "Handling missing values".
 #' @param keep.pairScore [logical] should the result of each pairwise comparison be kept?
-#' @param alternative [character] the alternative hypothesis.
-#' Must be one of \code{"two.sided"}, \code{"greater"} or \code{"less"}.
-#' Default value read from \code{BuyseTest.options()}.
 #' @param seed [integer, >0] the seed to consider for the permutation test.
 #' If \code{NULL} no seed is set.
 #' @param cpus [integer, >0] the number of CPU to use.
 #' Only the permutation test can use parallel computation.
-#' Default value read from \code{BuyseTest.options()}.
+#' See Details, section "Statistical inference".
 #' @param trace [integer] should the execution of the function be traced ? \code{0} remains silent
 #' and \code{1}-\code{3} correspond to a more and more verbose output in the console.
-#' Default value read from \code{BuyseTest.options()}.
 #' @param keep.comparison Obsolete. Alias for 'keep.pairScore'.
+#' @param method.tte Obsolete. Alias for 'scoring.rule'.
 #' 
-#' @details 
-#' \bold{treatment:} The variable corresponding to \code{treatment} in data must have only two levels (e.g. \code{0} and \code{1}). \cr
-#' \bold{endpoint, threshold, censoring, operator, and type:}  they must have the same length. \cr
-#' \code{threshold} must be \code{NA} for binary endpoints and positive for continuous or time to event endpoints. \cr
-#' \code{censoring} must be \code{NA} for binary or continuous endpoints and indicate a variable in data for time to event endpoints. 
-#' Short forms for endpoint \code{type} are \code{"bin"} (binary endpoint), \code{"cont"} (continuous endpoint), \
-#' code{"TTE"} (time-to-event endpoint). 
-#' \bold{operator:} when the operator is set to \code{"<0"} the corresponding column in the dataset is multiplied by \code{-1}.
-#' 
-#' \bold{n.resampling:} The number of permutation replications must be specified to enable the computation of the confidence intervals and the p.value. 
-#' A large number of permutations (e.g. \code{n.resampling=10000}) are needed to obtain accurate CI and p.value. See (Buyse et al., 2010) for more details. 
-#' 
-#' \bold{cpus parallelization:} Argument \code{cpus} can be set to \code{"all"} to use all available cpus.
-#' The detection of the number of cpus relies on the \code{detectCores} function from the \emph{parallel} package .
-#' 
-#' \bold{Dealing with neutral or uninformative pairs:} Neutral pairs correspond to pairs for which the difference between the endpoint of the control observation and the endpoint of the treatment observation is (in absolute value) below the threshold. When \code{threshold=0}, neutral pairs correspond to pairs with equal endpoint.\cr
-#' Uninformative pairs correspond to pairs for which the censoring prevent from classifying them into favorable, unfavorable or neutral. Neutral or uninformative pairs for an endpoint with priority \code{l} are, when available, analyzed on the endpoint with priority \code{l-1}.
-#' 
-#' \bold{method.tte:} the \code{method.tte="Peron"} is recommended in presence of right censored observations since it gives a more efficient estimator than \code{method.tte="Gehan"}.
-#' 
-#' \bold{method.inference:} the \code{method.inference="asymptotic"} estimate the distribution of the net benefit or win ratio statistics
-#' based on the H-decomposition of U-statistics. \code{method.inference="asymptotic-bebu"} is an equivalent approach based on Bebu et al. 2015 (formula 2.2).
-#' The current implementation of \code{"asymptotic"} and \code{"asymptotic-bebu"} is not valid in small sample or when using \code{method.tte="Peron"},
-#' or  \code{correction.uninf=1}, or \code{correction.uninf=2}.
+#' @details
 #'
-#' \bold{correction.uninf:} in presence of uninformative pairs, the proportion of favorable, unfavorable, or neutral pairs is underestimated.
-#' Inverse probability of censoring weights (\code{correction.uninf=2}) is only recommanded when the analysis is stopped after the first endpoint with uninformative pairs.
-#' Imputing the average score of the informative pairs (\code{correction.uninf=1}) gives equivalent results at the first endpoint but better behaves at latter endpoints.
-#' Note that both corrections will convert the whole proportion of uninformative pairs of a given endpoint into favorable, unfavorable, or neutral pairs.
+#' \bold{Specification of the GPC model}: \cr
+#' There are two way to specify the GPC model in \code{BuyseTest}.
+#' A \emph{Formula interface} via the argument \code{formula} where the response variable should be a binary variable defining the treatment arms. 
+#' The rest of the formula should indicate the endpoints by order of priority and the strata variables (if any).
+#' A \emph{Vector interface} using  the following arguments \itemize{
+#'   \item \code{treatment}: [character] name of the treatment variable identifying the control and the experimental group.
+#' Must have only two levels (e.g. \code{0} and \code{1}).
+#'   \item \code{endpoint}: [character vector] the name of the endpoint variable(s).
+#'   \item \code{threshold}: [numeric vector] critical values used to compare the pairs (threshold of minimal important difference).
+#' There must be one threshold for each endpoint variable; it must be \code{NA} for binary endpoints and positive for continuous or time to event endpoints. 
+#'   \item \code{censoring}: [character vector] the name of the binary variable(s) indicating whether the endpoint was observed or censored.
+#' Must value \code{NA} when the endpoint is not a time to event.
+#'   \item \code{operator}: [character vector] the sign defining a favorable endpoint.
+#' \code{">0"} indicates that higher values are favorable while "<0" indicates the opposite.
+#' When the operator is set to \code{"<0"} the corresponding column in the dataset is internally multiplied by \code{-1}.#' 
+#'   \item \code{type}: [character vector] indicates whether it is
+#' a binary outcome  (\code{"b"}, \code{"bin"}, or \code{"binary"}),
+#' a continuous outcome  (\code{"c"}, \code{"cont"}, or \code{"continuous"}),
+#' or a time to event outcome  (\code{"t"}, \code{"tte"}, \code{"time"}, or \code{"timetoevent"})
+#'   \item \code{strata}: [character vector] if not \code{NULL}, the GPC will be applied within each group of patient defined by the strata variable(s).
+#' }
+#' The formula interface can be more concise, especially when considering few outcomes, but may be more difficult to apprehend for new users.
+#' Note that arguments \code{endpoint}, \code{threshold}, \code{censoring}, \code{operator}, and \code{type} must have the same length. \cr \cr \cr
+#'
+#' 
+#' \bold{GPC procedure} \cr
+#' The GPC procedure form all pairs of observations, one belonging to the experimental group and the other to the control group, and class them in 4 categories: \itemize{
+#'  \item \emph{Favorable pair}: the endpoint is better for the observation in the experimental group.
+#'  \item \emph{Unfavorable pair}: the endpoint is better for the observation in the control group.
+#'  \item \emph{Neutral pair}: the difference between the endpoints of the two observations is (in absolute value) below the threshold. When \code{threshold=0}, neutral pairs correspond to pairs with equal endpoint. Lower-priority outcomes (if any) are then used to classified the pair into favorable/unfavorable.
+#'  \item \emph{Uninformative pair}: censoring/missingness prevents from classifying into favorable, unfavorable or neutral.
+#' }
+#' With complete data, pairs can be decidely classified as favorable/unfavorable/neutral.
+#' In presence of missing values, the GPC procedure uses the scoring rule (argument \code{scoring.rule}) and the correction for uninformative pairs (argument \code{correction.uninf}) to classify the pairs.
+#' The classification may not be 0,1, e.g. the probability that the pair is favorable/unfavorable/neutral with the Peron's scoring rule.
+#' To export the classification of each pair set the argument code{keep.pairScore} to \code{TRUE} and call the function \code{getPairScore} on the result of the \code{BuyseTest} function. \cr \cr \cr
+#' 
+#' 
+#' \bold{Handling missing values}
+#' \itemize{
+#'   \item \code{scoring.rule}: indicates how to handle right-censoring in time to event endpoints.
+#' The Gehan's scoring rule (argument \code{scoring.rule="Gehan"}) only scores pairs that can be decidedly classified as favorable, unfavorable, or neutral
+#' while the "Peron"'s scoring rule (argument \code{scoring.rule="Peron"}) uses the empirical survival curves of each group to also score the pairs that cannot be decidedly classified.
+#' The Peron's scoring rule is the recommanded scoring rule.
+#'   \item \code{correction.uninf}: indicates how to handle missing values that could not be classified by the scoring rule. \code{0} treat them as uninformative:
+#' if \code{neutral.as.uninf=FALSE}  - this is an equivalent to complete case analysis -
+#' while for \code{neutral.as.uninf=TRUE} uninformative pairs are treated as neutral, i.e., analyzed at the following endpoint (if any).
+#' However both will (in general) lead to biased estimates for the proportion of favorable, unfavorable, or neutral pairs.
+#' Inverse probability of censoring weights (IPCW, \code{correction.uninf=2}) is only recommanded when the analysis is stopped after the first endpoint with uninformative pairs.
+#' Imputing the average score of the informative pairs (\code{correction.uninf=1}) is the recommanded approach.
+#' Note that both corrections will convert the whole proportion of uninformative pairs of a given endpoint into favorable, unfavorable, or neutral pairs. \cr \cr
+#' }
+#' 
+#'
+#' \bold{Statistical inference} \cr
+#' The argument \code{method.inference} defines how to approximate the distribution of the GPC estimators and so how standard errors, confidence intervals, and p-values are computed.
+#' Available methods are:
+#' \itemize{
+#'   \item argument \code{method.inference="none"}: only the point estimate is computed which makes the execution of the \code{BuyseTest} faster than with the other methods.
+#'   \item argument \code{method.inference="u-statistic"}: uses a Gaussian approximation to obtain the distribution of the GPC estimators.
+#' The U-statistic theory indicates that this approximation is asymptotically exact.
+#' The variance is computed using a H-projection of order 1 (default option), which is a consistent but downward biased estimator.
+#' An unbiased estimator can be obtained using a H-projection of order 2 (only available for the uncorrected Gehan's scoring rule, see \code{BuyseTest.options}).
+#' \bold{WARNING}: the current implementation of the H-projection has not been validated when using corrections for uninformative pairs (\code{correction.uninf=1}, or \code{correction.uninf=2}).
+#'   \item argument \code{method.inference="permutation"}: perform a permutation test, estimating in each sample the summary statistics (net benefit, win ratio).
+#'   \item argument \code{method.inference="bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio).
+#'   \item argument \code{method.inference=" studentized bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio) and the variance-covariance matrix of the estimator.
+#' }
+#' Additional arguments for permutation and bootstrap resampling:
+#' \itemize{
+#'    \item \code{strata.resampling} If \code{NA} or of length 0, the permutation/non-parametric boostrap will be performed by resampling in the whole sample.
+#' Otherwise, the permutation/non-parametric boostrap will be performed separately for each level that the variable defined in \code{strata.resampling} take.
+#'    \item \code{n.resampling} set the number of permutations/samples used.
+#' A large number of permutations (e.g. \code{n.resampling=10000}) are needed to obtain accurate CI and p.value. See (Buyse et al., 2010) for more details.
+#'    \item \code{cpus} indicates whether the resampling procedure can be splitted on several cpus to save time. Can be set to \code{"all"} to use all available cpus.
+#' The detection of the number of cpus relies on the \code{detectCores} function from the \emph{parallel} package. \cr \cr
+#' }
+#'
+#'
+#' \bold{Default values} \cr
+#' The default of the arguments
+#' \code{scoring.rule}, \code{correction.uninf}, \code{method.inference}, \code{n.resampling},
+#' \code{hierarchical}, \code{neutral.as.uninf}, \code{keep.pairScore}, \code{strata.resampling},
+#' \code{cpus}, \code{trace} is read from \code{BuyseTest.options()}. \cr
+#' Additional (hidden) arguments are \itemize{
+#'  \item \code{alternative} [character] the alternative hypothesis. Must be one of "two.sided", "greater" or "less" (used by \code{confint}).
+#'  \item \code{conf.level} [numeric] level for the confidence intervals (used by \code{confint}).
+#'  \item \code{keep.survival} [logical] export the survival values used by the Peron's scoring rule.
+#'  \item \code{order.Hprojection} [1 or 2] the order of the H-projection used to compute the variance when \code{method.inference="u-statistic"}. 
+#' }
 #' 
 #' @return An \R object of class \code{\linkS4class{BuyseRes}}.
 #' 
 #' @references 
-#' J. Peron, M. Buyse, B. Ozenne, L. Roche and P. Roy (2018). \bold{An extension of generalized pairwise comparisons for prioritized outcomes in the presence of censoring}. \emph{Statistical Methods in Medical Research} 27: 1230-1239  \cr 
-#' D. Wang, S. Pocock (2016). \bold{A win ratio approach to comparing continuous non-normal outcomes in clinical trials}. \emph{Pharmaceutical Statistics} 15:238-245 \cr
-#' I. Bebu, J. M. Lachin (2015). \bold{Large sample inference for a win ratio analysis of a composite outcome based on prioritized components}. \emph{Biostatistics} 17(1):178-187 \cr
-#' Marc Buyse (2010). \bold{Generalized pairwise comparisons of prioritized endpoints in the two-sample problem}. \emph{Statistics in Medicine} 29:3245-3257 \cr
-#' Efron B (1967). \bold{The two sample problem with censored data}. \emph{Proceedings of the Fifth Berkeley Symposium on Mathematical Statistics and Probability} 4:831-583 \cr
-#' Gehan EA (1965). \bold{A generalized two-sample Wilcoxon test for doubly censored data}. \emph{Biometrika}  52(3):650-653 \cr
+#' On the GPC procedure: Marc Buyse (2010). \bold{Generalized pairwise comparisons of prioritized endpoints in the two-sample problem}. \emph{Statistics in Medicine} 29:3245-3257 \cr
+#' On the win ratio: D. Wang, S. Pocock (2016). \bold{A win ratio approach to comparing continuous non-normal outcomes in clinical trials}. \emph{Pharmaceutical Statistics} 15:238-245 \cr
+#' On the Peron's scoring rule: J. Peron, M. Buyse, B. Ozenne, L. Roche and P. Roy (2018). \bold{An extension of generalized pairwise comparisons for prioritized outcomes in the presence of censoring}. \emph{Statistical Methods in Medical Research} 27: 1230-1239  \cr 
+#' On the Gehan's scoring rule: Gehan EA (1965). \bold{A generalized two-sample Wilcoxon test for doubly censored data}. \emph{Biometrika}  52(3):650-653 \cr
+#' On inference in GPC using the U-statistic theory: I. Bebu, J. M. Lachin (2015). \bold{Large sample inference for a win ratio analysis of a composite outcome based on prioritized components}. \emph{Biostatistics} 17(1):178-187 \cr
 #'
 #' @seealso 
 #' \code{\link{BuyseRes-summary}} for a summary of the results of generalized pairwise comparison. \cr
@@ -104,6 +153,8 @@
 ## * BuyseTest (example)
 #' @rdname BuyseTest
 #' @examples
+#' library(data.table)
+#' 
 #' # reset the default value of the number of permuation sample
 #' BuyseTest.options(method.inference = "none") # no permutation test
 #'
@@ -113,12 +164,12 @@
 #'
 #'                                        # display 
 #' if(require(prodlim)){
-#'    resKM_tempo <- prodlim(Hist(eventtime,status)~Treatment, data = df.data)
+#'    resKM_tempo <- prodlim(Hist(eventtime,status)~treatment, data = df.data)
 #'    plot(resKM_tempo)
 #' }
 #'
 #' #### one time to event endpoint ####
-#' BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data= df.data)
+#' BT <- BuyseTest(treatment ~ TTE(eventtime, censoring = status), data= df.data)
 #'
 #' summary(BT) # net benefit
 #' summary(BT, percentage = FALSE)  
@@ -126,63 +177,63 @@
 #' 
 #' ## bootstrap to compute the CI
 #' \dontrun{
-#'     BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
+#'     BT <- BuyseTest(treatment ~ TTE(eventtime, censoring = status), data=df.data,
 #'                     method.inference = "permutation", n.resampling = 1e3)
 #' }
 #' \dontshow{
-#'     BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
+#'     BT <- BuyseTest(treatment ~ TTE(eventtime, censoring = status), data=df.data,
 #'                     method.inference = "permutation", n.resampling = 1e1, trace = 0)
 #' }
 #' summary(BT, statistic = "netBenefit") ## default
 #' summary(BT, statistic = "winRatio") 
 #' 
-#' ## parallel boostrap
+#' ## parallel bootstrap
 #' \dontrun{
-#'     BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
+#'     BT <- BuyseTest(treatment ~ TTE(eventtime, censoring = status), data=df.data,
 #'                     method.inference = "permutation", n.resampling = 1e3, cpus = 2)
 #'     summary(BT)
 #' }
 #' 
 #' ## method Gehan is much faster but does not optimally handle censored observations
-#' BT <- BuyseTest(Treatment ~ TTE(eventtime, censoring = status), data=df.data,
-#'                 method.tte = "Gehan", trace = 0)
+#' BT <- BuyseTest(treatment ~ TTE(eventtime, censoring = status), data=df.data,
+#'                 scoring.rule = "Gehan", trace = 0)
 #' summary(BT)
 #' 
 #' #### one time to event endpoint: only differences in survival over 1 unit ####
-#' BT <- BuyseTest(Treatment ~ TTE(eventtime, threshold = 1, censoring = status), data=df.data)
+#' BT <- BuyseTest(treatment ~ TTE(eventtime, threshold = 1, censoring = status), data=df.data)
 #' summary(BT)
 #' 
 #' #### one time to event endpoint with a strata variable
-#' BT <- BuyseTest(Treatment ~ strata + TTE(eventtime, censoring = status), data=df.data)
+#' BT <- BuyseTest(treatment ~ strata + TTE(eventtime, censoring = status), data=df.data)
 #' summary(BT)
 #' 
 #' #### several endpoints with a strata variable
-#' f <- Treatment ~ strata + T(eventtime, 1, status) + B(toxicity) 
+#' f <- treatment ~ strata + T(eventtime, status, 1) + B(toxicity) 
 #' f <- update(f, 
-#'             ~. + T(eventtime, 0.5, status) + C(score, 1) + T(eventtime, 0.25, status))
+#'             ~. + T(eventtime, status, 0.5) + C(score, 1) + T(eventtime, status, 0.25))
 #' 
 #' BT <- BuyseTest(f, data=df.data)
 #' summary(BT)
 #' 
 #' #### real example : Veteran dataset of the survival package ####
 #' #### Only one endpoint. Type = Time-to-event. Thresold = 0. Stratfication by histological subtype
-#' #### method.tte = "Gehan"
+#' #### scoring.rule = "Gehan"
 #' 
 #' if(require(survival)){
 #' \dontrun{
 #'   data(veteran,package="survival")
 #'  
-#'   ## method.tte = "Gehan"
+#'   ## scoring.rule = "Gehan"
 #'   BT_Gehan <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,censoring=status), 
-#'                         data=veteran, method.tte="Gehan",
+#'                         data=veteran, scoring.rule="Gehan",
 #'                         method.inference = "permutation", n.resampling = 1e3)
 #'   
 #'   summary_Gehan <- summary(BT_Gehan)
 #'   summary_Gehan <- summary(BT_Gehan, statistic = "winRatio")
 #'   
-#'   ## method.tte = "Peron"
+#'   ## scoring.rule = "Peron"
 #'   BT_Peron <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,censoring=status), 
-#'                         data=veteran, method.tte="Peron",
+#'                         data=veteran, scoring.rule="Peron",
 #'                         method.inference = "permutation", n.resampling = 1e3)
 #' 
 #'   class(BT_Peron)
@@ -195,49 +246,62 @@
 ##' @export
 BuyseTest <- function(formula,
                       data,
-                      method.tte = NULL,
+                      scoring.rule = NULL,
                       correction.uninf = NULL,
                       model.tte = NULL,
                       method.inference = NULL,
                       n.resampling = NULL,
+                      strata.resampling = NULL,
+                      hierarchical = NULL,
+                      weight = NULL,
                       neutral.as.uninf = NULL,
                       keep.pairScore = NULL,
-                      treatment = NULL,
-                      endpoint = NULL,
-                      type = NULL,
-                      threshold = NULL,
-                      censoring = NULL,
-                      operator = NULL,
-                      strata = NULL, 
-                      alternative = NULL, 
                       seed = 10,
                       cpus = NULL,
                       trace = NULL,
-                      keep.comparison){
+                      treatment = NULL,
+                      endpoint = NULL,
+                      type = NULL,
+                      threshold = NULL,                      
+                      censoring = NULL,
+                      operator = NULL,
+                      strata = NULL, 
+                      keep.comparison,
+                      method.tte){
 
     name.call <- names(match.call())
     option <- BuyseTest.options()
-    
+
     ## ** compatibility with previous version
     if(!missing(keep.comparison)){
         stop("Argument \'keep.comparison\' is obsolete. \n",
              "It has been replaced by the argument \'keep.pairScore\' \n")
     }
-    
+    if(!missing(method.tte)){
+        stop("Argument \'method.tte\' is obsolete. \n",
+             "It has been replaced by the argument \'scoring.rule\' \n")
+    }
+    if(!is.null(method.inference) && (method.inference=="asymptotic")){
+        stop("Value \"asymptotic\" for argument \'method.inference\' is obsolete. \n",
+             "Use \"u-statistic\" instead \n")
+    }
+
     ## ** initialize arguments (all expect data that is just converted to data.table)
     ## initialized arguments are stored in outArgs
-    outArgs <- initializeArgs(alternative = alternative,
-                              name.call = name.call,
-                              censoring = censoring,
+    outArgs <- initializeArgs(censoring = censoring,
+                              correction.uninf = correction.uninf,
                               cpus = cpus,
                               data = data,
                               endpoint = endpoint,
                               formula = formula,
+                              hierarchical = hierarchical,
                               keep.pairScore = keep.pairScore,
-                              method.tte = method.tte,
-                              correction.uninf = correction.uninf,
+                              method.inference = method.inference,
+                              scoring.rule = scoring.rule,
                               model.tte = model.tte,
                               n.resampling = n.resampling,
+                              strata.resampling = strata.resampling,
+                              name.call = name.call,
                               neutral.as.uninf = neutral.as.uninf,
                               operator = operator,
                               option = option,
@@ -247,45 +311,37 @@ BuyseTest <- function(formula,
                               trace = trace,
                               treatment = treatment,
                               type = type,
-                              method.inference = method.inference)
-
-    if(outArgs$keep.pairScore || outArgs$method.inference %in% c("asymptotic","asymptotic-bebu")){
-        keep.pairScore <- TRUE
-    }else{
-        keep.pairScore <- FALSE
-    }
+                              weight = weight)
 
     ## ** test arguments
     if(option$check){
-        outTest <- do.call(testArgs, args = outArgs)
+        outTest <- do.call(testArgs, args = outArgs)        
     }
 
     ## ** initialization data
     ## WARNING when updating code: names in the c() must precisely match output of initializeData, in the same order
     out.name <- c("data","M.endpoint","M.censoring",
                   "index.C","index.T","index.strata",
-                  "index.endpoint","index.censoring","level.treatment","level.strata",
-                  "n.strata","n.obs","n.obsStrata","cumn.obsStrata")
+                  "level.treatment","level.strata", "method.score",
+                  "n.strata","n.obs","n.obsStrata","n.obsStrataResampling","cumn.obsStrataResampling","skeletonPeron",
+                  "scoring.rule", "iidNuisance", "nUTTE.analyzedPeron_M1", "endpoint.UTTE", "censoring.UTTE", "D.UTTE","index.UTTE")
     outArgs[out.name] <- initializeData(data = outArgs$data,
                                         type = outArgs$type,
-                                        method.tte = outArgs$method.tte,
                                         endpoint = outArgs$endpoint,
+                                        Uendpoint = outArgs$Uendpoint,
+                                        D = outArgs$D,
+                                        scoring.rule = outArgs$scoring.rule,
                                         censoring = outArgs$censoring,
+                                        Ucensoring = outArgs$Ucensoring,
+                                        method.inference = outArgs$method.inference,
                                         operator = outArgs$operator,
                                         strata = outArgs$strata,
                                         treatment = outArgs$treatment,
-                                        copy = TRUE)
-
-    ## ** create weights matrix for survival endpoints
-    ## WARNING when updating code: names in the c() must precisely match output of initializeData, in the same order
-    out.name <- c("Wscheme","endpoint.UTTE","index.UTTE","D.UTTE","reanalyzed","outSurv")
-    outArgs[out.name] <- buildWscheme(method.tte = outArgs$method.tte,
-                                      endpoint = outArgs$endpoint,
-                                      D = outArgs$D,
-                                      D.TTE = outArgs$D.TTE,
-                                      n.strata = outArgs$n.strata,
-                                      type = outArgs$type,
-                                      threshold = outArgs$threshold)
+                                        hierarchical = outArgs$hierarchical,
+                                        copy = TRUE,
+                                        endpoint.TTE = outArgs$endpoint.TTE,
+                                        censoring.TTE = outArgs$censoring.TTE,
+                                        iidNuisance = outArgs$iidNuisance)
     
     ## ** Display
     if (outArgs$trace > 1) {
@@ -298,23 +354,40 @@ BuyseTest <- function(formula,
     envirBT <- environment()
     envirBT$.BuyseTest <- .BuyseTest
     envirBT$initializeData <- initializeData
-    envirBT$initializeSurvival_Peron <- initializeSurvival_Peron
+    envirBT$calcSurvPeron <- calcSurvPeron
     
     ## ** Point estimation
     if (outArgs$trace > 1) {
-        cat("Point estimation")
+        if(outArgs$iid){
+            cat("Point estimation and calculation of the iid decomposition")
+        }else{
+            cat("Point estimation")
+        }
+        
     }
+
     outPoint <- .BuyseTest(envir = envirBT,
-                           keep.pairScore = keep.pairScore,
-                           method.inference = "none")
+                           iid = outArgs$iid,
+                           method.inference = "none",
+                           pointEstimation = TRUE)
 
     if (outArgs$trace > 1) {
         cat("\n\n")
     }
+
+    ## check number of pairs
+    if(option$check){
+        vec.nPair <- (outPoint$count_favorable + outPoint$count_unfavorable + outPoint$count_neutral + outPoint$count_uninf )[,1]
+        if(any(abs(outPoint$n_pairs - vec.nPair) > 0.01)){
+            warning("Incorrect estimation of the number of pairs \n",
+                    "Something probably went wrong - contact the package maintainer\n")
+        }
+    }
+
     
     ## convert from a list of vector (output of C++) to a list of data.table
-    if(keep.pairScore){
-        ## needed for inference
+    if(outArgs$keep.pairScore){
+        ## needed for inference with bebu
         outPoint$tablePairScore <- pairScore2dt(outPoint$tableScore,
                                                 level.treatment = outArgs$level.treatment,
                                                 level.strata = outArgs$level.strata,
@@ -324,82 +397,60 @@ BuyseTest <- function(formula,
     }
     
     ## ** Inference
-    if (outArgs$method.inference!="none") {
-        if(outArgs$trace > 1){
-            do.call(printInference, args = outArgs)
-        }
-
-        if(outArgs$method.inference %in% c("asymptotic","asymptotic-bebu")){
-
-            if(outArgs$method.tte > 0){
-                warning("The current implementation of the asymptotic distribution is not valid for method.tte=\"Peron\" \n",
-                        "Standard errors / confidence intervals / p-values should not be trusted \n")
-            }
-            if(outArgs$correction.uninf > 0){
-                warning("The current implementation of the asymptotic distribution is not valid when a correction is used \n",
-                        "Standard errors / confidence intervals / p-values should not be trusted \n")
-            }
-
-            if(outArgs$method.inference=="asymptotic"){
-                ## via the iid decomposition
-                outCovariance <- inferenceUstatistic(tablePairScore = outPoint$tablePairScore, order = option$order.Hprojection,
-                                                     count.favorable = colSums(outPoint$count_favorable), count.unfavorable = colSums(outPoint$count_unfavorable),
-                                                     n.pairs = sum(outPoint$n_pairs), n.C = length(envirBT$outArgs$index.C), n.T = length(envirBT$outArgs$index.T),                                                                                   level.strata = outArgs$level.strata, n.strata = outArgs$n.strata, endpoint = outArgs$endpoint)
-            }else if(outArgs$method.inference=="asymptotic-bebu"){
-                ## direct computation of the variance
-                outCovariance <- inferenceUstatisticBebu(tablePairScore = outPoint$tablePairScore, order = option$order.Hprojection,
-                                                         count.favorable = colSums(outPoint$count_favorable), count.unfavorable = colSums(outPoint$count_unfavorable),
-                                                         n.pairs = outPoint$n_pairs, n.C = length(envirBT$outArgs$index.C), n.T = length(envirBT$outArgs$index.T),                                                                                     level.strata = outArgs$level.strata, n.strata = outArgs$n.strata, endpoint = outArgs$endpoint)
-            }
-
-            attr(outArgs$method.inference,"Hprojection") <- option$order.Hprojection
-            
-            outResampling <- list(deltaResampling.netBenefit = array(dim=c(0,0,0)),
-                                  deltaResampling.winRatio = array(dim=c(0,0,0)),
-                                  DeltaResampling.netBenefit = matrix(NA, nrow = 0, ncol = 0),
-                                  DeltaResampling.winRatio = matrix(NA, nrow = 0, ncol = 0),
-                                  n.resampling = as.double(NA))
-            
-            
-        }else{
-            outResampling <- inferenceResampling(envirBT)
-            outCovariance <- list(Sigma = matrix(nrow = 0, ncol = 0),
-                                  iid1 = NULL,
-                                  iid2 = NULL)
-        }
-        if(outArgs$trace > 1){
-            cat("\n")
-        }
-        
-    }else{
-        outResampling <- list(deltaResampling.netBenefit = array(dim=c(0,0,0)),
-                              deltaResampling.winRatio = array(dim=c(0,0,0)),
-                              DeltaResampling.netBenefit = matrix(NA, nrow = 0, ncol = 0),
-                              DeltaResampling.winRatio = matrix(NA, nrow = 0, ncol = 0),
-                              n.resampling = as.double(NA))
-        outCovariance <- list(Sigma = matrix(nrow = 0, ncol = 0),
-                              iid1 = NULL,
-                              iid2 = NULL)
+    if((outArgs$method.inference != "none") && (outArgs$trace > 1)){
+        do.call(printInference, args = outArgs)
     }
-    
+
+    outResampling <- list(deltaResampling.netBenefit = array(dim=c(0,0,0)),
+                          deltaResampling.winRatio = array(dim=c(0,0,0)),
+                          DeltaResampling.netBenefit = matrix(NA, nrow = 0, ncol = 0),
+                          DeltaResampling.winRatio = matrix(NA, nrow = 0, ncol = 0),
+                          covariance = array(NA, dim = c(0,0,0)),
+                          n.resampling = as.double(NA))
+
+    if(outArgs$method.inference == "none"){
+        outPoint$Mvar <- matrix(nrow = 0, ncol = 0)
+        outPoint$iidAverage_favorable <- NULL
+        outPoint$iidAverage_unfavorable <- NULL
+    }else if(outArgs$method.inference == "u-statistic"){
+        ## done in the C++ code
+        ## outCovariance <- inferenceUstatistic(tablePairScore = outPoint$tablePairScore, order = option$order.Hprojection,
+        ##                                      count.favorable = colSums(outPoint$count_favorable), count.unfavorable = colSums(outPoint$count_unfavorable),
+        ##                                      n.pairs = sum(outPoint$n_pairs), n.C = length(envirBT$outArgs$index.C), n.T = length(envirBT$outArgs$index.T),
+        ##                                      level.strata = outArgs$level.strata, n.strata = outArgs$n.strata, endpoint = outArgs$endpoint)
+    }else if(outArgs$method.inference == "u-statistic-bebu"){
+        if(outArgs$keep.pairScore == FALSE){
+            stop("Argument \'keep.pairScore\' needs to be TRUE when argument \'method.inference\' is \"u-statistic-bebu\" \n")
+        }
+
+        ## direct computation of the variance
+        outCovariance <- inferenceUstatisticBebu(tablePairScore = outPoint$tablePairScore, order = option$order.Hprojection,
+                                                 weight = outArgs$weight,
+                                                 count.favorable = colSums(outPoint$count_favorable), count.unfavorable = colSums(outPoint$count_unfavorable),
+                                                 n.pairs = outPoint$n_pairs, n.C = length(envirBT$outArgs$index.C), n.T = length(envirBT$outArgs$index.T),                                                                                   level.strata = outArgs$level.strata, n.strata = outArgs$n.strata, endpoint = outArgs$endpoint)
+
+        outPoint$Mvar <- outCovariance$Sigma
+        outPoint$iidAverage_favorable <- NULL
+        outPoint$iidAverage_unfavorable <- NULL
+        attr(outArgs$method.inference,"Hprojection") <- option$order.Hprojection
+    }else if(grepl("bootstrap|permutation",outArgs$method.inference)){
+        outResampling <- inferenceResampling(envirBT)
+        if(outArgs$iid==FALSE){
+            outPoint$Mvar <- matrix(nrow = 0, ncol = 0)
+            outPoint$iidAverage_favorable <- NULL
+            outPoint$iidAverage_unfavorable <- NULL
+        }
+    }
+    if((outArgs$method.inference != "none") && (outArgs$trace > 1)){
+        cat("\n")
+    }
+
     ## ** Gather results into a BuyseRes object
     if(outArgs$trace > 1){
         cat("Gather the results in a BuyseRes object \n")
     }
-    method.tte <- c("Gehan","Peron")[outArgs$method.tte+1]
+    scoring.rule <- c("Gehan","Peron")[outArgs$scoring.rule+1]
     type <- c("Binary","Continuous","TimeToEvent")[outArgs$type]
-
-    if(option$check){
-        vec.nPair <- sapply(1:length(outArgs$level.strata), function(iStrata){            
-            iN.C <- length(intersect(outArgs$index.C, outArgs$index.strata[[iStrata]]))
-            iN.T <- length(intersect(outArgs$index.T, outArgs$index.strata[[iStrata]]))
-            return(iN.C*iN.T)
-        })
-        if(any(abs(outPoint$n_pairs - vec.nPair) > 0.01)){
-            warning("Incorrect estimation of the number of pairs \n",
-                    "Something probably went wrong - contact the package maintainer\n")
-        }
-    }
     
     BuyseRes.object <- BuyseRes(
         count.favorable = outPoint$count_favorable,      
@@ -414,7 +465,9 @@ BuyseTest <- function(formula,
         type = type,
         endpoint = outArgs$endpoint,
         level.treatment = outArgs$level.treatment,
-        method.tte = method.tte,
+        scoring.rule = scoring.rule,
+        hierarchical = outArgs$hierarchical,
+        neutral.as.uninf = outArgs$neutral.as.uninf,
         correction.uninf = outArgs$correction.uninf,
         method.inference = outArgs$method.inference,
         strata = outArgs$strata,
@@ -425,182 +478,98 @@ BuyseTest <- function(formula,
         deltaResampling.winRatio = outResampling$deltaResampling.winRatio,
         DeltaResampling.netBenefit = outResampling$DeltaResampling.netBenefit,
         DeltaResampling.winRatio = outResampling$DeltaResampling.winRatio,
-        covariance = outCovariance,
+        covarianceResampling = outResampling$covariance,
+        covariance = outPoint$Mvar,
+        weight = outArgs$weight,
+        iidAverage_favorable = outPoint$iidAverage_favorable,
+        iidAverage_unfavorable = outPoint$iidAverage_unfavorable,
+        iidNuisance_favorable = outPoint$iidNuisance_favorable,
+        iidNuisance_unfavorable = outPoint$iidNuisance_unfavorable,
         tablePairScore = if(outArgs$keep.pairScore){outPoint$tablePairScore}else{list()},
         tableSurvival = if(outArgs$keep.survival){outPoint$tableSurvival}else{list()}
     )
     if(outArgs$trace > 1){
         cat("\n")
     }
-
+    
     ## ** export
     return(BuyseRes.object)
 }
 
 ## * .BuyseTest (code)
 .BuyseTest <- function(envir,
-                       keep.pairScore,
-                       method.inference){
+                       iid,
+                       method.inference,
+                       pointEstimation){
    
-    n.strata <- envir$outArgs$n.strata ## to simplify code
-    treatment <- envir$outArgs$treatment ## to simplify code
-    censoring <- envir$outArgs$censoring ## to simplify code
-    endpoint <- envir$outArgs$endpoint ## to simplify code
-    method.tte <- envir$outArgs$method.tte ## to simplify code
-    type <- envir$outArgs$type ## to simplify code
-    D.TTE <- envir$outArgs$D.TTE ## to simplify code
-    D <- envir$outArgs$D ## to simplify code
-
 
     ## ** Resampling
-    ls.indexC <- vector(mode = "list", length = n.strata)
-    ls.indexT <- vector(mode = "list", length = n.strata)
-    if(method.inference == "none"){
+    outSample <- calcSample(envir = envir, method.inference = method.inference)
+    if(is.null(outSample)){return(NULL)}
 
-        ## find groups
-        if(n.strata==1){        
-            ls.indexC[[1]] <- envir$outArgs$index.C - 1
-            ls.indexT[[1]] <- envir$outArgs$index.T - 1
-        }else{        
-            for(iStrata in 1:n.strata){ ## iStrata <- 1  
-                ls.indexC[[iStrata]] <- intersect(envir$outArgs$index.C, envir$outArgs$index.strata[[iStrata]]) - 1
-                ls.indexT[[iStrata]] <- intersect(envir$outArgs$index.T, envir$outArgs$index.strata[[iStrata]]) - 1
-            }
-        }
-
-        ## rebuild dataset
-        if(method.tte>0){
-            data <- data.table(envir$outArgs$data,envir$outArgs$M.endpoint,envir$outArgs$M.censoring)
-        }
-        
-    }else if(method.inference %in% c("permutation","stratified permutation")){
-
-        ## permute
-        if(method.inference == "permutation"){
-            index.resampling <- sample.int(envir$outArgs$n.obs, replace = FALSE)
-        }else if(method.inference == "stratified permutation"){
-            index.resampling <- NULL
-            for(iStrata in 1:n.strata){ ## iStrata <- 1  
-                index.resampling <- c(index.resampling,envir$outArgs$cumn.obsStrata[iStrata] + sample.int(envir$outArgs$n.obsStrata[iStrata], replace = FALSE))
-            }
-        }
-        ## find groups
-        if(n.strata==1){        
-            ls.indexC[[1]] <- which(index.resampling %in% envir$outArgs$index.C) - 1
-            ls.indexT[[1]] <- which(index.resampling %in% envir$outArgs$index.T) - 1            
-        }else{
-            index.C <- which(index.resampling %in% envir$outArgs$index.C)
-            index.T <- which(index.resampling %in% envir$outArgs$index.T)
-            for(iStrata in 1:n.strata){ ## iStrata <- 1  
-                ls.indexC[[iStrata]] <- intersect(index.C, envir$outArgs$index.strata[[iStrata]]) - 1
-                ls.indexT[[iStrata]] <- intersect(index.T, envir$outArgs$index.strata[[iStrata]]) - 1
-            }
-            ## ls.indexC[[1]]
-        }
-
-        ## rebuild dataset
-        if(method.tte>0){
-            data <- data.table(envir$outArgs$data[[treatment]][index.resampling],
-                               "..strata.." = envir$outArgs$data[["..strata.."]],
-                               envir$outArgs$M.endpoint,envir$outArgs$M.censoring)
-            data.table::setnames(data, old = names(data)[1], new = treatment)
-        }
-        
-    }else if(method.inference %in% c("bootstrap","stratified bootstrap")){ 
-
-        ## bootstrap
-        if(method.inference == "bootstrap"){
-            index.resampling <- sample.int(envir$outArgs$n.obs, replace = TRUE)
-        }else if(method.inference == "stratified bootstrap"){
-            index.resampling <- NULL
-            for(iStrata in 1:n.strata){ ## iStrata <- 1  
-                index.resampling <- c(index.resampling,envir$outArgs$cumn.obsStrata[iStrata] + sample.int(envir$outArgs$n.obsStrata[iStrata], replace = TRUE))
-            }
-        }
-            
-        ## find groups
-        if(n.strata==1){
-            ls.indexC[[1]] <- index.resampling[index.resampling %in% envir$outArgs$index.C] - 1
-            ls.indexT[[1]] <- index.resampling[index.resampling %in% envir$outArgs$index.T] - 1
-        }else{
-            index.C <- index.resampling[index.resampling %in% envir$outArgs$index.C]
-            index.T <- index.resampling[index.resampling %in% envir$outArgs$index.T]
-            ## update strata!!!!
-            for(iStrata in 1:n.strata){ ## iStrata <- 1
-                ## do not use intersect since it removes duplicated elements
-                iIndex.strata <- index.resampling[index.resampling %in% envir$outArgs$index.strata[[iStrata]]]                
-                ls.indexC[[iStrata]] <- index.C[index.C %in% iIndex.strata] - 1
-                ls.indexT[[iStrata]] <- index.T[index.T %in% iIndex.strata] - 1
-            }
-        }
-
-        ## lapply(ls.indexC,length)
-        ## lapply(ls.indexT,length)
-        ## table(data[["..strata.."]],data[[treatment]])
-        
-        ## rebuild dataset
-        if(method.tte>0){
-            data <- data.table(envir$outArgs$data,
-                               envir$outArgs$M.endpoint,envir$outArgs$M.censoring)[index.resampling]
-        }
+    ## ** Estimate survival curves with its iid
+    if(envir$outArgs$scoring.rule == 0){ ## Gehan
+        outSurv <- envir$outArgs$skeletonPeron
+    }else{ ## Peron 
+        outSurv <- calcSurvPeron(data = outSample$data,
+                                 model.tte = envir$outArgs$model.tte,
+                                 method.score = envir$outArgs$method.score,
+                                 treatment = envir$outArgs$treatment,
+                                 level.treatment = envir$outArgs$level.treatment,
+                                 endpoint = envir$outArgs$endpoint,
+                                 endpoint.TTE = envir$outArgs$endpoint.TTE,
+                                 endpoint.UTTE = envir$outArgs$endpoint.UTTE,
+                                 censoring = envir$outArgs$censoring,
+                                 censoring.TTE = envir$outArgs$censoring.TTE,
+                                 censoring.UTTE = envir$outArgs$censoring.UTTE,
+                                 D.TTE = envir$outArgs$D.TTE,
+                                 D.UTTE = envir$outArgs$D.UTTE,
+                                 type = envir$outArgs$type,
+                                 threshold = envir$outArgs$threshold,
+                                 n.strata = envir$outArgs$n.strata,
+                                 strata = envir$outArgs$strata,
+                                 iidNuisance = envir$outArgs$iidNuisance * iid,
+                                 out = envir$outArgs$skeletonPeron)
     }
-
-    ## Check valid resampling
-    if (any(c(sapply(ls.indexC,length),sapply(ls.indexT,length))==0)) {
-        return(NULL)
-    }
-
-    ## *** Update survival
-    if(method.tte == 0){ ## Gehan
-        outSurv <- envir$outArgs$outSurv
-
-    }else{ ## Peron
-        outSurv <- initializeSurvival_Peron(data = data,
-                                            model.tte = envir$outArgs$model.tte,
-                                            treatment = treatment,
-                                            level.treatment = envir$outArgs$level.treatment,
-                                            endpoint = endpoint,
-                                            endpoint.UTTE = envir$outArgs$endpoint.UTTE,
-                                            censoring = censoring,
-                                            D.TTE = D.TTE,
-                                            D.UTTE = envir$outArgs$D.UTTE,
-                                            type = type,
-                                            threshold = envir$outArgs$threshold,
-                                            n.strata = n.strata,
-                                            strata = envir$outArgs$strata,
-                                            out = envir$outArgs$outSurv)
-    }
-
-    ## ** Computation
+    
+    ## ** Perform GPC
     resBT <- GPC_cpp(endpoint = envir$outArgs$M.endpoint,
                      censoring = envir$outArgs$M.censoring,
-                     indexC = ls.indexC,
-                     indexT = ls.indexT,                     
+                     indexC = outSample$ls.indexC,
+                     posC = outSample$ls.posC,
+                     indexT = outSample$ls.indexT,                     
+                     posT = outSample$ls.posT,                     
                      threshold = envir$outArgs$threshold,
+                     weight = envir$outArgs$weight,
                      method = envir$outArgs$method.score,
-                     D = D,
-                     n_strata = n.strata,
-                     n_TTE = D.TTE,
-                     n_UTTE = envir$outArgs$D.UTTE,
-                     Wscheme = envir$outArgs$Wscheme,
+                     D = envir$outArgs$D,
+                     D_UTTE = envir$outArgs$D.UTTE,
+                     n_strata = envir$outArgs$n.strata,
+                     nUTTE_analyzedPeron_M1 = envir$outArgs$nUTTE.analyzedPeron_M1,
                      index_endpoint = envir$outArgs$index.endpoint,
                      index_censoring = envir$outArgs$index.censoring,
                      index_UTTE = envir$outArgs$index.UTTE,
-                     reanalyzed = envir$outArgs$reanalyzed,
                      list_survTimeC = outSurv$survTimeC,
                      list_survTimeT = outSurv$survTimeT,
                      list_survJumpC = outSurv$survJumpC,
                      list_survJumpT = outSurv$survJumpT,
                      list_lastSurv = outSurv$lastSurv,
+                     p_C = outSurv$p.C,
+                     p_T = outSurv$p.T,
+                     iid_survJumpC = outSurv$iid$survJumpC,
+                     iid_survJumpT = outSurv$iid$survJumpT,
+                     zeroPlus = 1e-8,
                      correctionUninf = envir$outArgs$correction.uninf,
+                     hierarchical = envir$outArgs$hierarchical,
+                     hprojection = envir$outArgs$order.Hprojection,
                      neutralAsUninf = envir$outArgs$neutral.as.uninf,
-                     keepScore = keep.pairScore,
-                     reserve = TRUE,
-                     returnOnlyDelta = (method.inference!="none")
+                     keepScore = (pointEstimation && envir$outArgs$keep.pairScore),
+                     returnIID = iid + iid*envir$outArgs$iidNuisance,
+                     debug = envir$outArgs$debug
                      )
-
+    
     ## ** export
-    if(method.inference == "none"){
+    if(pointEstimation){
         if(envir$outArgs$keep.survival){ ## useful to test initSurvival 
             resBT$tableSurvival <- outSurv
         }
@@ -609,8 +578,130 @@ BuyseTest <- function(formula,
         return(list(delta_netBenefit = resBT$delta_netBenefit,
                     Delta_netBenefit = resBT$Delta_netBenefit,
                     delta_winRatio = resBT$delta_winRatio,
-                    Delta_winRatio = resBT$Delta_winRatio))
+                    Delta_winRatio = resBT$Delta_winRatio,
+                    Mvar = resBT$Mvar))
+    }
 }
+
+## * calcSample
+#' @rdname internal-initialization
+calcSample <- function(envir, method.inference){
+
+    ## ** initialization
+    out <- list(## rows in M.endpoint/M.censoring corresponding to observations from the control/treatment group (not unique when boostraping)
+        ls.indexC = vector(mode = "list", length = envir$outArgs$n.strata), 
+        ls.indexT = vector(mode = "list", length = envir$outArgs$n.strata),
+        ## identifier for each observation from the control/treatment group (unique even when boostrap)
+        ls.posC = vector(mode = "list", length = envir$outArgs$n.strata),
+        ls.posT = vector(mode = "list", length = envir$outArgs$n.strata),
+        data = data.table()
+    )
+
+    if(method.inference == "none"){
+        ## ** no resampling
+        if(envir$outArgs$n.strata==1){        
+            out$ls.indexC[[1]] <- envir$outArgs$index.C - 1
+            out$ls.indexT[[1]] <- envir$outArgs$index.T - 1
+        }else{        
+            for(iStrata in 1:envir$outArgs$n.strata){ ## iStrata <- 1  
+                out$ls.indexC[[iStrata]] <- intersect(envir$outArgs$index.C, envir$outArgs$index.strata[[iStrata]]) - 1
+                out$ls.indexT[[iStrata]] <- intersect(envir$outArgs$index.T, envir$outArgs$index.strata[[iStrata]]) - 1
+            }
+        }
+        out$ls.posC <- out$ls.indexC
+        out$ls.posT <- out$ls.indexT
+
+        if(envir$outArgs$scoring.rule>0){
+            out$data <- data.table::data.table(envir$outArgs$data,envir$outArgs$M.endpoint,envir$outArgs$M.censoring)
+        }
+    }else{
+
+        if(grepl("permutation",method.inference)){
+            test.perm <- TRUE
+            replace <- FALSE
+        }else if(grepl("bootstrap",method.inference)){
+            test.perm <- FALSE
+            replace <- TRUE
+        }
+
+        ## ** perform resampling
+        n.strataResampling <- length(envir$outArgs$n.obsStrataResampling)
+        index.resampling <- NULL
+        for(iSR in 1:n.strataResampling){ ## iSR <- 1 
+            index.resampling <- c(index.resampling, envir$outArgs$cumn.obsStrataResampling[iSR] + sample.int(envir$outArgs$n.obsStrataResampling[iSR], replace = replace))
+        }            
+
+        ## ** reconstruct groups
+        if(envir$outArgs$n.strata==1){
+            ## index of the new observations in the old dataset by treatment group
+            if(test.perm){
+                out$ls.indexC[[1]] <- which(index.resampling %in% envir$outArgs$index.C) - 1
+                out$ls.indexT[[1]] <- which(index.resampling %in% envir$outArgs$index.T) - 1
+            }else{
+                out$ls.indexC[[1]] <- index.resampling[index.resampling %in% envir$outArgs$index.C] - 1
+                out$ls.indexT[[1]] <- index.resampling[index.resampling %in% envir$outArgs$index.T] - 1
+            }
+
+            ## check that each group has at least one observation
+            if(length(out$ls.indexC[[1]])==0 || length(out$ls.indexT[[1]])==0){return(NULL)} 
+
+            ## unique identifier for each observation
+            iNc <- length(out$ls.indexC[[1]])
+            iNt <- length(out$ls.indexT[[1]])
+            out$ls.posC[[1]] <- 0:(iNc-1)
+            out$ls.posT[[1]] <- iNc + 0:(iNt-1)
+
+        }else{
+            ## index of the new observation in the old dataset by treatment group
+            if(test.perm){
+                index.C <- which(index.resampling %in% envir$outArgs$index.C)
+                index.T <- which(index.resampling %in% envir$outArgs$index.T)
+            }else{
+                index.C <- index.resampling[index.resampling %in% envir$outArgs$index.C]
+                index.T <- index.resampling[index.resampling %in% envir$outArgs$index.T]
+            }
+
+            cumn <- 0
+            for(iStrata in 1:envir$outArgs$n.strata){ ## iStrata <- 1  
+
+                ## index of the new observation in the old dataset by treatment group
+                if(test.perm){
+                    out$ls.indexC[[iStrata]] <- intersect(index.C, envir$outArgs$index.strata[[iStrata]]) - 1
+                    out$ls.indexT[[iStrata]] <- intersect(index.T, envir$outArgs$index.strata[[iStrata]]) - 1
+                }else{
+                    ## WARNING: do not use intersect since it removes duplicated elements
+                    iIndex.strata <- index.resampling[index.resampling %in% envir$outArgs$index.strata[[iStrata]]]                
+                    out$ls.indexC[[iStrata]] <- index.C[index.C %in% iIndex.strata] - 1
+                    out$ls.indexT[[iStrata]] <- index.T[index.T %in% iIndex.strata] - 1
+                }
+
+                ## check that each group has at least one observation
+                if(length(out$ls.indexC[[iStrata]])==0 || length(out$ls.indexT[[iStrata]])==0){return(NULL)} 
+
+                ## unique identifier for each observation
+                iNc <- length(out$ls.indexC[[iStrata]])
+                iNt <- length(out$ls.indexT[[iStrata]])
+                out$ls.posC[[iStrata]] <- cumn + 0:(iNc-1)
+                out$ls.posT[[iStrata]] <- cumn + iNc + 0:(iNt-1)
+                cumn <- cumn + iNc + iNt
+            }
+        }
+
+        ## ** rebuild dataset
+        if(envir$outArgs$scoring.rule>0){
+            if(method.inference == "permutation"){
+                out$data <- data.table::data.table(envir$outArgs$data[[envir$outArgs$treatment]][index.resampling],
+                                                   "..strata.." = envir$outArgs$data[["..strata.."]],
+                                                   envir$outArgs$M.endpoint,envir$outArgs$M.censoring)
+                data.table::setnames(out$data, old = names(out$data)[1], new = envir$outArgs$treatment)
+            }else{
+                out$data <- data.table::data.table(envir$outArgs$data,
+                                                   envir$outArgs$M.endpoint,envir$outArgs$M.censoring)[index.resampling]
+            }
+        }
+    }
+
+    return(out)
 }
 
 
@@ -618,4 +709,392 @@ BuyseTest <- function(formula,
 
 
 
+## * calcSurvPeron
+#' @rdname internal-initialization
+calcSurvPeron <- function(data,
+                          model.tte,
+                          method.score,
+                          treatment,
+                          level.treatment,
+                          endpoint,
+                          endpoint.TTE,
+                          endpoint.UTTE,
+                          censoring,
+                          censoring.TTE,
+                          censoring.UTTE,
+                          D.TTE,
+                          D.UTTE,
+                          type,
+                          strata,
+                          threshold,
+                          n.strata,
+                          iidNuisance,
+                          out){
+
+    ## ** prepare
+    if(n.strata == 1){
+        ls.indexC <- list(which(data[[treatment]]==0))
+        ls.indexT <- list(which(data[[treatment]]==1))
+    }else{
+        indexC <- which(data[[treatment]]==0)
+        indexT <- which(data[[treatment]]==1)
+        ls.indexC <- vector(mode = "list", length = n.strata)
+        ls.indexT <- vector(mode = "list", length = n.strata)
+        for(iStrata in 1:n.strata){
+            iIndex.strata <- which(data[["..strata.."]]==iStrata)
+            ls.indexC[[iStrata]] <- intersect(indexC,iIndex.strata)
+            ls.indexT[[iStrata]] <- intersect(indexT,iIndex.strata)
+        }
+    }            
+    zeroPlus <- 1e-12
+
+    ## ** estimate cumulative incidence function (survival case or competing risk case)
+    if(is.null(model.tte)){        
+        model.tte <- vector(length = D.UTTE, mode = "list")
+        names(model.tte) <- endpoint.UTTE
+
+        txt.modelUTTE <- paste0("prodlim::Hist(",endpoint.UTTE,",",censoring.UTTE,") ~ ",treatment," + ..strata..")
+
+        for(iEndpoint.UTTE in 1:D.UTTE){ ## iEndpoint.UTTE <- 1
+            model.tte[[iEndpoint.UTTE]] <- try(prodlim::prodlim(as.formula(txt.modelUTTE[iEndpoint.UTTE]),
+                                                                data = data), silent = TRUE)
+            model.tte[[iEndpoint.UTTE]]$XX <- model.tte[[iEndpoint.UTTE]]$X
+        }
+        
+    }else{
+        for(iEndpoint.UTTE in 1:D.UTTE){ ## iEndpoint.TTE <- 1
+            ## convert treatment to numeric
+            model.tte[[iEndpoint.UTTE]]$XX <- model.tte[[iEndpoint.UTTE]]$X
+            model.tte[[iEndpoint.UTTE]]$XX[[treatment]] <- as.numeric(factor(model.tte[[iEndpoint.UTTE]]$XX[[treatment]], levels = level.treatment))-1
+            p <- NCOL(model.tte[[iEndpoint.UTTE]]$XX)
+
+            ## create ..strata..
+            if(p==1){
+                model.tte[[iEndpoint.UTTE]]$XX <- cbind(model.tte[[iEndpoint.UTTE]]$XX,
+                                                        "..strata.." = 1)
+            }else{
+                col.strata <- setdiff(1:p,which(colnames(model.tte[[iEndpoint.UTTE]]$XX)==treatment))
+                value.strata <- apply(model.tte[[iEndpoint.UTTE]]$XX[,col.strata],1,paste0,collapse="")
+                model.tte[[iEndpoint.UTTE]]$XX <- cbind(model.tte[[iEndpoint.UTTE]]$XX,
+                                                        "..strata.." = as.numeric(as.factor(value.strata)))
+
+            }
+        }
+    }
+
+    ## ** predict individual survival
+    ## *** fill
+    for(iEndpoint.UTTE in 1:D.UTTE){ ## iEndpoint.TTE <- 1
+        iEndpoint.UTTE.name <- endpoint.UTTE[iEndpoint.UTTE]
+        iIndex.associatedEndpoint <- which(endpoint == iEndpoint.UTTE.name)
+        iTest.CR <- method.score[iIndex.associatedEndpoint[1]]==4
+
+        if(iTest.CR){
+            index.jump1 <- which(model.tte[[iEndpoint.UTTE]]$cause.hazard[[1]]>0)
+            index.jump2 <- which(model.tte[[iEndpoint.UTTE]]$cause.hazard[[2]]>0)
+        }else{
+            index.jump <- which(model.tte[[iEndpoint.UTTE]]$hazard>0)
+        }
+        
+        indexX.C <- which(model.tte[[iEndpoint.UTTE]]$XX[[treatment]]==0)
+        indexX.T <- which(model.tte[[iEndpoint.UTTE]]$XX[[treatment]]==1)
+
+        
+        for(iStrata in 1:n.strata){ ## iStrata <- 1
+            iNcontrol <- length(ls.indexC[[iStrata]])
+            iNtreatment <- length(ls.indexT[[iStrata]])
+
+            if("..strata.." %in% colnames(model.tte[[iEndpoint.UTTE]]$XX)){
+                indexX.strata <- which(model.tte[[iEndpoint.UTTE]]$XX[["..strata.."]]==iStrata)
+                indexX.strataC <- intersect(indexX.C,indexX.strata)
+                indexX.strataT <- intersect(indexX.T,indexX.strata)
+            }
+
+            iIndex.startC <- model.tte[[iEndpoint.UTTE]]$first.strata[indexX.strataC]
+            iIndex.startT <- model.tte[[iEndpoint.UTTE]]$first.strata[indexX.strataT]
+
+            iIndex.stopC <- iIndex.startC + model.tte[[iEndpoint.UTTE]]$size.strata[indexX.strataC] - 1
+            iIndex.stopT <- iIndex.startT + model.tte[[iEndpoint.UTTE]]$size.strata[indexX.strataT] - 1
+
+            iTimeC <- data[ls.indexC[[iStrata]],.SD[[iEndpoint.UTTE.name]]]
+            iTimeT <- data[ls.indexT[[iStrata]],.SD[[iEndpoint.UTTE.name]]]
+
+            if(iTest.CR){
+                iJump1C <- model.tte[[iEndpoint.UTTE]]$time[intersect(index.jump1,iIndex.startC:iIndex.stopC)]
+                iJump1T <- model.tte[[iEndpoint.UTTE]]$time[intersect(index.jump1,iIndex.startT:iIndex.stopT)]
+                iJump2C <- model.tte[[iEndpoint.UTTE]]$time[intersect(index.jump2,iIndex.startC:iIndex.stopC)]
+                iJump2T <- model.tte[[iEndpoint.UTTE]]$time[intersect(index.jump2,iIndex.startT:iIndex.stopT)]
+
+                iLast.cif1C <- model.tte[[iEndpoint.UTTE]]$cuminc[[1]][iIndex.stopC]
+                iLast.cif1T <- model.tte[[iEndpoint.UTTE]]$cuminc[[1]][iIndex.stopT]
+                iLast.cif2C <- model.tte[[iEndpoint.UTTE]]$cuminc[[2]][iIndex.stopC]
+                iLast.cif2T <- model.tte[[iEndpoint.UTTE]]$cuminc[[2]][iIndex.stopT]
+
+                sumCifC = iLast.cif1C + iLast.cif2C
+                sumCifT = iLast.cif1T + iLast.cif2T
+            
+                iPredCif1C <- stats::approxfun(x = model.tte[[iEndpoint.UTTE]]$time[iIndex.startC:iIndex.stopC], 
+                                               y = model.tte[[iEndpoint.UTTE]]$cuminc[[1]][iIndex.startC:iIndex.stopC],
+                                               yleft = 0, yright = switch(as.character(sumCifC == 1),
+                                                                          "TRUE" = iLast.cif1C,
+                                                                          "FALSE" = NA), f = 0, method = "constant")
+            
+                iPredCif1T <- stats::approxfun(x = model.tte[[iEndpoint.UTTE]]$time[iIndex.startT:iIndex.stopT], 
+                                               y = model.tte[[iEndpoint.UTTE]]$cuminc[[1]][iIndex.startT:iIndex.stopT],
+                                               yleft = 0, yright = switch(as.character(sumCifT == 1),
+                                                                          "TRUE" = iLast.cif1T,
+                                                                          "FALSE" = NA), f = 0, method = "constant")
+            
+                iPredCif2C <- stats::approxfun(x = model.tte[[iEndpoint.UTTE]]$time[iIndex.startC:iIndex.stopC], 
+                                               y = model.tte[[iEndpoint.UTTE]]$cuminc[[2]][iIndex.startC:iIndex.stopC],
+                                               yleft = 0, yright = switch(as.character(sumCifC == 1),
+                                                                          "TRUE" = iLast.cif2C,
+                                                                          "FALSE" = NA), f = 0, method = "constant")
+            
+                iPredCif2T <- stats::approxfun(x = model.tte[[iEndpoint.UTTE]]$time[iIndex.startT:iIndex.stopT], 
+                                               y = model.tte[[iEndpoint.UTTE]]$cuminc[[2]][iIndex.startT:iIndex.stopT],
+                                               yleft = 0, yright = switch(as.character(sumCifT == 1),
+                                                                          "TRUE" = iLast.cif2T,
+                                                                          "FALSE" = NA), f = 0, method = "constant")
+
+                ## independent of the threshold i.e. of the priority
+                ## avoid repeated calculation when the same endpoint is used several times with different thresholds
+                iDCif1C.jumpC <- iPredCif1C(iJump1C) - iPredCif1C(iJump1C - zeroPlus)
+                iCif1C.timeC <- iPredCif1C(iTimeC)
+                iCif1C.timeT <- iPredCif1C(iTimeT)
+                iCif1T.timeC <- iPredCif1T(iTimeC)
+                iCif1T.timeT <- iPredCif1T(iTimeT)
+                iCif2C.timeC <- iPredCif2C(iTimeC)
+                                        #iCif2C.timeT <- iPredCif2C(iTimeT)
+                                        #iCif2T.timeC <- iPredCif2T(iTimeC)
+                iCif2T.timeT <- iPredCif2T(iTimeT)
+            
+            for(iEndpoint in iIndex.associatedEndpoint){ ## iEndpoint <- 1
+              iThreshold <- threshold[iEndpoint] ## iThreshold = 1
+              
+              ## **** last survival
+              out$lastSurv[[iEndpoint]][iStrata,] <- cbind(iLast.cif1C, iLast.cif1T, iLast.cif2C, iLast.cif2T)
+              
+              ## **** survival at jump times
+              out$survJumpC[[iEndpoint]][[iStrata]] <- cbind(time = iJump1C,
+                                                            "CIF1T-threshold" = iPredCif1T(iJump1C - iThreshold),
+                                                            "CIF1T+threshold" = iPredCif1T(iJump1C + iThreshold),
+                                                            dCIF = iDCif1C.jumpC)
+              
+              ## **** survival at observation time (+/- threshold)
+              out$survTimeC[[iEndpoint]][[iStrata]] <- cbind("time" = iTimeC,
+                                                            "CIF1C-threshold" = iPredCif1C(iTimeC - iThreshold),
+                                                            "CIF1C_0" = iCif1C.timeC,
+                                                            "CIF1C+threshold" = iPredCif1C(iTimeC + iThreshold),
+                                                            "CIF1T-threshold" = iPredCif1T(iTimeC - iThreshold),
+                                                            "CIF1T_0" = iCif1T.timeC,
+                                                            "CIF1T+threshold" = iPredCif1T(iTimeC + iThreshold),
+                                                            "CIF2C_0" = iCif2C.timeC)#,
+                                                            #"CIF2T_0" = iCif2T.timeC)
+              
+              out$survTimeT[[iEndpoint]][[iStrata]] <- cbind("time" = iTimeT,
+                                                             "CIF1C-threshold" = iPredCif1C(iTimeT - iThreshold),
+                                                             "CIF1C_0" = iCif1C.timeT,
+                                                             "CIF1C+threshold" = iPredCif1C(iTimeT + iThreshold),
+                                                             "CIF1T-threshold" = iPredCif1T(iTimeT - iThreshold),
+                                                             "CIF1T_0" = iCif1T.timeT,
+                                                             "CIF1T+threshold" = iPredCif1T(iTimeT + iThreshold),
+                                        #"CIF2C_0" = iCif2C.timeT,
+                                                             "CIF2T_0" = iCif2T.timeT)
+            }
+
+            }else{
+                ## jump times
+                iIndexJumpC <- intersect(index.jump,iIndex.startC:iIndex.stopC)
+                iIndexJumpT <- intersect(index.jump,iIndex.startT:iIndex.stopT)
+                    
+                iJumpC <- model.tte[[iEndpoint.UTTE]]$time[iIndexJumpC]
+                iJumpT <- model.tte[[iEndpoint.UTTE]]$time[iIndexJumpT]
+
+                ## last survival times
+                iLast.survC <- model.tte[[iEndpoint.UTTE]]$surv[iIndex.stopC]
+                iLast.survT <- model.tte[[iEndpoint.UTTE]]$surv[iIndex.stopT]
+
+                ## survival at each jump
+                iSurvTimeC <- c(-1e12,iJumpC)
+                iSurvC <- c(1,model.tte[[iEndpoint.UTTE]]$surv[iIndexJumpC])
+                if(iLast.survC!=0){ ## just after last event is unknown when the survival curve does not ends at 0
+                    iSurvTimeC <- c(iSurvTimeC, model.tte[[iEndpoint.UTTE]]$time[iIndex.stopC] + 1e-12)
+                    iSurvC <- c(iSurvC,NA)
+                }
+
+                iSurvTimeT <- c(-1e12,iJumpT)
+                iSurvT <- c(1,model.tte[[iEndpoint.UTTE]]$surv[iIndexJumpT])
+                if(iLast.survT!=0){ ## just after last event is unknown when the survival curve does not ends at 0
+                    iSurvTimeT <- c(iSurvTimeT, model.tte[[iEndpoint.UTTE]]$time[iIndex.stopT] + 1e-12)
+                    iSurvT <- c(iSurvT, NA)
+                }
+
+                ## dSurvival at each jump
+                if(length(iJumpC)>0){
+                    iIndexSurvivalC.JumpCm <- prodlim::sindex(iSurvTimeC, iJumpC - 1e-12)
+                    iIndexSurvivalC.JumpCp <- prodlim::sindex(iSurvTimeC, iJumpC + 1e-12)
+                    iDSurvC <- iSurvC[iIndexSurvivalC.JumpCp] - iSurvC[iIndexSurvivalC.JumpCm]
+                }
+                
+                if(length(iJumpT)>0){
+                    iIndexSurvivalT.JumpTm <- prodlim::sindex(iSurvTimeT, iJumpT - 1e-12)
+                    iIndexSurvivalT.JumpTp <- prodlim::sindex(iSurvTimeT, iJumpT + 1e-12)
+                    iDSurvT <- iSurvT[iIndexSurvivalT.JumpTp] - iSurvT[iIndexSurvivalT.JumpTm]
+                }
+                
+                ## independent of the threshold i.e. of the priority
+                ## avoid repeated calculation when the same endpoint is used several times with different thresholds
+                iIndexSurvivalC.timeC <- prodlim::sindex(iSurvTimeC, iTimeC)
+                iIndexSurvivalC.timeT <- prodlim::sindex(iSurvTimeC, iTimeT)
+                iIndexSurvivalT.timeC <- prodlim::sindex(iSurvTimeT, iTimeC)
+                iIndexSurvivalT.timeT <- prodlim::sindex(iSurvTimeT, iTimeT)
+                
+                iSurvivalC.timeC <- iSurvC[iIndexSurvivalC.timeC]
+                iSurvivalC.timeT <- iSurvC[iIndexSurvivalC.timeT]
+                iSurvivalT.timeC <- iSurvT[iIndexSurvivalT.timeC]
+                iSurvivalT.timeT <- iSurvT[iIndexSurvivalT.timeT]
+                
+                for(iEndpoint in iIndex.associatedEndpoint){ ## iEndpoint <- 1
+                    iThreshold <- threshold[iEndpoint]
+                    ## **** last survival
+                    out$lastSurv[[iEndpoint]][iStrata,1:2] <- c(iLast.survC, iLast.survT)
+
+                ## **** survival at jump times
+                if(length(iJumpC)>0){                    
+                    iIndexSurvivalT.JumpCpTau <- prodlim::sindex(iSurvTimeT, iJumpC + iThreshold)
+                    out$survJumpC[[iEndpoint]][[iStrata]] <- cbind(time = iJumpC,
+                                                                   survival = iSurvT[iIndexSurvivalT.JumpCpTau],
+                                                                   dSurvival = iDSurvC)
+
+                    if(iidNuisance){
+                        out$survJumpC[[iEndpoint]][[iStrata]] <- cbind(out$survJumpC[[iEndpoint]][[iStrata]],
+                                                                       index.survival = iIndexSurvivalT.JumpCpTau - 1,
+                                                                       index.dSurvival1 = iIndexSurvivalC.JumpCm - 1,
+                                                                       index.dSurvival2 = iIndexSurvivalC.JumpCp - 1)
+                        ## iSurvT[iIndexSurvivalT.JumpCpTau]
+                        ## iSurvC[iIndexSurvivalC.JumpCm]
+                    }
+                }else{
+                    out$survJumpC[[iEndpoint]][[iStrata]] <- matrix(nrow = 0, ncol = 3,
+                                                                    dimnames = list(NULL, c("time","surival","dSurvival")))
+                }
+                
+                if(length(iJumpT)>0){                    
+                    iIndexSurvivalC.JumpTpTau <- prodlim::sindex(iSurvTimeC, iJumpT + iThreshold)                
+                    out$survJumpT[[iEndpoint]][[iStrata]] <- cbind(time = iJumpT,
+                                                                   survival = iSurvC[iIndexSurvivalC.JumpTpTau],
+                                                                   dSurvival = iDSurvT)
+                    if(iidNuisance){
+                        out$survJumpT[[iEndpoint]][[iStrata]] <- cbind(out$survJumpT[[iEndpoint]][[iStrata]],
+                                                                       index.survival = iIndexSurvivalC.JumpTpTau - 1,
+                                                                       index.dSurvival1 = iIndexSurvivalT.JumpTm - 1,
+                                                                       index.dSurvival2 = iIndexSurvivalT.JumpTp - 1)
+                    }
+                }else{
+                    out$survJumpT[[iEndpoint]][[iStrata]] <- matrix(nrow = 0, ncol = 3,
+                                                                    dimnames = list(NULL, c("time","surival","dSurvival")))
+                }
+
+                ## **** survival at observation time (+/- threshold)
+                iIndexSurvivalC.timeCmTau <- prodlim::sindex(iSurvTimeC, iTimeC - iThreshold)
+                iIndexSurvivalC.timeCpTau <- prodlim::sindex(iSurvTimeC, iTimeC + iThreshold)
+                iIndexSurvivalT.timeCmTau <- prodlim::sindex(iSurvTimeT, iTimeC - iThreshold)
+                iIndexSurvivalT.timeCpTau <- prodlim::sindex(iSurvTimeT, iTimeC + iThreshold)
+
+                out$survTimeC[[iEndpoint]][[iStrata]] <- cbind("time" = iTimeC,
+                                                               "SurvivalC-threshold" = iSurvC[iIndexSurvivalC.timeCmTau],
+                                                               "SurvivalC_0" = iSurvivalC.timeC,
+                                                               "SurvivalC+threshold" = iSurvC[iIndexSurvivalC.timeCpTau],
+                                                               "SurvivalT-threshold" = iSurvT[iIndexSurvivalT.timeCmTau],
+                                                               "SurvivalT_0" = iSurvivalT.timeC,
+                                                               "SurvivalT+threshold" = iSurvT[iIndexSurvivalT.timeCpTau])
+                if(iidNuisance){                    
+                    out$survTimeC[[iEndpoint]][[iStrata]] <- cbind(out$survTimeC[[iEndpoint]][[iStrata]],
+                                                                   "index.SurvivalC-threshold" = iIndexSurvivalC.timeCmTau - 1,
+                                                                   "index.SurvivalC_0" = iIndexSurvivalC.timeC - 1,
+                                                                   "index.SurvivalC+threshold" = iIndexSurvivalC.timeCpTau - 1,
+                                                                   "index.SurvivalT-threshold" = iIndexSurvivalT.timeCmTau - 1,
+                                                                   "index.SurvivalT_0" = iIndexSurvivalT.timeC - 1,
+                                                                   "index.SurvivalT+threshold" = iIndexSurvivalT.timeCpTau - 1
+                                                                   )
+                }
+
+                iIndexSurvivalC.timeTmTau <- prodlim::sindex(iSurvTimeC, iTimeT - iThreshold)
+                iIndexSurvivalC.timeTpTau <- prodlim::sindex(iSurvTimeC, iTimeT + iThreshold)
+                iIndexSurvivalT.timeTmTau <- prodlim::sindex(iSurvTimeT, iTimeT - iThreshold)
+                iIndexSurvivalT.timeTpTau <- prodlim::sindex(iSurvTimeT, iTimeT + iThreshold)
+
+                out$survTimeT[[iEndpoint]][[iStrata]] <- cbind("time" = iTimeT,
+                                                               "SurvivalC-threshold" = iSurvC[iIndexSurvivalC.timeTmTau],
+                                                               "SurvivalC_0" = iSurvivalC.timeT,
+                                                               "SurvivalC+threshold" = iSurvC[iIndexSurvivalC.timeTpTau],
+                                                               "SurvivalT-threshold" = iSurvT[iIndexSurvivalT.timeTmTau],
+                                                               "SurvivalT_0" = iSurvivalT.timeT,
+                                                               "SurvivalT+threshold" = iSurvT[iIndexSurvivalT.timeTpTau]
+                                                               )
+                if(iidNuisance){
+                    out$survTimeT[[iEndpoint]][[iStrata]] <- cbind(out$survTimeT[[iEndpoint]][[iStrata]],
+                                                                   "index.SurvivalC-threshold" = iIndexSurvivalC.timeTmTau - 1,
+                                                                   "index.SurvivalC_0" = iIndexSurvivalC.timeT - 1,
+                                                                   "index.SurvivalC+threshold" = iIndexSurvivalC.timeTpTau - 1,
+                                                                   "index.SurvivalT-threshold" = iIndexSurvivalT.timeTmTau - 1,
+                                                                   "index.SurvivalT_0" = iIndexSurvivalT.timeT - 1,
+                                                                   "index.SurvivalT+threshold" = iIndexSurvivalT.timeTpTau - 1
+                                                                   )
+                }
+            }
+
+            }
+        }
+    }
+
+    ## ** prepare influence function
+    out$iid <- vector(mode = "list", length = 4)
+    template <- lapply(1:D.UTTE, function(IE){
+        lapply(1:n.strata, matrix, nrow = 0, ncol = 0)
+        })
+    out$iid <- lapply(out$iid, function(x){template})
+    names(out$iid) <- c("survJumpC","dSurvJumpC","survJumpT","dSurvJumpT")
+
+    if(iidNuisance){
+        iid.model.tte <- lapply(model.tte, function(iModel){ ## iModel <- model.tte[[1]]
+            iOut <- iidProdlim(iModel, add0 = TRUE)
+            iOut$IFsurvival.control <- iOut$IFsurvival[which(iOut$X[,treatment]==0)]
+            iOut$IFsurvival.treatment <- iOut$IFsurvival[which(iOut$X[,treatment]==1)]
+            return(iOut)
+        })
+        for(iEndpoint.UTTE in 1:D.UTTE){  ## iEndpoint <- 1
+            iEndpoint.UTTE.name <- endpoint.UTTE[iEndpoint.UTTE]
+            iIndex.associatedEndpoint <- which(endpoint == iEndpoint.UTTE.name)
+
+            for(iStrata in 1:n.strata){  ## iStrata <- 1
+                iIID.control <- iid.model.tte[[iEndpoint.UTTE]]$IFsurvival.control[[iStrata]]
+                iIID.treatment <- iid.model.tte[[iEndpoint.UTTE]]$IFsurvival.treatment[[iStrata]]
+
+                ## iid.model.tte[[iEndpoint]]$time
+                out$iid$survJumpC[[iEndpoint.UTTE]][[iStrata]] <- iIID.control
+                if(NCOL(iIID.control)>1){
+                    out$iid$dSurvJumpC[[iEndpoint.UTTE]][[iStrata]] <- iIID.control - cbind(0,iIID.control[,1:(NCOL(iIID.control)-1),drop=FALSE])
+                }else{
+                    out$iid$dSurvJumpC[[iEndpoint.UTTE]][[iStrata]] <- iIID.control
+                }
+                
+                out$iid$survJumpT[[iEndpoint.UTTE]][[iStrata]] <- iIID.treatment
+                if(NCOL(iIID.treatment)>1){
+                    out$iid$dSurvJumpT[[iEndpoint.UTTE]][[iStrata]] <-  iIID.treatment - cbind(0,iIID.treatment[,1:(NCOL(iIID.treatment)-1),drop=FALSE])
+                }else{
+                    out$iid$dSurvJumpT[[iEndpoint.UTTE]][[iStrata]] <-  iIID.treatment
+                }
+                out$p.C[iStrata, iIndex.associatedEndpoint] <- NCOL(iIID.control)
+                out$p.T[iStrata, iIndex.associatedEndpoint] <- NCOL(iIID.treatment)
+            }
+        }
+        
+    }
+    
+    ## ** export
+    return(out)
+    
+}
 

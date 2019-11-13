@@ -38,14 +38,19 @@
 #' 
 #' Arguments in the list \code{argsTTE}:
 #'     \itemize{
+#'     \item\code{CR} should competing risks be simulated? \cr 
 #'     \item\code{rates.T} hazard corresponding to each endpoint (time to event endpoint, treatment group). \cr 
 #'     \item\code{rates.C} same as \code{rates.T} but for the control group. \cr
-#'     \item\code{rates.Censoring} Censoring same as \code{rates.T} but for the censoring. \cr
+#'     \item\code{rates.CR} same as \code{rates.T} but for the competing event (same in both groups). \cr
+#'     \item\code{rates.Censoring.T} Censoring same as \code{rates.T} but for the censoring. \cr
+#'     \item\code{rates.Censoring.C} Censoring same as \code{rates.C} but for the censoring. \cr
 #'     \item\code{name} names of the time to event variables. \cr
 #'     \item\code{nameCensoring} names of the event type indicators. \cr
 #'     }
 #'     
 #' @examples
+#' library(data.table)
+#' 
 #' n <- 1e2
 #'
 #' #### default option ####
@@ -67,7 +72,7 @@
 #' simBuyseTest(n, argsBin = NULL, argsCont = args, argsTTE = NULL)
 #' 
 #' #### only TTE endpoints ####
-#' args <- list(rates.T = c(3:5/10), rates.Censoring = rep(1,3))
+#' args <- list(rates.T = c(3:5/10), rates.Censoring.T = rep(1,3))
 #' simBuyseTest(n, argsBin = NULL, argsCont = NULL, argsTTE = args)
 #'         
 #' 
@@ -154,9 +159,8 @@ simBuyseTest <- function(n.T, n.C = NULL,
     }
   
     ## ** simulate data from the generative model
-    df.T <- cbind(Treatment = "T", lava::sim(mT.lvm, n.T, latent = latent))
-    df.C <- cbind(Treatment = "C", lava::sim(mC.lvm, n.C, latent = latent))
-  
+    df.T <- cbind(treatment = "T", lava::sim(mT.lvm, n.T, latent = latent))
+    df.C <- cbind(treatment = "C", lava::sim(mC.lvm, n.C, latent = latent))
   
     ## ** export
     res <- do.call(format, args =  rbind(df.C, df.T))
@@ -266,11 +270,13 @@ simBuyseTest_cont <- function(modelT,
 
 ## * Function simBuyseTest_TTE
 simBuyseTest_TTE <- function(modelT,
-                             modelC, 
+                             modelC,
+                             CR = FALSE,
                              rates.T = 2,
                              rates.C = NULL,
-                             rates.Censoring = 1,
-                             sigma.C = NULL, 
+                             rates.CR = NULL,
+                             rates.Censoring.T = 1,
+                             rates.Censoring.C = NULL,
                              name = NULL,
                              nameCensoring = NULL,
                              check){
@@ -284,12 +290,20 @@ simBuyseTest_TTE <- function(modelT,
         if(n.endpoints == 1){nameCensoring <- "status"}else{nameCensoring <- paste0("status",1:n.endpoints)}
     }
     if(is.null(rates.C)){rates.C <- rates.T}
+    if(is.null(rates.CR)){rates.CR <- rates.T}
+    if(is.null(rates.Censoring.C)){rates.Censoring.C <- rates.Censoring.T}
     
     name0 <- paste0(name,"Uncensored")
+    if(CR){
+        nameCR <- paste0(name,"CompetingRisk")
+    }
     nameC <- paste0(name,"Censoring")
-    
+
     ## ** tests
     if(check){
+        validLogical(CR,
+                     valid.length = 1,
+                     method = "simBuyseTest")
         validNumeric(rates.T,
                      valid.length = NULL,
                      method = "simBuyseTest")
@@ -297,7 +311,17 @@ simBuyseTest_TTE <- function(modelT,
                      valid.length = n.endpoints,
                      min = 0,
                      method = "simBuyseTest")
-        validNumeric(rates.Censoring,
+        if(CR){
+            validNumeric(rates.CR,
+                         valid.length = n.endpoints,
+                         min = 0,
+                         method = "simBuyseTest")
+        }
+        validNumeric(rates.Censoring.T,
+                     valid.length = n.endpoints,
+                     min = 0,
+                     method = "simBuyseTest")
+        validNumeric(rates.Censoring.C,
                      valid.length = n.endpoints,
                      min = 0,
                      method = "simBuyseTest")
@@ -316,18 +340,31 @@ simBuyseTest_TTE <- function(modelT,
             stop("simBuyseTest_TTE: variable already in the LVM \n",
                  "variable: ",paste(allvarE[allvarE %in% lava::vars(modelT)], collapse = " "),"\n")
         }
-        
         lava::distribution(modelT, name0[iterE]) <- lava::coxExponential.lvm(rate=rates.T[iterE])
-        lava::distribution(modelT, nameC[iterE]) <- lava::coxExponential.lvm(rate=rates.Censoring[iterE])
-        txtSurv <- paste0(name[iterE], "~min(",name0[iterE],"=1,",nameC[iterE],"=0)")
+        lava::distribution(modelT, nameC[iterE]) <- lava::coxExponential.lvm(rate=rates.Censoring.T[iterE])
+        if(CR){
+            lava::distribution(modelT, nameCR[iterE]) <- lava::coxExponential.lvm(rate=rates.CR[iterE])
+            txtSurv <- paste0(name[iterE], "~min(",nameCR[iterE],"=2,",name0[iterE],"=1,",nameC[iterE],"=0)")
+        }else{
+            txtSurv <- paste0(name[iterE], "~min(",name0[iterE],"=1,",nameC[iterE],"=0)")
+        }        
         modelT <- lava::eventTime(modelT, stats::as.formula(txtSurv), nameCensoring[iterE])
-        
+
         lava::distribution(modelC, name0[iterE]) <- lava::coxExponential.lvm(rate=rates.C[iterE])
-        lava::distribution(modelC, nameC[iterE]) <- lava::coxExponential.lvm(rate=rates.Censoring[iterE])
-        txtSurv <- paste0(name[iterE], "~min(",name0[iterE],"=1,",nameC[iterE],"=0)")
+        lava::distribution(modelC, nameC[iterE]) <- lava::coxExponential.lvm(rate=rates.Censoring.C[iterE])
+        if(CR){
+            lava::distribution(modelC, nameCR[iterE]) <- lava::coxExponential.lvm(rate=rates.CR[iterE])
+            txtSurv <- paste0(name[iterE], "~min(",nameCR[iterE],"=2,",name0[iterE],"=1,",nameC[iterE],"=0)")
+        }else{
+            txtSurv <- paste0(name[iterE], "~min(",name0[iterE],"=1,",nameC[iterE],"=0)")
+        }
         modelC <- lava::eventTime(modelC, stats::as.formula(txtSurv), nameCensoring[iterE])
 
-        formula.latent <- as.formula(paste0("~",name0[iterE],"+",nameC[iterE]))
+        if(CR){
+            formula.latent <- as.formula(paste0("~",name0[iterE],"+",nameC[iterE],"+",nameCR[iterE]))
+        }else{
+            formula.latent <- as.formula(paste0("~",name0[iterE],"+",nameC[iterE]))
+        }
         latent(modelT) <- formula.latent
         latent(modelC) <- formula.latent
     }

@@ -3,13 +3,13 @@
 \docType{methods}
 \name{BuyseRes-confint}
 \alias{BuyseRes-confint}
-\alias{confing}
+\alias{confint}
 \alias{confint,BuyseRes-method}
 \title{Confidence Intervals for Model Parameters}
 \usage{
 \S4method{confint}{BuyseRes}(object, statistic = NULL,
-  conf.level = NULL, alternative = NULL, method.boot = "percentile",
-  transformation = NULL)
+  conf.level = NULL, alternative = NULL, method.ci.resampling = NULL,
+  order.Hprojection = NULL, transformation = NULL)
 }
 \arguments{
 \item{object}{an \R object of class \code{\linkS4class{BuyseRes}}, i.e., output of \code{\link{BuyseTest}}}
@@ -25,19 +25,25 @@ Default value read from \code{BuyseTest.options()}.}
 \item{alternative}{[character] the type of alternative hypothesis: \code{"two.sided"}, \code{"greater"}, or \code{"less"}.
 Default value read from \code{BuyseTest.options()}.}
 
-\item{method.boot}{[character] the method used to compute the boostrap confidence intervals and p-values.
-Can be \code{"percentile"} for computing the CI using the quantiles of the boostrap distribution or
-\code{"gaussian"} for using a Gaussian approximation to compute the CI where the standard error is computed using the bootstrap samples.}
+\item{method.ci.resampling}{[character] the method used to compute the confidence intervals and p-values when using bootstrap or permutation.
+\code{"percentile"} uses the quantiles of the empirical distribution,
+\code{"gaussian"} uses the quantiles of a Gaussian distribution,
+and \code{"student"} uses the quantiles of a Student's t-distribution (only available for bootstrap).}
+
+\item{order.Hprojection}{[integer, 1-2] order of the H-decomposition used to compute the variance.}
 
 \item{transformation}{[logical]  should the CI be computed on the logit scale / log scale for the net benefit / win ratio and backtransformed.
 Otherwise they are computed without any transformation.
-Default value read from \code{BuyseTest.options()}.}
+Default value read from \code{BuyseTest.options()}. Not relevant when using permutations or percentile bootstrap.}
 }
 \value{
 A matrix containing a column for the estimated statistic (over all strata),
 the lower bound and upper bound of the confidence intervals, and the associated p-values.
-When using resampling methods,
-an attribute \code{n.resampling} specified how many samples have been used to compute the confidence intervals and the p-values.
+When using resampling methods:
+\itemize{
+\item an attribute \code{n.resampling} specified how many samples have been used to compute the confidence intervals and the p-values.
+\item an attribute \code{method.ci.resampling} method used to compute the confidence intervals and p-values. 
+}
 }
 \description{
 Computes confidence intervals for net benefit statistic or the win ratio statistic.
@@ -46,8 +52,6 @@ Computes confidence intervals for net benefit statistic or the win ratio statist
 When using a permutation test, the uncertainty associated with the estimator is computed under the null hypothesis.
 Thus the confidence interval may not be valid if the null hypothesis is false. \cr
 More precisely, the quantiles of the distribution of the statistic are computed under the null hypothesis and then shifted by the point estimate of the statistic.
-Therefore it is possible that the limits of the confidence interval
-are estimated outside of the interval of definition of the statistic (e.g. outside [-1,1] for the proportion in favor of treatment).
 }
 \seealso{
 \code{\link{BuyseTest}} for performing a generalized pairwise comparison. \cr

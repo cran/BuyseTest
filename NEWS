@@ -1,11 +1,33 @@
 # -*- mode: org -*-
 
+* Version 1.8
+** User visble changes
+- method.inference="u-statistic" gives valid results when using
+  scoring.rule="Peron"
+- The group variable in simBuyseTest is treatment instead of Treatment.
+- The stratification of the resampling procedure is now defined via
+  the argument strata.resampling. In particular this enables to
+  performed a bootstrap stratified on the treatment variable.
+
+** Internal change
+- Second order H-projection for scoring.rule="Peron" has been fixed.
+- To a large extend, the C++ code performing the GPC has been
+  re-written to be able to compute the iid decomposition for the
+  scores when using the Peron's scoring rule.
+
 * Version 1.7
 ** User visble changes
+- method.inference="asymptotic" becomes method.inference="u-statistic"
+- argument method.tte becomes scoring.rule.
+- NEW FEATURE: coef function 
 - NEW FEATURE: iid function 
+- NEW FEATURE: option hierarchical in BuyseTest
+- NEW FEATURE: studentized bootstrap
+- NEW FEATURE: gaussian permutation
 
 ** Internal change
 - fix bug in the computation of the asymptotic variance + add tests
+- faster computation of the iid (done in the C++ code)
 
 * Version 1.6
 ** Internal change

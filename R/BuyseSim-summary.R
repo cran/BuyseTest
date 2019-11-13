@@ -89,7 +89,7 @@ setMethod(f = "summary",
                                               by = c("n.T","n.C","method.inference"), .SDcols = statistic.cols]
                   out[[iStatistic]] <- out[[iStatistic]][out[[iStatistic]]$method.inference %in% method.inference]
                   
-                  if(object@method.inference == "asymptotic"){
+                  if(object@method.inference == "u-statistic"){
                       out[[iStatistic]][, c("order") := grepl("order=2",.SD$method.inference)+1]
                       out[[iStatistic]][, c("transformation") := grepl("transformation=TRUE",.SD$method.inference)]
 
@@ -109,12 +109,7 @@ setMethod(f = "summary",
                   rm.duplicate <- c("n.T", "n.C", "rep.estimate", "rep.se", "mean.estimate", "sd.estimate")
                   
                   if("netBenefit" %in% statistic){
-                      if(attr(object@method.inference, "continuity.correction")){
-                          add.text <- ", inference with continuity correction"
-                      }else{
-                          add.text <- NULL
-                      }
-                      cat(" > statistic   : net benefit (null hypothesis Delta=",null["netBenefit"],add.text,")\n", sep = "")
+                      cat(" > statistic   : net benefit (null hypothesis Delta=",null["netBenefit"],")\n", sep = "")
                       printNetBenefit <- as.data.frame(outW$netBenefit)
                       printNetBenefit <- round(printNetBenefit, digits = digit)
                       if(length(outW$netBenefit$order)>1){ ## remove duplicated values due to order = 1:2
@@ -150,7 +145,7 @@ setMethod(f = "summary",
                                  c(" rep.se",":","number of sucessful simulations for the estimation of the distribution of the estimate"),
                                  c(" mean.estimate",":","average estimate over simulations"),
                                  c(" sd.estimate",":","standard deviation of the estimate over simulations"))
-                      if(object@method.inference == "asymptotic"){                          
+                      if(object@method.inference == "u-statistic"){                          
                           M <- rbind(M,
                                      c(" order",":","order of the H-decomposition used to compute the asymptotic variance"),
                                      c(" mean.se",":","average estimated standard error of the estimate over simulations"),

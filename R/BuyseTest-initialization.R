@@ -8,7 +8,7 @@
 #' 
 #' \code{initializeArgs}: Normalize the argument 
 #' \itemize{
-#' \item method.tte, neutral.as.uninf, keep.pairScore, n.resampling, seed, cpus, trace: set to default value when not specified.
+#' \item scoring.rule, neutral.as.uninf, keep.pairScore, n.resampling, seed, cpus, trace: set to default value when not specified.
 #' \item formula: call \code{initializeFormula} to extract arguments.
 #' \item type: convert to numeric.
 #' \item censoring: only keep censoring relative to TTE endpoint. Set to \code{NULL} if no TTE endpoint.
@@ -16,9 +16,8 @@
 #' the rational being we consider a pair favorable if X>Y ie X>=Y+1e-12.
 #' When using a threshold e.g. 5 we want X>=Y+5 and not X>Y+5, especially when the measurement is discrete. \cr
 #' \item data: convert to data.table object.
-#' \item method.tte: convert to numeric.
+#' \item scoring.rule: convert to numeric.
 #' }
-#' and create \code{Wscheme}. \cr \cr
 #'
 #' \code{initializeFormula}:  extract \code{treatment}, \code{type}, \code{endpoint}, \code{threshold}, \code{censoring}, \code{operator}, and \code{strata}
 #' from the formula. \cr \cr
@@ -26,25 +25,25 @@
 #' \code{initializeData}: Divide the dataset into two, one relative to the treatment group and the other relative to the control group.
 #' Merge the strata into one with the interaction variable.
 #' Extract for each strata the index of the observations within each group.
-#' \code{initializeSurvival}: Compute the survival via KM.
-#' 
+#'
 #' @keywords function internal BuyseTest
 
 ## * initializeArgs
 #' @rdname internal-initialization
-initializeArgs <- function(alternative,
-                           name.call,
-                           censoring,
+initializeArgs <- function(censoring,
+                           correction.uninf = NULL,
                            cpus = NULL,
                            data,
                            endpoint,
                            formula,
+                           hierarchical = NULL,
                            keep.pairScore = NULL,
-                           method.tte = NULL,
-                           correction.uninf = NULL,
-                           model.tte,
                            method.inference = NULL,
+                           scoring.rule = NULL,
+                           model.tte,
                            n.resampling = NULL,
+                           strata.resampling = NULL,
+                           name.call,
                            neutral.as.uninf = NULL,
                            operator,
                            option,
@@ -53,27 +52,47 @@ initializeArgs <- function(alternative,
                            threshold,
                            trace = NULL,
                            treatment,
-                           type){
+                           type,
+                           weight){
 
     ## ** apply default options
     if(is.null(cpus)){ cpus <- option$cpus }
     if(is.null(keep.pairScore)){ keep.pairScore <- option$keep.pairScore }
-    if(is.null(method.tte)){ method.tte <- option$method.tte }
+    if(is.null(scoring.rule)){ scoring.rule <- option$scoring.rule }
+    if(is.null(hierarchical)){ hierarchical <- option$hierarchical }
     if(is.null(correction.uninf)){ correction.uninf <- option$correction.uninf }
     if(is.null(method.inference)){ method.inference <- option$method.inference }
     if(is.null(n.resampling)){ n.resampling <- option$n.resampling }
+    if(is.null(strata.resampling)){ strata.resampling <- option$strata.resampling }
     if(is.null(neutral.as.uninf)){ neutral.as.uninf <- option$neutral.as.uninf }
     if(is.null(trace)){ trace <- option$trace }
-    if(is.null(alternative)){ alternative <- option$alternative }
-
+    alternative <- option$alternative
+    
     ## ** convert formula into separate arguments
     if(!missing(formula)){
+        ## the missing is for BuysePower where the arguments are not necessarily specified
+        test.null <- c(censoring = !missing(censoring) && !is.null(censoring),
+                       endpoint = !missing(endpoint) && !is.null(endpoint),
+                       operator = !missing(operator) && !is.null(operator),
+                       strata = !missing(strata) && !is.null(strata),
+                       threshold = !missing(threshold) && !is.null(threshold),
+                       treatment = !missing(treatment) && !is.null(treatment),
+                       type = !missing(type) && !is.null(type),
+                       weight = !missing(weight) && !is.null(weight)
+                       )
+        if(any(test.null)){
+            txt <- names(test.null)[test.null]
+            warning("Argument",if(sum(test.null)>1){"s"}," \'",paste(txt, collpase="\' \'"),if(sum(test.null)>1){" are "}else{" is "}," ignored when argument \'formula\' has been specified\n")
+        }
+        
         resFormula <- initializeFormula(formula)
+
         treatment <- resFormula$treatment
         type <- resFormula$type
         endpoint <- resFormula$endpoint
         threshold <- resFormula$threshold
         censoring <- resFormula$censoring
+        weight <- resFormula$weight
         operator <- resFormula$operator
         strata <- resFormula$strata
     }else{
@@ -81,31 +100,39 @@ initializeArgs <- function(alternative,
             operator <- rep(">0",length(endpoint))
         }
         formula <- NULL
+        if(is.null(weight)){
+            weight <- rep(1,length(endpoint))
+        }
     }
-
-    ## ** endpoint
-    D <- length(endpoint) 
     
     ## ** type
     if(!is.numeric(type)){
         validType1 <- c("b","bin","binary")
         validType2 <- c("c","cont","continuous")
-        validType3 <- c("t","tte","time","timetoevent")
+        validType3 <- c("t","tte","time","timetoevent") ## [if modified, remember to change the corresponding vector in initFormula]
         type <- tolower(type)
 
         type[grep(paste(validType1,collapse="|"), type)] <- "1" 
         type[grep(paste(validType2,collapse="|"), type)] <- "2" 
-        type[grep(paste(validType3,collapse="|"), type)] <- "3" 
-        type <- as.numeric(type) # type is an integer equal to 1 (binary endpoint), 2 (continuous endpoint) or 3 (time to event endpoint)
+        type[grep(paste(validType3,collapse="|"), type)] <- "3"
+        type <- sapply(type, function(iType){
+            switch(iType,
+                   "1" = 1, ## binary endpoint
+                   "2" = 2, ## continuous endpoint
+                   "3" = 3, ## time to event endpoint
+                   NA)})
     }
+ 
+    ## ** endpoint
+    index.type3 <- which(type==3)
     
-    D.TTE <- sum(type == 3) # number of time to event endpoints
-
-    ## ** method.inference
-    method.inference <- tolower(method.inference)
-    if(is.null(strata) && length(grep("stratified ",method.inference))>0){ ## remove stratified if no strata variable
-        method.inference <- gsub("stratified ","",method.inference)
-    }
+    D <- length(endpoint)
+    Uendpoint <- unique(endpoint)
+    
+    ## time to event endpoints 
+    endpoint.TTE <- endpoint[index.type3]
+    threshold.TTE <- threshold[index.type3]
+    D.TTE <- length(endpoint.TTE) 
 
     ## ** censoring
     if(D.TTE==0){
@@ -113,10 +140,30 @@ initializeArgs <- function(alternative,
     }else if(length(censoring) == D.TTE){
         censoring.save <- censoring
         censoring <- rep("..NA..", D)
-        censoring[type==3] <- censoring.save 
+        censoring[index.type3] <- censoring.save 
     }
+    Ucensoring <- unique(censoring)
+    censoring.TTE <- censoring[index.type3]
     ## from now, censoring contains for each endpoint the name of variable indicating censoring (0) or event (1) or NA
     
+    
+    ## ** scoring.rule
+    ## WARNING: choices must be lower cases
+    ##          remember to update check scoring.rule (in BuyseTest-check.R)
+    scoring.rule <- tolower(scoring.rule)
+    scoring.rule <- switch(scoring.rule,
+                           "gehan" = 0,
+                           "peron" = 1,
+                           NA
+                           )
+
+    if (D.TTE == 0) {
+        scoring.rule <- 0
+        if ("scoring.rule" %in% name.call && trace > 0) {
+            message("NOTE : there is no survival endpoint, \'scoring.rule\' argument is ignored \n")
+        }
+    }
+
     ## ** threshold
     if(is.null(threshold)){
         threshold <- rep(10^{-12},D)  # if no treshold is proposed all threshold are by default set to 10^{-12}
@@ -134,85 +181,96 @@ initializeArgs <- function(alternative,
             threshold[which(abs(threshold)<10^{-12})] <- 10^{-12}
         }
     }
-    
-    ## ** method.tte
-    ## WARNING: choices must be lower cases
-    ##          remember to update check method.tte (in BuyseTest-check.R)
-    method.tte <- tolower(method.tte)
-    method.tte <- switch(method.tte,
-                         "gehan" = 0,
-                         "peron" = 1,
-                         NA
-                         )
 
-    if (D.TTE == 0) {
-        method.tte <- 0
-        if ("method.tte" %in% name.call && trace > 0) {
-            message("NOTE : there is no survival endpoint, \'method.tte\' argument is ignored \n")
-        }
+    ## ** method.inference
+    method.inference <- tolower(method.inference)    
+    attr(method.inference,"permutation") <- grepl("permutation",method.inference)
+    attr(method.inference,"bootstrap") <- grepl("bootstrap",method.inference)
+    attr(method.inference,"studentized") <- grepl("studentized",method.inference)
+    attr(method.inference,"ustatistic") <- grepl("u-statistic",method.inference)
+    if(is.na(strata.resampling) || length(strata.resampling)== 0){
+        attr(method.inference,"resampling-strata") <- as.character(NA)
+    }else{
+        attr(method.inference,"resampling-strata") <- strata.resampling
     }
-
-
+    
     ## ** correction.uninf
     correction.uninf <- as.numeric(correction.uninf)
 
-    ## ## ** model.tte
-    if(method.tte > 0){
-        if((!is.null(model.tte)) && (D.TTE == 1) && inherits(model.tte, "prodlim")){
+    ## ** model.tte
+    if(identical(scoring.rule,1)){
+        if((!is.null(model.tte)) && (length(unique(endpoint.TTE)) == 1) && inherits(model.tte, "prodlim")){
+            attr.save <- attr(model.tte,"iidNuisance")
+            
             model.tte <- list(model.tte)
-            names(model.tte) <- endpoint[type==3]
+            names(model.tte) <- unique(endpoint.TTE)
+            attr(model.tte,"iidNuisance") <- attr.save
         }
     }else{
         model.tte <- NULL
     }
-
-    ## ** alternative
-    alternative <- tolower(alternative)
     
+    ## ** iid
+    iid <- attr(method.inference,"studentized") || (method.inference == "u-statistic")
+    if(iid){
+        attr(method.inference,"hprojection") <- option$order.Hprojection
+        if(attr(method.inference,"hprojection")==2 & identical(scoring.rule,1)){
+            keep.pairScore <- TRUE ## need the detail of the score to perform the 2nd order projection
+        }
+    }else{
+        attr(method.inference,"hprojection") <- NA
+    }
+    iidNuisance <- iid && identical(scoring.rule,1) && (is.null(model.tte) || identical(attr(model.tte,"iidNuisance"),TRUE))
+
     ## ** cpu
     if (cpus == "all") { 
         cpus <- parallel::detectCores() # this function detect the number of CPU cores 
     }
 
-    ## ** method.score
-    ## 1 binary continuous
-    ## 2 tte Gehan
-    ## 3 tte Peron
-    method.score <- 1 + (type==3)*(1+method.tte)
-
     ## ** export
     return(list(
-        alternative = alternative,
         name.call = name.call,
         censoring = censoring,
+        censoring.TTE = censoring.TTE,
         correction.uninf = correction.uninf,
         cpus = cpus,
-        D = length(endpoint),
-        D.TTE = sum(type == 3),
+        D = D,
+        D.TTE = D.TTE,
         data = data,
         endpoint = endpoint,
+        endpoint.TTE = endpoint.TTE,
         formula = formula,
+        iid = iid,
+        iidNuisance = iidNuisance,
+        index.endpoint = match(endpoint, Uendpoint) - 1,
+        index.censoring = match(censoring, Ucensoring) - 1,
         keep.pairScore = keep.pairScore,
         keep.survival = option$keep.survival,
-        method.tte = method.tte,
+        scoring.rule = scoring.rule,
         model.tte = model.tte,
         method.inference = method.inference,
-        method.score = method.score,
         n.resampling = n.resampling,
+        hierarchical = hierarchical,
         neutral.as.uninf = neutral.as.uninf,
         operator = operator,
+        order.Hprojection = option$order.Hprojection,
         seed = seed,
         strata = strata,
         threshold = threshold,
         trace = trace,
         treatment = treatment,
-        type = type
+        type = type,
+        Uendpoint = Uendpoint,
+        Ucensoring = Ucensoring,
+        weight = weight,
+        debug = option$debug
     ))
 }
 
 ## * initializeData
 #' @rdname internal-initialization
-initializeData <- function(data, type, endpoint, method.tte, censoring, operator, strata, treatment, copy){
+initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, censoring, Ucensoring, method.inference, operator, strata, treatment, hierarchical, copy,
+                           endpoint.TTE, censoring.TTE, iidNuisance){
 
     if (!data.table::is.data.table(data)) {
         data <- data.table::as.data.table(data)
@@ -252,15 +310,14 @@ initializeData <- function(data, type, endpoint, method.tte, censoring, operator
     n.obs <- data[,.N]
 
     ## ** strata
-    if(!is.null(strata)){        
+    if(!is.null(strata)){  
+    
         data[ , c("..strata..") := interaction(.SD, drop = TRUE, lex.order = FALSE, sep = "."), .SDcols = strata]
         level.strata <- levels(data[["..strata.."]])        
         data[ , c("..strata..") := as.numeric(.SD[["..strata.."]])] # convert to numeric
-        data.table::setkeyv(data, cols = c("..strata..", treatment)) ## important to first sort by strata when doing the resampling
         
         n.obsStrata <- data[,.N, by = "..strata.."][,setNames(.SD[[1]],.SD[[2]]),.SD = c("N","..strata..")]
     }else{
-        data.table::setkeyv(data, cols = treatment)
         
         data[ , c("..strata..") := 1]
         n.obsStrata <- n.obs
@@ -278,78 +335,105 @@ initializeData <- function(data, type, endpoint, method.tte, censoring, operator
     data[,c("..rowIndex..") := 1:.N]
 
     ## ** unique censoring
-    Ucensoring <- unique(censoring)
     if(any(censoring == "..NA..")){
         data[,c("..NA..") := as.numeric(NA)]
     }
 
-    ## ** unique endpoint
-    Uendpoint <- unique(endpoint)
+    ## ** TTE with censoring
+    if(scoring.rule>0){
+        test.censoring <- sapply(censoring.TTE, function(iC){any(data[[iC]]==0)})
+        if(all(test.censoring==FALSE)){
+            scoring.rule <- 0
+            iidNuisance <- FALSE
+        }        
+
+        ## distinct time to event endpoints
+        endpoint.UTTE <- unique(endpoint.TTE[test.censoring])
+        censoring.UTTE <- unique(censoring.TTE[test.censoring])
+        D.UTTE <- length(endpoint.UTTE)
+
+        ## correspondance endpoint, TTE endpoint (non TTEe endpoint are set to -100)
+        index.UTTE = match(endpoint, endpoint.UTTE, nomatch = -99) - 1
+    }else{
+        endpoint.UTTE <- numeric(0)
+        censoring.UTTE <- numeric(0)
+        D.UTTE <- 0
+        index.UTTE <- rep(-100, D)
+    }
+    
+    ## ** scoring method for each endpoint
+    ## check if censoring
+    method.score <- 1 + (type==3) ## 1 binary/continuous and 2 Gehan
+    if(scoring.rule > 0){ ## if Peron
+        test.CR <- sapply(Ucensoring, function(iC){max(data[[iC]])>1})[censoring]
+        method.score[type == 3] <- method.score[type == 3] + test.censoring * (1 + test.CR[type == 3])
+        ## 3 Peron survival
+        ## 4 Peron CR
+    }
+
+
+    ## ** previously analyzed distinct TTE endpoints
+    if((scoring.rule==1) && hierarchical){ ## only relevant when using Peron scoring rule with hierarchical GPC
+        ## number of distinct, previously analyzed, TTE endpoints
+        nUTTE.analyzedPeron_M1 <- sapply(1:D, function(iE){
+            if(iE>1){
+                sum(endpoint.UTTE %in% endpoint[1:(iE-1)])
+            }else{
+                return(0)
+            }
+        })
+    }else{
+        nUTTE.analyzedPeron_M1 <- rep(0,D)
+    }
+
+    ## ** number of observations per strata used when resampling
+    index.C <- which(data[[treatment]] == 0)
+    index.T <- which(data[[treatment]] == 1)
+    if(!is.na(attr(method.inference,"resampling-strata"))){
+        n.obsStrataResampling <- table(data[,interaction(.SD), .SDcols = attr(method.inference,"resampling-strata")])
+    }else{
+        n.obsStrataResampling <- n.obs
+    }
+    
+    ## ** skeleton for survival proba (only relevant for Peron scoring rule)
+    skeletonPeron <- list(survTimeC = lapply(1:D, function(iE){lapply(1:n.strata, function(iS){matrix(nrow=0,ncol=0)})}),
+                          survTimeT = lapply(1:D, function(iE){lapply(1:n.strata, function(iS){matrix(nrow=0,ncol=0)})}),
+                          survJumpC = lapply(1:D, function(iE){lapply(1:n.strata, function(iS){matrix(nrow=0,ncol=0)})}),
+                          survJumpT = lapply(1:D, function(iE){lapply(1:n.strata, function(iS){matrix(nrow=0,ncol=0)})}),
+                          lastSurv = lapply(1:D, function(iS){matrix(nrow = n.strata, ncol = 4)}), ## 4 for competing risk setting, 2 is enough for survival
+                          p.C = matrix(NA, nrow = n.strata, ncol = D),
+                          p.T = matrix(NA, nrow = n.strata, ncol = D)
+                          )
+
 
     ## ** export
-    return(list(data = data[,.SD,.SDcols =  c(treatment,"..strata..")],
+    keep.cols <- union(c(treatment, "..strata.."),
+                       na.omit(attr(method.inference,"resampling-strata")))
+    return(list(data = data[,.SD,.SDcols = keep.cols],
                 M.endpoint = as.matrix(data[, .SD, .SDcols = Uendpoint]),
                 M.censoring = as.matrix(data[, .SD, .SDcols = Ucensoring]),
-                index.C = which(data[[treatment]] == 0),
-                index.T = which(data[[treatment]] == 1),
+                index.C = index.C,
+                index.T = index.T,
                 index.strata = tapply(data[["..rowIndex.."]], data[["..strata.."]], list),
-                index.endpoint = match(endpoint, Uendpoint) - 1,
-                index.censoring = match(censoring, Ucensoring) - 1,
                 level.treatment = level.treatment,
                 level.strata = level.strata,
+                method.score = method.score,
                 n.strata = n.strata,
                 n.obs = n.obs,
                 n.obsStrata = n.obsStrata,
-                cumn.obsStrata = cumsum(c(0,n.obsStrata))[1:n.strata]
+                n.obsStrataResampling = n.obsStrataResampling,
+                cumn.obsStrataResampling = c(0,cumsum(n.obsStrataResampling)),
+                skeletonPeron = skeletonPeron,
+                scoring.rule = scoring.rule,
+                iidNuisance = iidNuisance,
+                nUTTE.analyzedPeron_M1 = nUTTE.analyzedPeron_M1,
+                endpoint.UTTE = endpoint.UTTE,
+                censoring.UTTE = censoring.UTTE,
+                D.UTTE = D.UTTE,
+                index.UTTE = index.UTTE
                 ))
 }
 
-## * buildWscheme
-buildWscheme <- function(method.tte, endpoint, D.TTE, D, n.strata,
-                         type, threshold){
-
-    Wscheme <- matrix(0,nrow=D,ncol=D) # design matrix indicating to combine the weights obtained at differents endpoints
-    rownames(Wscheme) <- paste("weigth of ",endpoint,"(",threshold,")",sep="")
-    colnames(Wscheme) <- paste("for ",endpoint,"(",threshold,")",sep="")
-    Wscheme[upper.tri(Wscheme)] <- 1 ## only previous endpoint can contribute to the current weights
-    Wscheme[lower.tri(Wscheme)] <- NA ## do not look at future endpoint 
-        
-    ## take care of repeated survival endpoints
-    if(D.TTE>1 && method.tte > 0){
-
-        index.TTE <- which(type == 3)
-        indexDuplicated.TTE <- which(duplicated(endpoint[index.TTE]))
-
-        for(iEndpoint in indexDuplicated.TTE){    ## iEndpoint <- indexDuplicated.endpoint.TTE[1]
-            iEndpoint2 <- index.TTE[iEndpoint] ## position of the current endpoint relative to all endpoint
-            iEndpoint2_M1 <- which(endpoint[1:(iEndpoint2-1)] == endpoint[iEndpoint2])  ## position of the previous endpoint(s) relative to all endpoints
-            Wscheme[iEndpoint2_M1,iEndpoint2] <- 0
-        }
-    }
-
-    ## skeleton
-    skeleton <- lapply(1:D, function(iE){
-        lapply(1:n.strata, function(iS){matrix(nrow=0,ncol=0)})
-    })
-
-    ## unique tte endpoint
-    endpoint.UTTE <- unique(endpoint[type==3])
-    
-    ## export
-    return(list(Wscheme = Wscheme,
-                endpoint.UTTE = endpoint.UTTE,
-                index.UTTE = match(endpoint, endpoint.UTTE, nomatch = 0) - 1,
-                D.UTTE = length(endpoint.UTTE),
-                reanalyzed = rev(duplicated(rev(endpoint))),
-                outSurv = list(survTimeC = skeleton,
-                               survTimeT = skeleton,
-                               survJumpC = skeleton,
-                               survJumpT = skeleton,
-                               lastSurv = lapply(1:D, function(iS){matrix(nrow=n.strata,ncol=2)})
-                               ))
-           )
-
-}
 
 ## * initializeFormula
 #' @rdname internal-initialization
@@ -357,29 +441,35 @@ initializeFormula <- function(x){
 
   validClass(x, valid.class = "formula")
     
-  ## ** extract treatment
-  treatment <- setdiff(all.vars(x), all.vars(stats::delete.response(stats::terms(x))))
-  if(length(treatment)!=1){
-    stop("initFormula: there must be exactly one response variable in formula\n",
-         "number of response variables founded: ",length(treatment),"\n")
-  }
+    ## ** extract treatment
+    treatment <- setdiff(all.vars(x), all.vars(stats::delete.response(stats::terms(x))))
+    if(length(treatment)!=1){
+        stop("initFormula: there must be exactly one response variable in formula\n",
+             "number of response variables founded: ",length(treatment),"\n")
+    }
   
-  if(length(as.character(x))!=3){
-    stop("initFormula: formula with unexpected length, as.character(x) should have length 3\n",
-         "length founded: ",length(as.character(x)),"\n")
-  }
+    if(length(as.character(x))!=3){
+        stop("initFormula: formula with unexpected length, as.character(x) should have length 3\n",
+             "length founded: ",length(as.character(x)),"\n")
+    }
   
     ## ** restrict to the right side of the formula
     x.rhs <- as.character(x)[3]
   
-    ## remove all blancks
+    ## remove all blanks
     x.rhs <- gsub("[[:blank:]]", "", x.rhs)
-    vec.x.rhs <- unlist(strsplit(x.rhs, split = "+", fixed = TRUE))
 
+    ## find endpoints
+    ## https://stackoverflow.com/questions/35347537/using-strsplit-in-r-ignoring-anything-in-parentheses/35347645
+    ## (*SKIP)(*FAIL): ignore
+    ## \\( \\): inside brackets
+    ## [^()]*: anything but ()
+    magic.formula <- "\\([^()]*\\)(*SKIP)(*FAIL)|\\h*\\+\\h*"
+    vec.x.rhs <- unlist(strsplit(x.rhs, split = magic.formula, perl = TRUE))
     ## find all element in the vector corresponding to endpoints (i.e. ...(...) )
     ## \\w* any letter/number
     ## [[:print:]]* any letter/number/punctuation/space
-    index.endpoint <- grep("^\\w*\\([[:print:]]*\\)$", vec.x.rhs)
+    index.endpoint <- grep("\\w*\\([[:print:]]*\\)$", vec.x.rhs)
     index.strata <- setdiff(1:length(vec.x.rhs), index.endpoint)
 
     ## ** strata variables
@@ -392,7 +482,7 @@ initializeFormula <- function(x){
     ## ** number of endpoint variables    
     vec.x.endpoint <- vec.x.rhs[index.endpoint]
     n.endpoint <- length(vec.x.endpoint)
-    if(length(n.endpoint)==0){
+    if(n.endpoint==0){
         stop("initFormula: x must contain endpoints \n",
              "nothing of the form type(endpoint,threshold,censoring) found in the formula \n")
     }
@@ -402,7 +492,8 @@ initializeFormula <- function(x){
     censoring <- rep("..NA..", n.endpoint)
     endpoint <- rep(NA, n.endpoint)
     operator <- rep(">0", n.endpoint)
-    validArgs <- c("endpoint","threshold","censoring","operator")
+    weight <- rep(1, n.endpoint)
+    validArgs <- c("endpoint","censoring","threshold","operator","weight")
 
     ## split around parentheses
     ls.x.endpoint <- strsplit(vec.x.endpoint, split = "(", fixed = TRUE)
@@ -410,8 +501,15 @@ initializeFormula <- function(x){
     type <- character(length = n.endpoint)
     for(iE in 1:n.endpoint){
         ## extract type
-        type[iE] <- ls.x.endpoint[[iE]][1]
-
+        type[iE] <- tolower(ls.x.endpoint[[iE]][1])
+        if(type[iE] %in% c("b","bin","binary")){
+            iValidArgs <- setdiff(validArgs,c("censoring","threshold"))
+        }else if(type[iE] %in% c("c","cont","continuous")){
+            iValidArgs <- setdiff(validArgs,"censoring")
+        }else{ ## if(type[iE] %in% c("t","tte","time","timetoevent"))
+            iValidArgs <- validArgs
+        }
+        
         ## get each argument
         iVec.args <- strsplit(gsub(")", replacement = "",ls.x.endpoint[[iE]][2]),
                               split = ",", fixed = TRUE)[[1]]
@@ -437,9 +535,9 @@ initializeFormula <- function(x){
         if(length(iIndex.name)>0){
             iiName <- gsub("=[[:print:]]*$","",iVec.args[iIndex.name])
             iName[iIndex.name] <- iiName
-            if(any(iiName %in% validArgs == FALSE)){
+            if(any(iiName %in% iValidArgs == FALSE)){
                 stop("initFormula: invalid formula \n",
-                     vec.x.rhs[iE]," contains arguments that are not endpoint, threshold, censoring \n")
+                     vec.x.rhs[iE]," contains arguments that are not \"",paste0(iValidArgs,sep = "\" \""),"\" \n")
             }
             if( any(duplicated(iiName)) ){
                 stop("initFormula: invalid formula \n",
@@ -452,27 +550,39 @@ initializeFormula <- function(x){
         ## add missing names
         n.missingNames <- n.args - length(iiName) 
         if(n.missingNames>0){
-            iName[setdiff(1:n.args,iIndex.name)] <- setdiff(validArgs,iiName)[1:n.missingNames]
+            iName[setdiff(1:n.args,iIndex.name)] <- setdiff(iValidArgs,iiName)[1:n.missingNames]
         }
 
         ## extract arguments
         endpoint[iE] <- gsub("\"","",iArg[iName=="endpoint"])
         if("threshold" %in% iName){
-            thresholdTempo <- tryCatch(as.numeric(iArg[iName=="threshold"]),
-                                       error = function(c){ "error" },
-                                       warning = function(c){ "warning" }
-                                       )
-            if(thresholdTempo %in% c("error", "warning")){ ## maybe a variable was passed instead of a value
-              thresholdTempo <- eval(expr = parse(text = iArg[iName=="threshold"]))
+            thresholdTempo <- try(eval(expr = parse(text = iArg[iName=="threshold"])), silent = TRUE)
+            if(inherits(thresholdTempo,"try-error")){
+                stop(iArg[iName=="threshold"]," does not refer to a valid threshold \n",
+                     "Should be numeric or the name of a variable in the global workspace \n")
+            }
+                
+            if(inherits(thresholdTempo, "function")){
+                packageTempo <- environmentName(environment(thresholdTempo))
+                if(nchar(packageTempo)>0){
+                    txt <- paste0("(package ",packageTempo,")")
+                }else{
+                    txt <- ""
+                }
+                stop(iArg[iName=="threshold"]," is already defined as a function ",txt,"\n",
+                     "cannot be used to specify the threshold \n")
             }
             
-            threshold[iE] <- thresholdTempo
+            threshold[iE] <- as.numeric(thresholdTempo)
         }
         if("censoring" %in% iName){
             censoring[iE] <- gsub("\"","",iArg[iName=="censoring"])
         }
         if("operator" %in% iName){
             operator[iE] <- gsub("\"","",iArg[iName=="operator"])
+        }
+        if("weight" %in% iName){
+            weight[iE] <- as.numeric(eval(expr = parse(text = iArg[iName=="weight"])))
         }
     }
 
@@ -483,196 +593,9 @@ initializeFormula <- function(x){
                 threshold = threshold,
                 censoring = censoring,
                 operator = operator,
+                weight = weight,
                 strata = strata))
 }
-
-## * initializeSurvival
-#' @rdname internal-initialization
-initializeSurvival_Peron <- function(data,
-                                     model.tte,
-                                     treatment,
-                                     level.treatment,
-                                     endpoint,
-                                     endpoint.UTTE,
-                                     censoring,
-                                     D.TTE,
-                                     D.UTTE,
-                                     type,
-                                     strata,
-                                     threshold,
-                                     n.strata,
-                                     out){
-
-    . <- NULL ## for CRAN check
-        
-    ## ** prepare
-    if(n.strata == 1){
-        ls.indexC <- list(which(data[[treatment]]==0))
-        ls.indexT <- list(which(data[[treatment]]==1))
-    }else{
-        indexC <- which(data[[treatment]]==0)
-        indexT <- which(data[[treatment]]==1)
-        ls.indexC <- vector(mode = "list", length = n.strata)
-        ls.indexT <- vector(mode = "list", length = n.strata)
-        for(iStrata in 1:n.strata){
-            iIndex.strata <- which(data[["..strata.."]]==iStrata)
-            ls.indexC[[iStrata]] <- intersect(indexC,iIndex.strata)
-            ls.indexT[[iStrata]] <- intersect(indexT,iIndex.strata)
-        }
-    }            
-    
-    zeroPlus <- 1e-12
-
-    ## ** unique tte endpoints
-    endpoint.TTE <- endpoint[type==3]
-    censoring.TTE <- censoring[type==3]
-    
-    index.endpoint.UTTE <- which(!duplicated(endpoint.TTE))
-    censoring.UTTE <- censoring.TTE[index.endpoint.UTTE]
-
-    ## ** estimate survival
-    if(is.null(model.tte)){
-        model.tte <- vector(length = D.UTTE, mode = "list")
-        names(model.tte) <- endpoint.UTTE
-
-        txt.modelUTTE <- paste0("prodlim::Hist(",endpoint.UTTE,",",censoring.UTTE,") ~ ",treatment," + ..strata..")
-
-        for(iEndpoint.UTTE in 1:D.UTTE){ ## iEndpoint.UTTE <- 1
-            model.tte[[iEndpoint.UTTE]] <- prodlim::prodlim(as.formula(txt.modelUTTE[iEndpoint.UTTE]),
-                                                            data = data)
-        }
-    }else{ 
-        for(iEndpoint.UTTE in 1:D.UTTE){ ## iEndpoint.TTE <- 1
-            ## convert treatment to numeric
-            model.tte[[iEndpoint.UTTE]]$X[[treatment]] <- as.numeric(factor(model.tte[[iEndpoint.UTTE]]$X[[treatment]], levels = level.treatment))-1
-            p <- NCOL(model.tte[[iEndpoint.UTTE]]$X)
-
-            ## create ..strata..
-            if(p==1){
-                model.tte[[iEndpoint.UTTE]]$X <- cbind(model.tte[[iEndpoint.UTTE]]$X,
-                                                       "..strata.." = 1)
-            }else{
-                col.strata <- setdiff(1:p,which(colnames(model.tte[[iEndpoint.UTTE]]$X)==treatment))
-                value.strata <- apply(model.tte[[iEndpoint.UTTE]]$X[,col.strata],1,paste0,collapse="")
-                model.tte[[iEndpoint.UTTE]]$X <- cbind(model.tte[[iEndpoint.UTTE]]$X,
-                                                       "..strata.." = as.numeric(as.factor(value.strata)))
-
-            }
-        }
-    }
-  
-    ## ** predict individual survival
-    ## *** dataset
-    colnames.obs <- c("time",
-                      paste("SurvivalC",c("-threshold","_0","+threshold"),sep=""),
-                      paste("SurvivalT",c("-threshold","_0","+threshold"),sep="")) 
-
-    colnames.jump <- c("time","survival","dSurvival") 
-
-    ## *** fill
-    for(iEndpoint.UTTE in 1:D.UTTE){ ## iEndpoint.TTE <- 1
-        iEndpoint.UTTE.name <- endpoint.UTTE[iEndpoint.UTTE]
-        iIndex.associatedEndpoint <- which(endpoint == iEndpoint.UTTE.name)
-        
-        index.jump <- which(model.tte[[iEndpoint.UTTE]]$hazard>0)
-
-        indexX.C <- which(model.tte[[iEndpoint.UTTE]]$X[[treatment]]==0)
-        indexX.T <- which(model.tte[[iEndpoint.UTTE]]$X[[treatment]]==1)
-
-        
-        for(iStrata in 1:n.strata){
-            iNcontrol <- length(ls.indexC[[iStrata]]+1)
-            iNtreatment <- length(ls.indexT[[iStrata]]+1)
-
-            if("..strata.." %in% colnames(model.tte[[iEndpoint.UTTE]]$X)){
-                indexX.strata <- which(model.tte[[iEndpoint.UTTE]]$X[["..strata.."]]==iStrata)
-                indexX.strataC <- intersect(indexX.C,indexX.strata)
-                indexX.strataT <- intersect(indexX.T,indexX.strata)
-            }
-
-            iIndex.startC <- model.tte[[iEndpoint.UTTE]]$first.strata[indexX.strataC]
-            iIndex.startT <- model.tte[[iEndpoint.UTTE]]$first.strata[indexX.strataT]
-
-            iIndex.stopC <- iIndex.startC + model.tte[[iEndpoint.UTTE]]$size.strata[indexX.strataC] - 1
-            iIndex.stopT <- iIndex.startT + model.tte[[iEndpoint.UTTE]]$size.strata[indexX.strataT] - 1
-            
-            iJumpC <- model.tte[[iEndpoint.UTTE]]$time[intersect(index.jump,iIndex.startC:iIndex.stopC)]
-            iJumpT <- model.tte[[iEndpoint.UTTE]]$time[intersect(index.jump,iIndex.startT:iIndex.stopT)]
-            
-            iLast.survC <- model.tte[[iEndpoint.UTTE]]$surv[iIndex.stopC]
-            iLast.survT <- model.tte[[iEndpoint.UTTE]]$surv[iIndex.stopT]
-            
-            iPredSurvC <- stats::approxfun(x = model.tte[[iEndpoint.UTTE]]$time[iIndex.startC:iIndex.stopC],
-                                           y = model.tte[[iEndpoint.UTTE]]$surv[iIndex.startC:iIndex.stopC],
-                                           yleft=1, yright=switch(as.character(iLast.survC<zeroPlus),
-                                                                  "TRUE" = 0,
-                                                                  "FALSE" = NA),
-                                           f=0,
-                                           method = "constant")
-            
-            iPredSurvT <- stats::approxfun(x = model.tte[[iEndpoint.UTTE]]$time[iIndex.startT:iIndex.stopT],
-                                           y = model.tte[[iEndpoint.UTTE]]$surv[iIndex.startT:iIndex.stopT],
-                                           yleft=1, yright=switch(as.character(iLast.survT<zeroPlus),
-                                                                  "TRUE" = 0,
-                                                                  "FALSE" = NA),
-                                           f=0,
-                                           method = "constant")
-
-
-            iTimeC <- data[ls.indexC[[iStrata]],.SD[[iEndpoint.UTTE.name]]]
-            iTimeT <- data[ls.indexT[[iStrata]],.SD[[iEndpoint.UTTE.name]]]
-
-            ## independent of the threshold i.e. of the priority
-            ## avoid repeated calculation when the same endpoint is used several times with different thresholds
-            iDSurvivalC.jumpC <- iPredSurvC(iJumpC) - iPredSurvC(iJumpC - zeroPlus)
-            iDSurvivalT.jumpT <- iPredSurvT(iJumpT) - iPredSurvT(iJumpT - zeroPlus)
-            iSurvivalC.timeC <- iPredSurvC(iTimeC)
-            iSurvivalC.timeT <- iPredSurvC(iTimeT)
-            iSurvivalT.timeC <- iPredSurvT(iTimeC)
-            iSurvivalT.timeT <- iPredSurvT(iTimeT)
-            
-            for(iEndpoint in iIndex.associatedEndpoint){ ## iEndpoint <- 1
-                iThreshold <- threshold[iEndpoint]
-
-                ## **** last survival
-                out$lastSurv[[iEndpoint]][iStrata,] <- c(iLast.survC, iLast.survT)
-
-                ## **** survival at jump times
-                out$survJumpC[[iEndpoint]][[iStrata]] <- cbind(time = iJumpC,
-                                                               survival = iPredSurvT(iJumpC + iThreshold),
-                                                               dSurvival = iDSurvivalC.jumpC)
-            
-                out$survJumpT[[iEndpoint]][[iStrata]] <- cbind(time = iJumpT,
-                                                               survival = iPredSurvC(iJumpT + iThreshold),
-                                                               dSurvival = iDSurvivalT.jumpT)
-
-                ## **** survival at observation time (+/- threshold)
-                out$survTimeC[[iEndpoint]][[iStrata]] <- cbind("time" = iTimeC,
-                                                               "SurvivalC-threshold" = iPredSurvC(iTimeC - iThreshold),
-                                                               "SurvivalC_0" = iSurvivalC.timeC,
-                                                               "SurvivalC+threshold" = iPredSurvC(iTimeC + iThreshold),
-                                                               "SurvivalT-threshold" = iPredSurvT(iTimeC - iThreshold),
-                                                               "SurvivalT_0" = iSurvivalT.timeC,
-                                                               "SurvivalT+threshold" = iPredSurvT(iTimeC + iThreshold)
-                                                               )
-
-                out$survTimeT[[iEndpoint]][[iStrata]] <- cbind("time" = iTimeT,
-                                                               "SurvivalC-threshold" = iPredSurvC(iTimeT - iThreshold),
-                                                               "SurvivalC_0" = iSurvivalC.timeT,
-                                                               "SurvivalC+threshold" = iPredSurvC(iTimeT + iThreshold),
-                                                               "SurvivalT-threshold" = iPredSurvT(iTimeT - iThreshold),
-                                                               "SurvivalT_0" = iSurvivalT.timeT,
-                                                               "SurvivalT+threshold" = iPredSurvT(iTimeT + iThreshold)
-                                                               )
-            }
-        }
-    }
-    ## export
-    return(out)
-    
-}
-
-
 
 
 

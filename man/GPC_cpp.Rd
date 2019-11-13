@@ -4,42 +4,45 @@
 \alias{GPC_cpp}
 \title{C++ function performing the pairwise comparison over several endpoints.}
 \usage{
-GPC_cpp(endpoint, censoring, indexC, indexT, threshold, method, D,
-  n_strata, n_TTE, n_UTTE, Wscheme, index_endpoint, index_censoring,
-  index_UTTE, reanalyzed, list_survTimeC, list_survTimeT, list_survJumpC,
-  list_survJumpT, list_lastSurv, correctionUninf, neutralAsUninf,
-  keepScore, reserve, returnOnlyDelta)
+GPC_cpp(endpoint, censoring, indexC, posC, indexT, posT, threshold, weight,
+  method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint,
+  index_censoring, index_UTTE, list_survTimeC, list_survTimeT,
+  list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC,
+  iid_survJumpT, zeroPlus, correctionUninf, hierarchical, hprojection,
+  neutralAsUninf, keepScore, returnIID, debug)
 }
 \arguments{
 \item{endpoint}{A matrix containing the values of each endpoint (in columns) for each observation (in rows).}
 
 \item{censoring}{A matrix containing the values of the censoring variables relative to each endpoint (in columns) for each observation (in rows).}
 
-\item{indexC}{A list containing the indexes of control observations belonging for each strata.}
+\item{indexC}{A list containing, for each strata, which rows of the endpoint and censoring matrices corresponds to the control observations. Not unique when bootstraping.}
 
-\item{indexT}{A list containing the indexes of treatment observations belonging for each strata.}
+\item{posC}{A list containing, for each strata, the unique identifier of each control observations.}
 
-\item{threshold}{Store the thresholds associated to each endpoint. Must have length D. The threshold is ignored for binary endpoints. Must have D columns.}
+\item{indexT}{A list containing, for each strata, which rows of the endpoint and censoring matrices corresponds to the treatment observations. Not unique when bootstraping.}
+
+\item{posT}{A list containing, for each strata, the unique identifier of each treatment observations.}
+
+\item{threshold}{Store the thresholds associated to each endpoint. Must have length D. The threshold is ignored for binary endpoints.}
+
+\item{weight}{Store the weight associated to each endpoint. Must have length D.}
 
 \item{method}{The index of the method used to score the pairs. Must have length D. 1 for continuous, 2 for Gehan, and 3 for Peron.}
 
 \item{D}{The number of endpoints.}
 
+\item{D_UTTE}{The number of distinct time to event endpoints.}
+
 \item{n_strata}{The number of strata.}
 
-\item{n_TTE}{The number of time-to-event endpoints.}
-
-\item{n_UTTE}{The number of unique time-to-event endpoints.}
-
-\item{Wscheme}{The matrix describing the weighting strategy. For each endpoint (except the first) in column, weights of each pair are initialized at 1 and multiplied by the weight of the endpoints in rows where there is a 1. Must have D lines and D columns.}
+\item{nUTTE_analyzedPeron_M1}{The number of unique time-to-event endpoints that have been analyzed the Peron scoring rule before the current endpoint. Must have length D.}
 
 \item{index_endpoint}{The position of the endpoint at each priority in the argument endpoint. Must have length D.}
 
 \item{index_censoring}{The position of the censoring at each priority in the argument censoring. Must have length D.}
 
 \item{index_UTTE}{The position, among all the unique tte endpoints, of the TTE endpoints. Equals -1 for non tte endpoints. Must have length n_TTE.}
-
-\item{reanalyzed}{Will this endpoint be re-analyzed latter with a different threshold.}
 
 \item{list_survTimeC}{A list of matrix containing the survival estimates (-threshold, 0, +threshold ...) for each event of the control group (in rows).}
 
@@ -51,15 +54,29 @@ GPC_cpp(endpoint, censoring, indexC, indexT, threshold, method, D,
 
 \item{list_lastSurv}{A list of matrix containing the last survival estimate in each strata (rows) and treatment group (columns).}
 
+\item{p_C}{Number of nuisance parameter in the survival model for the control group, for each endpoint and strata}
+
+\item{p_T}{Number of nuisance parameter in the survival model for the treatment group, for each endpoint and strata}
+
+\item{iid_survJumpC}{A list of matrix containing the iid of the survival estimates in the control group.}
+
+\item{iid_survJumpT}{A list of matrix containing the iid of the survival estimates in the treatment group.}
+
+\item{zeroPlus}{Value under which doubles are considered 0?}
+
 \item{correctionUninf}{Should the uninformative weight be re-distributed to favorable and unfavorable?}
+
+\item{hierarchical}{Should only the uninformative pairs be analyzed at the lower priority endpoints (hierarchical GPC)? Otherwise all pairs will be compaired for all endpoint (full GPC).}
+
+\item{hprojection}{Order of the H-projection used to compute the variance.}
 
 \item{neutralAsUninf}{Should paired classified as neutral be re-analyzed using endpoints of lower priority?}
 
 \item{keepScore}{Should the result of each pairwise comparison be kept?}
 
-\item{reserve}{Should vector storing neutral pairs and uninformative pairs be initialized at their maximum possible length?}
+\item{returnIID}{Should the iid be computed?}
 
-\item{returnOnlyDelta}{Should only the net benefit and win ratio be output?.}
+\item{debug}{Print messages tracing the execution of the function to help debugging. The amount of messages increase with the value of debug (0-5).}
 }
 \description{
 \code{GPC_cpp} call for each endpoint and each strata the pairwise comparison function suited to the type of endpoint and store the results.

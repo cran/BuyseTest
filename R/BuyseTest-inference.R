@@ -4,15 +4,30 @@ inferenceResampling <- function(envir){
     cpus <- envir$outArgs$cpus
     D <- envir$outArgs$D
     endpoint <- envir$outArgs$endpoint
+    iid <- envir$outArgs$iid
     level.strata <- envir$outArgs$level.strata
+    method.inference <- envir$outArgs$method.inference
+
     n.resampling <- envir$outArgs$n.resampling
     n.strata <- envir$outArgs$n.strata
     seed <- envir$outArgs$seed
     trace <- envir$outArgs$trace
 
+    ## re-order dataset according to the strata used when resampling
+    if(!is.na(attr(method.inference,"resampling-strata"))){
+        envir$outArgs$data[,c("..rowIndex..") := 1:.N]
+        data.table::setkeyv(envir$outArgs$data, cols = attr(method.inference,"resampling-strata"))
+
+        envir$outArgs$M.endpoint <- envir$outArgs$M.endpoint[envir$outArgs$data[["..rowIndex.."]],,drop=FALSE]
+        envir$outArgs$M.censoring <- envir$outArgs$M.censoring[envir$outArgs$data[["..rowIndex.."]],,drop=FALSE]
+        envir$outArgs$index.C <- which(envir$outArgs$data$treatment == 0)
+        envir$outArgs$index.T <- which(envir$outArgs$data$treatment == 1)
+        envir$outArgs$index.strata <- tapply(1:NROW(envir$outArgs$data), envir$outArgs$data[["..strata.."]], list)
+        envir$outArgs$data[,c("..rowIndex..") := NULL,]
+    }
+    
     ## ** computation
     if (cpus == 1) { ## *** sequential resampling test
-           
         if (!is.null(seed)) {set.seed(seed)} # set the seed
 
         if (trace > 0) {
@@ -25,11 +40,14 @@ inferenceResampling <- function(envir){
                                   args = list(X = 1:n.resampling,
                                               FUN = function(iB){
                                                   .BuyseTest(envir = envir,
-                                                             keep.pairScore = FALSE,
-                                                             method.inference = envir$outArgs$method.inference
+                                                             iid = iid,
+                                                             method.inference = method.inference,
+                                                             pointEstimation = FALSE
                                                              )
                                               })
-                                  )
+                                 )
+
+        if(!is.null(seed)){rm(.Random.seed, envir=.GlobalEnv)} # restaure original seed
     }else { ## *** parallel resampling test
 
         ## define cluster
@@ -47,18 +65,19 @@ inferenceResampling <- function(envir){
             suppressPackageStartupMessages(library(BuyseTest, quietly = TRUE, warn.conflicts = FALSE, verbose = FALSE))
         })
         ## export functions
-        toExport <- c(".BuyseTest","initializeSurvival_Peron")
-
+        toExport <- c(".BuyseTest","calcSurvPeron","calcSample")
         iB <- NULL ## [:forCRANcheck:] foreach        
         ls.resampling <- foreach::`%dopar%`(
-                                       foreach::foreach(iB=1:n.resampling,
-                                                        .export = toExport),                                            
-                                       {                                           
-                                           if(trace>0){utils::setTxtProgressBar(pb, iB)}
+                                      foreach::foreach(iB=1:n.resampling,
+                                                       .export = toExport,
+                                                       .packages = "data.table"),                                            
+                                      {                                           
+                                          if(trace>0){utils::setTxtProgressBar(pb, iB)}
 
                                            return(.BuyseTest(envir = envir,
-                                                      keep.pairScore = FALSE,
-                                                      method.inference = envir$outArgs$method.inference))
+                                                             iid = iid,
+                                                             method.inference = method.inference,
+                                                             pointEstimation = FALSE))
                       
                                        })
 
@@ -78,18 +97,27 @@ inferenceResampling <- function(envir){
 
     out <- list(deltaResampling.netBenefit = array(NA, dim = dim.delta, dimnames = dimnames.delta),
                 deltaResampling.winRatio = array(NA, dim = dim.delta, dimnames = dimnames.delta),
-                DeltaResampling.netBenefit = matrix(NA, nrow = D, ncol = n.resampling,
-                                                   dimnames = list(endpoint, as.character(1:n.resampling))),
-                DeltaResampling.winRatio = matrix(NA, nrow = D, ncol = n.resampling,
-                                                  dimnames = list(endpoint, as.character(1:n.resampling)))
+                DeltaResampling.netBenefit = matrix(NA, ncol = D, nrow = n.resampling,
+                                                    dimnames = list(as.character(1:n.resampling), endpoint)),
+                DeltaResampling.winRatio = matrix(NA, ncol = D, nrow = n.resampling,
+                                                  dimnames = list(as.character(1:n.resampling), endpoint))
                 )
-
+    if(iid){
+        out$covariance = array(NA, dim = c(n.resampling, D, 5))
+    }else{
+        out$covariance <- array(NA, dim = c(0,0,0))
+    }
+    
     for(iR in test.resampling){
         out$deltaResampling.netBenefit[,,iR] <- ls.resampling[[iR]]$delta_netBenefit
         out$deltaResampling.winRatio[,,iR] <- ls.resampling[[iR]]$delta_winRatio
 
-        out$DeltaResampling.netBenefit[,iR] <- ls.resampling[[iR]]$Delta_netBenefit
-        out$DeltaResampling.winRatio[,iR] <- ls.resampling[[iR]]$Delta_winRatio
+        out$DeltaResampling.netBenefit[iR,] <- ls.resampling[[iR]]$Delta_netBenefit
+        out$DeltaResampling.winRatio[iR,] <- ls.resampling[[iR]]$Delta_winRatio
+
+        if(iid){
+            out$covariance[iR,,] <- ls.resampling[[iR]]$Mvar
+        }
 
     }
 
@@ -100,7 +128,7 @@ inferenceResampling <- function(envir){
 
 ## * inference U-statistic
 ## Implement the computation of the asymptotic variance via an Hajek projection
-inferenceUstatistic <- function(tablePairScore, order, count.favorable, count.unfavorable,
+inferenceUstatistic <- function(tablePairScore, order, weight, count.favorable, count.unfavorable,
                                 n.pairs, n.C, n.T, level.strata, n.strata, n.endpoint, endpoint){
     . <- NULL ## for CRAN test
     
@@ -108,33 +136,8 @@ inferenceUstatistic <- function(tablePairScore, order, count.favorable, count.un
     n.endpoint <- length(endpoint)
     
     ## ** merge tables
-    keep.col <- c("strata","index.C","index.T","indexWithinStrata.C", "indexWithinStrata.T","favorableC","unfavorableC")
-    old.col <- c("favorableC","unfavorableC")
-    new.col <- c("favorable","unfavorable")
+    ls.table <- wsumPairScore(tablePairScore, weight = weight, n.endpoint = n.endpoint)
 
-    ## first endpoint
-    ls.table <- vector(mode = "list", length = n.endpoint)
-    ls.table[[1]] <- tablePairScore[[1]][,.SD,.SDcols = keep.col]
-    setnames(ls.table[[1]], old = old.col, new = new.col)
-    
-    if(n.endpoint>1){
-        ##
-        n.TCstrata <- tablePairScore[[1]][,length(unique(.SD$indexWithinStrata.C)), by = "strata"][[2]]
-
-        for(iE in 2:n.endpoint){ ## iE <- 2
-            iTable <- tablePairScore[[iE]][,.SD,.SDcols = keep.col]
-            setnames(iTable, old = old.col, new = new.col)
-            iTable[, c("indexTable") := (.SD$indexWithinStrata.T-1) * n.TCstrata[.GRP] + .SD$indexWithinStrata.C, by="strata"]
-
-            ls.table[[iE]] <- data.table::copy(ls.table[[iE-1]])
-            ls.table[[iE]][,c("favorable","unfavorable") := 0]
-            ls.table[[iE]][iTable$indexTable, c("favorable") := iTable$favorable]
-            ls.table[[iE]][iTable$indexTable, c("unfavorable") := iTable$unfavorable]
-        }
-    }
-    
-    ## ls.table[[1]][, mean(favorable)-mean(unfavorable)]
-    ## ls.table[[2]][, mean(favorable)-mean(unfavorable)]
     ## ** H-decomposition
     ## expectation
     Upartial.favorable <- count.favorable/n.pairs
@@ -142,7 +145,7 @@ inferenceUstatistic <- function(tablePairScore, order, count.favorable, count.un
 
     ## storage
     A.iid <- array(NA, dim = c(n.T+n.C, n.endpoint, 2), dimnames = list(NULL, endpoint, c("favorable","unfavorable")))
-    if(order == 2){
+    if(any(order == 2)){
         A2.iid <- array(NA, dim = c(n.pairs, n.endpoint, 2), dimnames = list(NULL, endpoint, c("favorable","unfavorable")))
     }else{
         A2.iid <- NULL
@@ -160,33 +163,48 @@ inferenceUstatistic <- function(tablePairScore, order, count.favorable, count.un
 
             ## *** Hajek projection
             ## \E[X_i>=Y_j+\tau|X_i] and \E[X_i+\tau<=Y_j|X_i]
-            sumPair.T <- iTable[, .(pairs  = .N, favorable = sum(.SD$favorable), unfavorable = sum(.SD$unfavorable)), by = "indexWithinStrata.T"]
+            sumPair.T <- iTable[, list(pairs  = .N, favorable = sum(.SD$favorable), unfavorable = sum(.SD$unfavorable)), by = "index.T"]
             sumPair.T[, c("E.favorable") := .SD$favorable/.SD$pairs]
             sumPair.T[, c("E.unfavorable") := .SD$unfavorable/.SD$pairs]
-                
+
             ## \E[X_i>=Y_j+\tau|Y_j] and \E[X_i+\tau<=Y_j|Y_j]
-            sumPair.C <- iTable[, .(pairs  = .N, favorable = sum(.SD$favorable), unfavorable = sum(.SD$unfavorable)), by = "indexWithinStrata.C"]
+            sumPair.C <- iTable[, list(pairs  = .N, favorable = sum(.SD$favorable), unfavorable = sum(.SD$unfavorable)), by = "index.C"]
             sumPair.C[, c("E.favorable") := .SD$favorable/.SD$pairs]
             sumPair.C[, c("E.unfavorable") := .SD$unfavorable/.SD$pairs]
 
             ## store
-            A.iid[index2originalOrder.C,iE,"favorable"] <- (sumPair.C$E.favorable - Upartial.favorable[iE]) / n.C
-            A.iid[index2originalOrder.T,iE,"favorable"] <- (sumPair.T$E.favorable - Upartial.favorable[iE]) / n.T
-            A.iid[index2originalOrder.C,iE,"unfavorable"] <- (sumPair.C$E.unfavorable - Upartial.unfavorable[iE]) / n.C
-            A.iid[index2originalOrder.T,iE,"unfavorable"] <- (sumPair.T$E.unfavorable - Upartial.unfavorable[iE]) / n.T
+            A.iid[index2originalOrder.C,iE,"favorable"] <- weight[iE] * (sumPair.C$E.favorable - Upartial.favorable[iE]) / n.C
+            A.iid[index2originalOrder.T,iE,"favorable"] <- weight[iE] * (sumPair.T$E.favorable - Upartial.favorable[iE]) / n.T
+            A.iid[index2originalOrder.C,iE,"unfavorable"] <- weight[iE] * (sumPair.C$E.unfavorable - Upartial.unfavorable[iE]) / n.C
+            A.iid[index2originalOrder.T,iE,"unfavorable"] <- weight[iE] * (sumPair.T$E.unfavorable - Upartial.unfavorable[iE]) / n.T
             
             ## *** second order
-            if(order == 2){
-                A2.iid[,iE,"favorable"] <- (iTable$favorable - A.iid[iTable$index.C,iE,"favorable"] * n.C - A.iid[iTable$index.T,iE,"favorable"] * n.T - Upartial.favorable[iE])/n.pairs
-                A2.iid[,iE,"unfavorable"] <- (iTable$unfavorable - A.iid[iTable$index.C,iE,"unfavorable"] * n.C - A.iid[iTable$index.T,iE,"unfavorable"] * n.T - Upartial.unfavorable[iE])/n.pairs                
+            if(any(order == 2)){
+                A2.iid[,iE,"favorable"] <- weight[iE] * (iTable$favorable - A.iid[iTable$index.C,iE,"favorable"] * n.C - A.iid[iTable$index.T,iE,"favorable"] * n.T - Upartial.favorable[iE])/n.pairs
+                A2.iid[,iE,"unfavorable"] <- weight[iE] * (iTable$unfavorable - A.iid[iTable$index.C,iE,"unfavorable"] * n.C - A.iid[iTable$index.T,iE,"unfavorable"] * n.T - Upartial.unfavorable[iE])/n.pairs                
             }
         }
     }
 
     ## ** compute Sigma
-    M.cov <- .iid2cov(A.iid = A.iid, A2.iid = A2.iid,
-                      order = order, endpoint = endpoint, n.endpoint = n.endpoint)
+    iwFavorable <- cumsum(count.favorable * weight)/sum(n.pairs)
+    iwUnfavorable <- cumsum(count.unfavorable * weight)/sum(n.pairs)
+
+    M.cov0 <- .iid2cov(A.iid = A.iid, A2.iid = A2.iid,
+                       order = max(order), endpoint = endpoint, n.endpoint = n.endpoint)
+    M.cov <- cbind(M.cov0,
+                   "netBenefit" = M.cov0[,"favorable"] + M.cov0[,"unfavorable"] - 2 * M.cov0[,"covariance"],
+                   "winRatio" =  M.cov0[,"favorable"]/iwUnfavorable^2 + M.cov0[,"unfavorable"]*iwFavorable^2/iwUnfavorable^4 - 2 * M.cov0[,"covariance"]*iwFavorable/iwUnfavorable^3
+                   )
     
+    if(length(order)==2){
+        M.cov1 <- .iid2cov(A.iid = A.iid, A2.iid = NULL,
+                           order = min(order), endpoint = endpoint, n.endpoint = n.endpoint)
+        attr(M.cov, "first.order") <- cbind(M.cov0,
+                                            "netBenefit" = M.cov1[,"favorable"] + M.cov1[,"unfavorable"] - 2 * M.cov1[,"covariance"],
+                                            "winRatio" =  M.cov1[,"favorable"]/iwUnfavorable^2 + M.cov1[,"unfavorable"]*iwFavorable^2/iwUnfavorable^4 - 2 * M.cov1[,"covariance"]*iwFavorable/iwUnfavorable^3
+                                            )
+    }
     ## ** export
     return(list(Sigma = M.cov,
                 iid1 = A.iid,
@@ -198,7 +216,7 @@ inferenceUstatistic <- function(tablePairScore, order, count.favorable, count.un
 ## Large sample inference for a win ratio analysis of a composite outcome based on prioritized components
 ## Biostatistics (2015), pp. 1–10 doi:10.1093/biostatistics/kxv032
 ## Give results equivalent to inferenceUstatistic
-inferenceUstatisticBebu <- function(tablePairScore, order, count.favorable, count.unfavorable,
+inferenceUstatisticBebu <- function(tablePairScore, order, weight, count.favorable, count.unfavorable,
                                     n.pairs, n.C, n.T, level.strata, n.strata, n.endpoint, endpoint){
     . <- NULL ## for CRAN test
     
@@ -210,32 +228,7 @@ inferenceUstatisticBebu <- function(tablePairScore, order, count.favorable, coun
     p1.unfavorable <- cumsum(count.unfavorable)/ntot.pairs
 
     ## ** merge tables
-    keep.col <- c("strata","index.C","index.T","indexWithinStrata.C", "indexWithinStrata.T","favorableC","unfavorableC")
-    old.col <- c("favorableC","unfavorableC")
-    new.col <- c("favorable","unfavorable")
-
-    ## first endpoint
-    ls.table <- vector(mode = "list", length = n.endpoint)
-    ls.table[[1]] <- tablePairScore[[1]][,.SD,.SDcols = keep.col]
-    setnames(ls.table[[1]], old = old.col, new = new.col)
-    
-    if(n.endpoint>1){
-        ##
-        n.TCstrata <- tablePairScore[[1]][,length(unique(.SD$indexWithinStrata.C)), by = "strata"][[2]]
-
-        for(iE in 2:n.endpoint){ ## iE <- 2
-            iTable <- tablePairScore[[iE]][,.SD,.SDcols = keep.col]
-            setnames(iTable, old = old.col, new = new.col)
-            iTable[, c("indexTable") := (.SD$indexWithinStrata.T-1) * n.TCstrata[.GRP] + .SD$indexWithinStrata.C, by="strata"]
-
-            ls.table[[iE]] <- data.table::copy(ls.table[[iE-1]])
-            ls.table[[iE]][iTable$indexTable, c("favorable") := .SD$favorable + iTable$favorable]
-            ls.table[[iE]][iTable$indexTable, c("unfavorable") := .SD$unfavorable + iTable$unfavorable]
-        }
-    }
-    ## ls.table[[1]][, mean(favorable)-mean(unfavorable)]
-    ## ls.table[[2]][, mean(favorable)-mean(unfavorable)]
-
+    ls.table <- wsumPairScore(tablePairScore, weight = weight, n.endpoint = n.endpoint)
 
     ## ** compute variance component over strata
     M.cov <- matrix(0, nrow = n.endpoint, ncol = 3,
@@ -244,11 +237,12 @@ inferenceUstatisticBebu <- function(tablePairScore, order, count.favorable, coun
     strataSum <- matrix(NA, nrow = 6, ncol = n.endpoint,
                         dimnames = list(c("favorableT","favorableC","unfavorableT","unfavorableC","mixedC","mixedT"),
                                         endpoint))
-    
+
     for(iStrata in 1:n.strata){ ## iStrata <- 1
 
         iN.strata <- n.pairs[iStrata]
-        iDT.nCT <- ls.table[[1]][ls.table[[1]]$strata == level.strata[iStrata], .(n.C = length(unique(.SD$index.C)),n.T = length(unique(.SD$index.T)))]
+        iDT.nCT <- ls.table[[1]][ls.table[[1]]$strata == level.strata[iStrata],
+                                 .(n.C = length(unique(.SD$indexWithinStrata.C)),n.T = length(unique(.SD$index.T)))]
         iN.C <- iDT.nCT$n.C
         iN.T <- iDT.nCT$n.T
         
@@ -260,7 +254,7 @@ inferenceUstatisticBebu <- function(tablePairScore, order, count.favorable, coun
 
             ## *** Hajek projection
             ## \E[X_i>=Y_j+\tau|X_i] and \E[X_i+\tau<=Y_j|X_i]
-            sumPair.T <- iTable[, .(pairs  = .N, favorable = sum(.SD$favorable), unfavorable = sum(.SD$unfavorable)), by = "indexWithinStrata.T"]
+            sumPair.T <- iTable[, .(pairs  = .N, favorable = sum(.SD$favorable), unfavorable = sum(.SD$unfavorable)), by = "index.T"]
             sumPair.T[, c("E.favorable") := .SD$favorable/.SD$pairs]
             sumPair.T[, c("E.unfavorable") := .SD$unfavorable/.SD$pairs]
                 
@@ -307,7 +301,7 @@ inferenceUstatisticBebu <- function(tablePairScore, order, count.favorable, coun
         xi_10_11 <- strataSum["favorableT",] - p1.favorable^2
         ## P[X1>Y1 & X1'>Y1] - P[X1>Y1]^2
         xi_01_11 <- strataSum["favorableC",] - p1.favorable^2
-    
+
         ## P[X1<Y1 & X1<Y1'] - P[X1<Y1]^2
         xi_10_22 <- strataSum["unfavorableT",] - p1.unfavorable^2
         ## P[X1<Y1 & X1'<Y1] - P[X1<Y1]^2
@@ -320,17 +314,22 @@ inferenceUstatisticBebu <- function(tablePairScore, order, count.favorable, coun
 
         ## *** second order terms
         if(order == 2){
-            H2.favorable <- (p1.favorable*(1-p1.favorable) - xi_10_11 - xi_01_11)/(iN.strata)
-            H2.unfavorable <- (p1.unfavorable*(1-p1.unfavorable) - xi_10_22 - xi_01_22)/(iN.strata)
-            H2.covariance <- 0##(-xi_10_12)/(iN.strata)
-            warning("No formula for the contribution of the second order term to the covariance. It is set to 0.")
+            Mfav <- do.call(cbind,lapply(ls.table,"[[","favorable"))
+            Munfav <- do.call(cbind,lapply(ls.table,"[[","unfavorable"))
+            
+            varUfav <- colMeans(Mfav^2) - colMeans(Mfav)^2 ##instead of p1.favorable*(1-p1.favorable)
+            varUunfav <- colMeans(Munfav^2) - colMeans(Munfav)^2 ##instead of p1.unfavorable*(1-p1.unfavorable)
+            covUfavunfav <- colMeans(Mfav*Munfav) - colMeans(Mfav)*colMeans(Munfav) ##instead of -p1.favorable*p1.unfavorable
+            
+            H2.favorable <- (varUfav - xi_10_11 - xi_01_11)/(iN.strata)
+            H2.unfavorable <- (varUunfav - xi_10_22 - xi_01_22)/(iN.strata)
+            H2.covariance <- (covUfavunfav - xi_10_12 - xi_01_12)/(iN.strata)
         }else{
             H2.favorable <- 0
             H2.unfavorable <- 0
             H2.covariance <- 0
         }
         
-
         ## ** compute sigma
         ## NO STRATA:
         ## N.TC = N.T+N.C
@@ -339,20 +338,28 @@ inferenceUstatisticBebu <- function(tablePairScore, order, count.favorable, coun
         ## scaled asymptotic variance i.e. (Uhat - U) \sim N(0,Sigma/N.TC) = N(0,1/N.C SigmaC + 1/N.T SigmaT)
         ##
         ## STRATA:
-        ## same but adding a factor n.strata / N.TC to accound for pooling        
+        ## same but adding a factor n.strata / N.TC to accound for pooling
         M.cov <- M.cov + (iN.strata/ntot.pairs)^2 * cbind(favorable =  xi_10_11 / iN.C + xi_01_11 / iN.T + H2.favorable,
                                                           unfavorable = xi_10_22 / iN.C + xi_01_22 / iN.T + H2.unfavorable,
                                                           covariance = xi_10_12 / iN.C + xi_01_12 / iN.T + H2.covariance)
     }
 
+    
+    
+
     ## ** export
-    return(list(Sigma = M.cov,
+    iwFavorable <- cumsum(count.favorable * weight) / ntot.pairs
+    iwUnfavorable <- cumsum(count.unfavorable * weight) / ntot.pairs
+    return(list(Sigma = cbind(M.cov,
+                              "netBenefit" = M.cov[,"favorable"] + M.cov[,"unfavorable"] - 2 * M.cov[,"covariance"],
+                              "winRatio" =  M.cov[,"favorable"]/iwUnfavorable^2 + M.cov[,"unfavorable"]*iwFavorable^2/iwUnfavorable^4 - 2 * M.cov[,"covariance"]*iwFavorable/iwUnfavorable^3
+                              ),
                 iid1 = NULL,
                 iid2 = NULL))
 }
 
 ## * .iid2cov
-.iid2cov <- function(A.iid, A2.iid,
+.iid2cov <- function(A.iid, A2.iid, weight,
                      order, endpoint, n.endpoint){
     
     if(n.endpoint==1){
@@ -366,7 +373,7 @@ inferenceUstatisticBebu <- function(tablePairScore, order, count.favorable, coun
             M.cov[1,"covariance"] <- M.cov[1,"covariance"] + sum(A2.iid[,,"favorable"] * A2.iid[,,"unfavorable"])
         }
     }else{
-        ## cumsum because the iid decomposition is endpoint specific while the net benefit is the overall
+        ## cumsum because the iid decomposition is endpoint specific while the net benefit is the overall        
         favorable.cumiid <- t(apply(A.iid[,,"favorable"],1,cumsum))
         unfavorable.cumiid <- t(apply(A.iid[,,"unfavorable"],1,cumsum))
 
@@ -387,3 +394,5 @@ inferenceUstatisticBebu <- function(tablePairScore, order, count.favorable, coun
     
     return(M.cov)
 }
+
+

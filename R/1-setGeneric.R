@@ -19,8 +19,9 @@ setGeneric(name = "getCount",
 #' @rdname BuyseRes-getPairScore
 #' @exportMethod getPairScore
 setGeneric(name = "getPairScore",
-           def = function(object, endpoint = NULL, strata = NULL,
-                          rm.withinStrata = TRUE, rm.weight = FALSE,
+           def = function(object, endpoint = NULL, strata = NULL, sum = FALSE,
+                          rm.withinStrata = TRUE, rm.strata = is.na(object@strata),
+                          rm.indexPair = TRUE, rm.weight = FALSE, rm.corrected = (object@correction.uninf==0),
                           unlist = TRUE, trace = 1){
                standardGeneric("getPairScore")
            }
@@ -39,7 +40,8 @@ setGeneric(name = "getSurvival",
 #' @rdname BuyseRes-iid
 #' @exportMethod iid
 setGeneric(name = "iid",
-           def = function(object, endpoint = NULL, order = 1){
+           def = function(object, endpoint = NULL, type = "all"){
                standardGeneric("iid")
            }
 )
+

@@ -1,4 +1,4 @@
-% Created 2019-01-09 on 18:18
+% Created 2019-09-11 on 14:20
 % Intended LaTeX compiler: pdflatex
 \documentclass[12pt]{article}
 
@@ -53,7 +53,6 @@ emphstyle=\color{blue}
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage{dsfont}
-\usepackage{textcomp}
 \usepackage{array}
 \usepackage{ifthen}
 \usepackage{hyperref}
@@ -79,10 +78,15 @@ emphstyle=\color{blue}
 \newcommand\Yobs{\tilde{Y}}
 \newcommand\xobs{\tilde{x}}
 \newcommand\yobs{\tilde{y}}
-\newcommand\CensT{\varepsilon_X}
-\newcommand\CensC{\varepsilon_Y}
-\newcommand\censT{e_X}
-\newcommand\censC{e_Y}
+\newcommand\CensT{\varepsilon^X}
+\newcommand\CensC{\varepsilon^Y}
+\newcommand\censT{e^X}
+\newcommand\censC{e^Y}
+\newcommand\sample{\chi}
+\newcommand\VX{\mathbf{X}}
+\newcommand\VY{\mathbf{Y}}
+\newcommand\VW{\mathbf{W}}
+\newcommand\Vtau{\boldsymbol{\tau}}
 \RequirePackage{epstopdf} % to be able to convert .eps to .pdf image files
 \RequirePackage{amsmath}
 \RequirePackage{algorithm}
@@ -131,6 +135,8 @@ emphstyle=\color{blue}
 \newcommandx\Score[2][1=,2=]{\defOperator{#1}{#2}{S}{}{(}{)}{\mathcal}}
 \newcommandx\SurvT[1][1=]{\defOperator{#1}{}{S_T}{}{(}{)}{}}
 \newcommandx\SurvC[1][1=]{\defOperator{#1}{}{S_C}{}{(}{)}{}}
+\newcommandx\SurvThat[1][1=]{\defOperator{#1}{}{\hat{S}_T}{}{(}{)}{}}
+\newcommandx\SurvChat[1][1=]{\defOperator{#1}{}{\hat{S}_C}{}{(}{)}{}}
 \newcommandx\Vois[2][1=,2=]{\defOperator{#1}{#2}{V}{}{(}{)}{\mathcal}}
 \newcommandx\IF[2][1=,2=]{\defOperator{#1}{#2}{IF}{}{(}{)}{\mathcal}}
 \newcommandx\Ind[1][1=]{\defOperator{}{#1}{1}{}{(}{)}{\mathds}}
@@ -173,6 +179,7 @@ emphstyle=\color{blue}
 \newcommand\half{\frac{1}{2}}
 \newcommand\normMax[1]{\left|\left|#1\right|\right|_{max}}
 \newcommand\normTwo[1]{\left|\left|#1\right|\right|_{2}}
+\newcommandx\Hajek{H\'{a}jek\xspace}
 \author{Brice Ozenne}
 \date{\today}
 \title{Theory supporting the net benefit and Peron's scoring rules}
@@ -191,41 +198,35 @@ emphstyle=\color{blue}
 \begin{document}
 
 \maketitle
-This document describe the relationship between the net benefit and
-traditional parameter of interest (e.g. hazard ratio). It also present
-how Peron's scoring rules for the survival and competing setting were
-derived.
-
-\bigskip
-
-In the examples we will use a sample size of:
-\lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
-\begin{lstlisting}
-n <- 1e4
-\end{lstlisting}
-
-and use the following R packages
+This document describes the theoretical background of the methods
+implemented in the \texttt{BuyseTest} package. Some are illutrated on
+specific examples where we will use the following R packages:
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 library(BuyseTest)
-library(riskRegression)
+library(data.table)
 library(survival)
+library(riskRegression)
 \end{lstlisting}
+
+\bigskip
 
 \tableofcontents
 
 \clearpage
 
 \section{Parameter of interest}
-\label{sec:org093516e}
+\label{sec:org1d8cd75}
 
-Let consider two independent real valued (univariate) random variables
+\subsection{Univariate case}
+\label{sec:org5ebb5d2}
+Consider two independent real valued (univariate) random variables
 \(X\) and \(Y\). Informally \(X\) refer to the outcome in the
 experimental group while \(Y\) refer to the outcome in the control
 group. For a given threshold \(\tau \in \Real^{+*}\), the net benefit
 can be expressed as:
 \begin{align*}
-\Delta_\tau = \Prob[X \geq Y+\tau] - \Prob[Y \geq Y+\tau]
+\Delta_\tau = \Prob[X \geq Y + \tau] - \Prob[Y \geq X + \tau]
 \end{align*}
 To relate the net benefit to known quantities we will also consider
 the case of an infinitesimal threshold \(\tau\):
@@ -237,12 +238,81 @@ given a formula for \(\Prob[X \geq Y+\tau]\) (or \(\Prob[X > Y]\)), we
 can substitute \(X\) to \(Y\) and \(Y\) to \(X\) to obtain the formula
 for \(\Prob[Y \geq X+\tau]\) (or \(\Prob[Y > X]\)).
 
+\subsection{Multivariate case}
+\label{sec:org320bdac}
+
+In the multivariate case we now have a vector of outcome \(\VX =
+(X_1,\ldots,X_K)\) and \(\VY = (Y_1,\ldots,Y_K)\) for each group, and
+a vector of clinical thresholds \(\Vtau =
+(\tau_1,\ldots,\tau_K)\). When the same outcome is used at several
+priorities, we will also denote by \(h(\tau_l)\) the previously used
+threshold relative to outcome \(l\) (if it is the first time that
+outcome \(l\) is analyzed then \(h(\tau_l)=+\infty\)). The values of
+each outcomes are assumed to be ordered such that we are able to
+define a partial ordering for any two realizations of the \(l\)-th
+outcome in each group \(x_k \succ y_k = \Ind[x_k \geq y_k + \tau_k]\) where \(\Ind[.]\) denotes the indicator function. 
+
+
+\bigskip
+
+We also introduce the weights \(\VW = (W_1,\ldots,W_K)\) indicating
+whether the pair could be classified at the previous priorities with
+distinct outcome.
+\begin{itemize}
+\item \textbf{General case}: for \(k \in \{1,\ldots,K\}\):
+\end{itemize}
+\begin{align*}
+W_k = \left\{ \begin{array}{c} 
+1\text{, if } k = 1 \\ 
+\prod_{k' \in S_k } \left(\left|X_{k'} - Y_{k'}\right| < \tau_{k'}\right) \text{, otherwise} 
+\end{array} \right.
+\end{align*}
+where \(S_k=\left\{k \text{ such that }  k \in \{1,\ldots,k-1\} \text{ and } \left(X_k,Y_k\right) \neq
+\left(X_{k'},Y_{k'}\right)\right\}\), i.e. the indexes of the previous
+outcomes that are distinct from the \(k\)-th outcome.
+
+\begin{itemize}
+\item \textbf{Distinct outcomes}: for \(k \in \{1,\ldots,K\}\):
+\end{itemize}
+\begin{align*}
+W_k = \left\{ \begin{array}{c} 
+1\text{, if } k = 1 \\ 
+\prod_{k'=1}^{k-1} \left(\left|X_{k'} - Y_{k'}\right| < \tau_{k'}\right) \text{, otherwise} 
+\end{array} \right.
+\end{align*}
+
 \clearpage
 
-\section{Binary variable}
-\label{sec:orgd9ef560}
-\subsection{Relationship between \(\Delta_+\) and the prevalence}
-\label{sec:org73393ce}
+The net benefit is then defined as \(\Delta_{\Vtau} = \Prob[\VX \succ \VY + \Vtau] - \Prob[\VY \succ \VX + \Vtau]\)
+
+\begin{itemize}
+\item \textbf{General case}:
+\end{itemize}
+\begin{align*}
+\Prob[\VX \succ \VY + \Vtau] = \sum_{k=1}^K \Prob\left[\left(W_k=1\right) \cap
+\left(X_k \in [Y_k + \tau_k;Y_k + \tau_k + h(\tau_k)[ \right) \right] 
+\end{align*}
+\begin{itemize}
+\item \textbf{Distinct outcomes}:
+\end{itemize}
+\begin{align*}
+\Prob[\VX \succ \VY + \Vtau] = \sum_{k=1}^K
+  \Prob\left[\left(W_k=1\right) \cap \left(X_k \geq Y_k + \tau_k\right) \right]
+\end{align*}
+
+\bigskip
+
+Note: In the following we focus, when possible, on the univariate case to
+simplify the notations and the exposition.
+
+\clearpage
+
+\section{Relationship between the net benefit and classical summary statistics}
+\label{sec:org262740e}
+\subsection{Binary variable}
+\label{sec:orgdb3fd55}
+\subsubsection{Relationship between \(\Delta_+\) and the prevalence}
+\label{sec:org12019aa}
 \begin{align*}
 \Prob[X>Y] = \Prob[X=1,Y=0]
 \end{align*}
@@ -259,13 +329,14 @@ So
 \Delta_+ = \Prob[X=1] - \Prob[Y=1]
 \end{align*}
 
-\subsection{In R}
-\label{sec:orgc35cecf}
+\subsubsection{In R}
+\label{sec:orgd5966f2}
 Settings:
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 prob1 <- 0.4
 prob2 <- 0.2
+n <- 1e4
 \end{lstlisting}
 
 Simulate data:
@@ -298,10 +369,10 @@ prob2 - prob1
 
 \clearpage
 
-\section{Continuous variable}
-\label{sec:orgce1716f}
-\subsection{Relationship between \(\Delta\) and Cohen's d}
-\label{sec:orgbbe01ec}
+\subsection{Continuous variable}
+\label{sec:org3dae1ae}
+\subsubsection{Relationship between \(\Delta_+\) and Cohen's d}
+\label{sec:org728a81b}
 Let's consider two independent normally distributed variables with common variance:
 \begin{itemize}
 \item \(X \sim \Gaus[\mu_X,\sigma^2]\)
@@ -320,8 +391,8 @@ So
 \Delta = 2*\Phi(\frac{d}{\sqrt{2}})-1
 \end{align*}
 
-\subsection{In R}
-\label{sec:orgcb6ceb2}
+\subsubsection{In R}
+\label{sec:orgce21389}
 
 Settings:
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
@@ -329,6 +400,7 @@ Settings:
 meanX <- 0
 meanY <- 2
 sdXY <- 1
+n <- 1e4
 \end{lstlisting}
 
 Simulate data:
@@ -363,10 +435,10 @@ d <- (meanY-meanX)/sdXY
 
 \clearpage
 
-\section{Survival}
-\label{sec:orgc81b2a0}
-\subsection{Relationship between \(\Delta\) and the hazard ratio}
-\label{sec:org34562b4}
+\subsection{Time to event variable (survival)}
+\label{sec:orgf8f5095}
+\subsubsection{Relationship between \(\Delta_+\) and the hazard ratio}
+\label{sec:org6bf00c5}
 For a given cumulative density function \(F(x)\) and a corresponding
 probability density function \(f(x)\) we define the hazard by:
 \begin{align*}
@@ -407,269 +479,15 @@ So \(\Prob[Y>X] = \frac{\alpha_X}{\alpha_Y+\alpha_X} = 1-\frac{1}{1+HR}\) and:
 
 \clearpage
 
-\subsection{Scoring rule in presence of censoring}
-\label{sec:orgec425bd}
-Let's consider the following random variables:  
-\begin{itemize}
-\item \(X\) the time to the occurrence of the event in the experimental group.
-\item \(\Xobs\) the censored event time in the experimental group,
-i.e. \(\Xobs = X \wedge C_X\) where \(C_X\) denotes the censoring time in the experimental group.
-\item \(\CensT = \Ind[X \leq C_X]\) the event time indicator in the experimental group.
-\item \(Y\) the time to the occurrence of the event in the control group.
-\item \(\Yobs\) the censored event time in the control group,
-i.e. \(\Yobs = X \wedge C_Y\) where \(C_Y\) denotes the censoring time in the control group.
-\item \(\CensC = \Ind[Y \leq C_Y]\) the event time indicator in the control group.
-\end{itemize}
-
-We observe one realization \(\left(\xobs, \yobs, \censT, \censC
-\right)\) of the random variables \(\left(\Xobs, \Yobs, \censT, \censC
-\right)\). We use the short notation \(x \wedge y = \min(x,y)\) and
-\(x \vee y = \max(x,y)\). We assume to know the expected survival in
-each group (respectively \(\SurvC\) and \(\SurvT\)) at each timepoint.
-
-\subsubsection{Case: \(\SurvT=0,\SurvC=1\)}
-\label{sec:org8a13637}
-
-\noindent \textcolor{darkgreen}{Probability in favor of the treatment}:
-\begin{align*}
-\Prob[X \geq Y + \tau \big| \xobs, \yobs, \censT, \censC, \SurvT, \SurvC] 
-&= \Prob[X \geq \yobs + \tau \big| X>\xobs]  \\
-&= \frac{\Prob[X \geq \yobs + \tau, X>\xobs]}{\Prob[X>\xobs]}  \\
-&= \left\{ \begin{array}{ll}
-           1 \text{ if } \xobs \geq \yobs + \tau\\
-           \frac{\SurvT[(\yobs + \tau)_-]}{\SurvT[\xobs]}  \text{ if } \xobs < \yobs + \tau \\
-           \end{array} \right.
-\end{align*}
-
-\noindent \textcolor{darkred}{Probability in favor of the control}:
-\begin{align*}
-\Prob[Y \geq X + \tau \big| \xobs, \yobs, \censT, \censC, \SurvT, \SurvC] 
-&= \Prob[\yobs \geq X + \tau \big| X>\xobs]  \\
-&= 1-\Prob[\yobs < X + \tau \big| X>\xobs]  \\
-&= 1-\frac{\Prob[X>\max\left(\xobs,\yobs - \tau\right)]}{\Prob[X>\xobs]}  \\
-&= \left\{ \begin{array}{ll}
-           0 \text{ if } \xobs \geq \yobs - \tau\\
-           1-\frac{\SurvT[\yobs - \tau]}{\SurvT[\xobs]} \text{ if } \xobs < \yobs - \tau \\
-           \end{array} \right.
-\end{align*}
-
-
-\subsubsection{Case: \(\SurvT=1,\SurvC=0\)}
-\label{sec:org982ad1f}
-By symmetry we have: \\
-\noindent \textcolor{darkgreen}{Probability in favor of the treatment}:
-\begin{align*}
-\Prob[X \geq Y + \tau \big| \xobs, \yobs, \censT, \censC, \SurvT, \SurvC] 
-&= \left\{ \begin{array}{ll}
-           0 \text{ if } \yobs \geq \xobs - \tau\\
-           1-\frac{\SurvC[\xobs - \tau]}{\SurvC[\yobs]} \text{ if } \yobs < \xobs - \tau\\
-           \end{array} \right.
-\end{align*}
-
-\noindent \textcolor{darkred}{Probability in favor of the control}:
-\begin{align*}
-\Prob[Y \geq X + \tau \big| \xobs, \yobs, \censT, \censC, \SurvT, \SurvC] 
-&= \Prob[\yobs \geq X + \tau \big| X>\xobs]  \\
-&= \left\{ \begin{array}{ll}
-           1 \text{ if } \yobs \geq \xobs + \tau\\
-           \frac{\SurvC[(\xobs + \tau)_-]}{\SurvC[\yobs]} \text{ if } \yobs < \xobs - \tau\\
-           \end{array} \right.
-\end{align*}
-
-
-
-
-\subsubsection{Case: \(\SurvT=0,\SurvC=0\)}
-\label{sec:orgc273756}
-
-\noindent \textcolor{darkgreen}{Probability in favor of the treatment}:
-\begin{align*}
-&\Prob[X \geq Y + \tau \big| \xobs, \yobs, \censT, \censC, \SurvT, \SurvC] \\
-&= \Prob[X \geq Y + \tau \big| X>\xobs,  Y>\yobs]  \\
-&= \Prob[ \left( X \geq Y + \tau  \right) \cap \left( \xobs \geq Y + \tau  \right) \big| X>\xobs,  Y>\yobs]  
-+ \Prob[ \left( X \geq Y + \tau  \right) \cap \left( \xobs < Y + \tau  \right) \big| X>\xobs,  Y>\yobs]  \\
-&= \Prob[ \xobs \geq Y + \tau  \big| Y>\yobs]  
-+ \frac{
-\Prob \left[ \left( X \geq Y + \tau  \right) \cap \left( \xobs < Y + \tau  \right) \cap \Ccancel[red]{\left( X>\xobs \right)} \cap  \left(Y>\yobs \right) \right]
-}{
-\Prob[\left( X>\xobs \right) \cap  \left(Y>\yobs \right)]
-}  \\
-&= \Prob[ \xobs \geq Y + \tau  \big| Y>\yobs]  
-+ \frac{
-\Prob[ \left( X \geq Y + \tau  \right) \cap  \left(Y> \max(\yobs, \xobs-\tau) \right)]
-}{
-\Prob[\left( X>\xobs \right) \cap  \left(Y>\yobs \right)]
-}  
-\end{align*}
-where we have used that:
-\begin{align*}
-\left( X \geq Y + \tau \right) \cap \left( \xobs < Y + \tau \right) \implies X > \xobs
-\end{align*}
-Since:
-\begin{align*}
-\Prob[A>B] &= \int_{-\infty}^{+\infty}\Prob[A>t] d \Prob[B \leq t] \\
-\Prob[(A>B+\tau) \cap (B>b)] &= \int_{b^+}^{+\infty}\Prob[A>t+\tau] d \Prob[B \leq t] \\
-&= - \int_{b^+}^{+\infty}\Prob[A>t+\tau] d \Prob[B > t]
-\end{align*}
-we obtain for \(A=X\), \(B=Y\),\(b=\max(\yobs, \xobs-\tau)\):
-\begin{align*}
-&\Prob[X \geq Y + \tau \big| \xobs, \yobs, \censT, \censC, \SurvT, \SurvC] \\
-&= \Prob[ \xobs \geq Y + \tau  \big| Y>\yobs]  
-- \frac{
-\int_{\max(\yobs, \xobs-\tau)^+}^{\infty} \Prob[\left( X \geq t + \tau  \right)] d \Prob[Y > t]
-}{
-\SurvT[\xobs]\SurvC[\yobs]
-}  \\
-&= \Prob[ \xobs \geq Y + \tau  \big| Y>\yobs]  
-- \frac{
-\int_{\max(\yobs, \xobs-\tau)^+}^{\infty} \SurvT((t+\tau)_{-}) d \SurvC(t)
-}{
-\SurvT[\xobs]\SurvC[\yobs]
-}  \\
-\end{align*}
-So using the results of the case \(\SurvT=1,\SurvC=0\) we obtain:
-\begin{align*}
-&\Prob[X \geq Y + \tau \big| \xobs, \yobs, \censT, \censC, \SurvT, \SurvC] \\
-&= \left\{ \begin{array}{ll}
-           - \frac{
-\int_{\yobs^+}^{\infty} \SurvT((t+\tau)_-) d \SurvC(t)
-}{
-\SurvT[\xobs]\SurvC[\yobs]
-}  \text{ if } \yobs \geq \xobs - \tau\\
-           1-\frac{\SurvC[\xobs - \tau]}{\SurvC[\yobs]} - \frac{
-\int_{(\xobs-\tau)^+}^{\infty} \SurvT((t+\tau)_-) d \SurvC(t)
-}{
-\SurvT[\xobs]\SurvC[\yobs]
-} \text{ if } \yobs < \xobs - \tau\\ \\
-           \end{array} \right.
-\end{align*}
-
-\noindent \textcolor{darkred}{Probability in favor of the control}:
-By symmetry we have: \\
-\begin{align*}
-&\Prob[Y \geq X + \tau \big| \xobs, \yobs, \censT, \censC, \SurvT, \SurvC] \\
-&= \left\{ \begin{array}{ll}
-           - \frac{
-\int_{\xobs^+}^{\infty} \SurvC((t+\tau)_-) d \SurvT(t)
-}{
-\SurvT[\xobs]\SurvC[\yobs]
-}  \text{ if } \xobs \geq \yobs - \tau\\
-           1-\frac{\SurvT[\yobs - \tau]}{\SurvT[\xobs]} - \frac{
-\int_{(\yobs-\tau)^+}^{\infty} \SurvC((t+\tau)_-) d \SurvT(t)
-}{
-\SurvT[\xobs]\SurvC[\yobs]
-} \text{ if } \xobs < \yobs - \tau\\ \\
-           \end{array} \right.
-\end{align*}
-
-\clearpage
-
-
-\subsubsection{Synthesis}
-\label{sec:org3449db1}
-\textcolor{darkgreen}{Probability in favor of the treatment}: \(\Prob[X \geq Y+\tau \big| \xobs,\yobs,\censT,\censC,\SurvT,\SurvC]\)
-\begin{table}[!h]
-	\centering
-	\setlength{\extrarowheight}{6mm}
-	\begin{tabular}{l@{}l@{}l|lll}
-		(&$\censT$, & $\censC$) & $\xobs \leq \yobs - \tau$ & $ |\xobs - \yobs| < \tau$ & $\xobs \geq \yobs + \tau$ \\ \hline 
-		(&1,&1) & \(0\) & \(0\) & \(1\) \\
-		(&1,&0) & \(0\) & \(0\) & $1-\frac{\SurvC[\xobs - \tau]}{\SurvC[\yobs]}$ \\
-		(&0,&1) & $\frac{\SurvT[(\yobs+\tau)_{-}]}{\SurvT[\xobs]}$ & $\frac{\SurvT[(\yobs+\tau)_{-}]}{\SurvT[\xobs]}$ & \(1\) \\
-		(&0,&0) & \(-\frac{\int_{t>\yobs}^{\infty} \SurvT[(t+\tau)_{-}] d\SurvC[t]}{\SurvT[\xobs]\SurvC[\yobs]}\)
-              & \(-\frac{\int_{t>\yobs}^{\infty} \SurvT[(t+\tau)_{-}] d\SurvC[t]}{\SurvT[\xobs]\SurvC[\yobs]}\)
-              & \( 1 - \frac{\SurvC[\xobs-\tau]}{\SurvC[\yobs]} - \frac{\int_{t>\xobs-\tau}^{\infty} \SurvT[(t+\tau)_{-}] d\SurvC[t]}{\SurvT[\xobs]\SurvC[\yobs]}\)
-\\ \hline
-	\end{tabular}
-\end{table}
-
-\textcolor{darkred}{Probability in favor of the control}: \(\Prob[Y \geq X+\tau \big| \xobs,\yobs,\censT,\censC,\SurvT,\SurvC]\)
-
-\begin{table}[!h]
-	\centering
-	\setlength{\extrarowheight}{6mm}
-	\begin{tabular}{l@{}l@{}l|lll}
-		(&$\censT$, & $\censC$) & $\xobs \leq \yobs - \tau$ & $ |\xobs - \yobs| < \tau$ & $\xobs \geq \yobs + \tau$ \\ \hline 
-		(&1,&1) & \(1\) & \(0\) & \(0\) \\
-		(&1,&0) & \(1\) & $\frac{\SurvC[(\xobs + \tau)_{-}]}{\SurvC[\yobs]}$ & $\frac{\SurvC[(\xobs + \tau)_{-}]}{\SurvC[\yobs]}$ \\
-		(&0,&1) & $1 - \frac{\SurvT[\yobs-\tau]}{\SurvT[\xobs]}$ & \(0\) & \(0\) \\
-		(&0,&0) & \( 1 - \frac{\SurvT[\yobs-\tau]}{\SurvT[\xobs]} - \frac{\int_{t>\yobs-\tau}^{\infty} \SurvC[(t+\tau)_{-}] d\SurvT[t]}{\SurvT[\xobs]\SurvC[\yobs]}\)
-              & \(-\frac{\int_{t>\xobs}^{\infty} \SurvC[(t+\tau)_{-}] d\SurvT[t]}{\SurvT[\xobs]\SurvC[\yobs]}\)
-              & \(-\frac{\int_{t>\xobs}^{\infty} \SurvC[(t+\tau)_{-}] d\SurvT[t]}{\SurvT[\xobs]\SurvC[\yobs]}\)
-\\ \hline
-	\end{tabular}
-\end{table}
-
-\hfill 
-
-\textcolor{darkblue}{Probability neutral to the treatment}:  \(\Prob[|X-Y| < \tau  \big| \xobs,\yobs,\theta,\eta,S_T,S_C]\)
-
-\begin{align*}
- = 1-\Prob[X \geq Y+\tau  \big|\xobs,\yobs,\theta,\eta,S_T,S_C]-\Prob[Y \geq X+\tau  \big| \xobs,\yobs,\theta,\eta,S_T,S_C]
-\end{align*}
-
-\clearpage
-
-\subsection{Partially known survival curve}
-\label{sec:org0cb43e3}
-In the case where \(x^* < y^* - \tau\), we need an estimate of
-\(S_X(y^* - \tau)\) to compute the probability in favor of the
-control. If we can only have an estimate of \(S_X\) up to
-\(x_{max} < y^* - \tau\) then we can use the following inequality:
-\begin{align*}
-S_X(x_{max}) &\geq S_X(y^* - \tau) \\
-\Prob[x \geq y - \tau | x \geq x^*, y = y^*] &\geq 1 - \frac{ S_X(x_{max})}{S_X(x^*)} \\
-\end{align*}
-
-\textbf{Probability of being neutral}:
-
-\begin{align*}
-\Prob[|x-y| \leq \tau | x \geq x^*, y = y^*] 
-&= 1-\Prob[x \geq y + \tau | x \geq x^*, y = y^*]-\Prob[y \geq x + \tau | x \geq x^*, y = y^*]  \\
-&= \frac{ S_X(y^* - \tau \vee x^*) - S_X(y^* + \tau \vee x^*)}{S_X(x^*)}
-\end{align*}
-
-Consider the case \(x^*\)
-If \(x_{max} > y^* - \tau\) then 
-\begin{align*}
-\Prob[|x-y| \leq \tau | x \geq x^*, y = y^*] \geq \frac{ S_X(y^* - \tau) - S_X(x_{max})}{S_X(x^*)}
-\end{align*}
-otherwise
-\begin{align*}
-\Prob[|x-y| \leq \tau | x \geq x^*, y = y^*] \geq 0
-\end{align*}
-
-\textbf{Probability of being uninformative}: It is computed as the complement
-to 1 of the sum of the probability of being in favor of the treatment,
-in favor of the control, and neutral.
-
-\bigskip
-
-\textsc{Example}:
-
-\begin{itemize}
-\item when \(x^* > y^* + \tau\), the probability of being favorable is 1
-so the probability of being uninformative is 0.
-
-\item when \(\left|x^* - y^*\right| < \tau\), the probability of being in
-favor of the control is 0. If we know the survival in the experimental
-group up to time \(y^*\), then we can only say that the probability
-of being favorable is bounded below by 0. The probability of being
-neutral bounded below by \(1-S_T(y^*)/S_T(x^*)\). The probability of
-being uninformative is then \(S_T(y^*)/S_T(x^*)\). Clearly this
-probability becomes small when \(S_T(y^*)\) is small. The
-approximation by the lower bound becomes exact when \(S_T(y^*)\)
-tends to 0.
-\end{itemize}
-
-\subsection{In R}
-\label{sec:org7ab208d}
+\subsubsection{In R}
+\label{sec:orgc4a678d}
 
 Settings:
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 alphaX <- 2
 alphaY <- 1
+n <- 1e4
 \end{lstlisting}
 
 Simulate data:
@@ -684,7 +502,7 @@ Buyse test:
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 BuyseTest(group ~ tte(time, censoring = event), data = df,
-		  method.inference = "none", trace = 0, method.tte = "Gehan")
+		  method.inference = "none", trace = 0, scoring.rule = "Gehan")
 \end{lstlisting}
 \begin{verbatim}
 endpoint threshold  delta  Delta
@@ -709,13 +527,10 @@ c("HR.cox" = HR, "Delta" = (1-HR)/(1+HR))
 
 \clearpage
 
-\section{Competing risks}
-\label{sec:org9bc38ed}
-\subsection{Theory}
-\label{sec:orgeee2d13}
-
-\subsubsection{General case (no censoring)}
-\label{sec:org7b44c18}
+\subsection{Time to event variable (competing risks)}
+\label{sec:orgb342dc9}
+\subsubsection{Relationship between \(\Delta_+\) and the hazard function}
+\label{sec:org435e992}
 Let consider: 
 \begin{itemize}
 \item \(X^*_{E}\) the time to the occurrence of the event of interest in the experimental group.
@@ -774,11 +589,6 @@ Y|\varepsilon_X=1,\varepsilon_Y=1]\Prob[\varepsilon_X=1,\varepsilon_Y=1] +
 & + \Prob[\varepsilon_X=2,\varepsilon_Y=1] - \Prob[\varepsilon_X=1,\varepsilon_Y=2]
 \end{align*}
 
-\clearpage
-
-\subsubsection{Exponential distribution (no censoring)}
-\label{sec:org3527cc5}
-
 Now let's assume that:
 \begin{itemize}
 \item \(X_{E} \sim Exp(\alpha_{E,X})\).
@@ -824,12 +634,11 @@ CIF_1(t|group = Y) &= \frac{\alpha_{E,Y}}{\alpha_{E,Y} + \alpha_{CR,Y}} \left(1 
 
 \clearpage
 
-\subsection{In R}
-\label{sec:org7d22886}
-
-\subsubsection{BuyseTest (no censoring)}
-\label{sec:orgde8c1dc}
-
+\subsubsection{In R}
+\label{sec:org319bc9b}
+\begin{enumerate}
+\item No censoring
+\label{sec:org3dc0736}
 Setting:
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
@@ -837,6 +646,7 @@ alphaE.X <- 2
 alphaCR.X <- 1
 alphaE.Y <- 3
 alphaCR.Y <- 2
+n <- 1e3
 \end{lstlisting}
 
 Simulate data:
@@ -853,19 +663,18 @@ BuyseTest:
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 e.BT <- BuyseTest(group ~ tte(time, censoring = event), data = df,
-				  method.inference = "none", method.tte = "Gehan",
+				  method.inference = "none", scoring.rule = "Gehan",
 				  trace = 0)
 summary(e.BT, percentage = TRUE)
 \end{lstlisting}
 
 \begin{verbatim}
-       Generalized pairwise comparison with 1 prioritized endpoint
+      Generalized pairwise comparisons with 1 endpoint
 
-> statistic       : net chance of a better outcome (delta: endpoint specific, Delta: global) 
+> statistic       : net benefit (delta: endpoint specific, Delta: global) 
 > null hypothesis : Delta == 0 
 > treatment groups: 1 (control) vs. 2 (treatment) 
 > censored pairs  : uninformative pairs
-
 > results
 endpoint threshold total favorable unfavorable neutral uninf   delta   Delta
     time     1e-12   100      41.6       45.12   13.28     0 -0.0352 -0.0352
@@ -884,9 +693,9 @@ summary(e.BT.bis, percentage = TRUE)
 \end{lstlisting}
 
 \begin{verbatim}
-       Generalized pairwise comparison with 1 prioritized endpoint
+      Generalized pairwise comparisons with 1 endpoint
 
-> statistic       : net chance of a better outcome (delta: endpoint specific, Delta: global) 
+> statistic       : net benefit (delta: endpoint specific, Delta: global) 
 > null hypothesis : Delta == 0 
 > treatment groups: 1 (control) vs. 2 (treatment) 
 > results
@@ -911,9 +720,8 @@ favorable unfavorable     neutral
  42.66667    44.00000    13.33333
 \end{verbatim}
 
-\subsubsection{BuyseTest (with censoring)}
-\label{sec:orga14aa37}
-
+\item Censoring
+\label{sec:orgced04b7}
 Simulate data:
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
@@ -925,19 +733,19 @@ BuyseTest (biased):
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 e.BTC <- BuyseTest(group ~ tte(time, censoring = eventC), data = df,
-				   method.inference = "none", method.tte = "Gehan",
+				   method.inference = "none", scoring.rule = "Gehan",
 				   trace = 0)
 summary(e.BTC, percentage = TRUE)
 \end{lstlisting}
 
 \begin{verbatim}
-       Generalized pairwise comparison with 1 prioritized endpoint
+      Generalized pairwise comparisons with 1 endpoint
 
-> statistic       : net chance of a better outcome (delta: endpoint specific, Delta: global) 
+> statistic       : net benefit (delta: endpoint specific, Delta: global) 
 > null hypothesis : Delta == 0 
 > treatment groups: 1 (control) vs. 2 (treatment) 
 > censored pairs  : uninformative pairs
-
+> uninformative pairs: no contribution at the current endpoint, analyzed at later endpoints (if any)
 > results
 endpoint threshold total favorable unfavorable neutral uninf   delta   Delta
     time     1e-12   100      31.1       35.15    8.65  25.1 -0.0406 -0.0406
@@ -947,33 +755,34 @@ BuyseTest (unbiased):
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 e.BTCC <- BuyseTest(group ~ tte(time, censoring = eventC), data = df,
-				   method.inference = "none", method.tte = "Gehan corrected",
-				   trace = 0)
+					method.inference = "none", scoring.rule = "Gehan",
+					correction.uninf = 2,
+					trace = 0)
 summary(e.BTCC, percentage = TRUE)
 \end{lstlisting}
 
 \begin{verbatim}
-       Generalized pairwise comparison with 1 prioritized endpoint
+      Generalized pairwise comparisons with 1 endpoint
 
-> statistic       : net chance of a better outcome (delta: endpoint specific, Delta: global) 
+> statistic       : net benefit (delta: endpoint specific, Delta: global) 
 > null hypothesis : Delta == 0 
 > treatment groups: 1 (control) vs. 2 (treatment) 
 > censored pairs  : uninformative pairs
-                    IPW for uninformative pairs
-
+> uninformative pairs: no contribution, their weight is passed to the informative pairs using IPCW
 > results
 endpoint threshold total favorable unfavorable neutral uninf   delta   Delta
     time     1e-12   100     41.52       46.94   11.54     0 -0.0542 -0.0542
 \end{verbatim}
 
-\subsubsection{Cumulative incidence}
-\label{sec:org33dceae}
+\item Cumulative incidence
+\label{sec:org0f869a2}
 
 Settings:
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 alphaE <- 2
 alphaCR <- 1
+n <- 1e3
 \end{lstlisting}
 
 Simulate data:
@@ -1026,11 +835,89 @@ mean((df$time<=1)*(df$event==1))
 
 
 
+\clearpage
+\end{enumerate}
+
+\section{Scoring rules in the survival case}
+\label{sec:orgf63586d}
+Let's consider the following random variables:  
+\begin{itemize}
+\item \(X\) the time to the occurrence of the event in the experimental group.
+\item \(\Xobs\) the censored event time in the experimental group,
+i.e. \(\Xobs = X \wedge C_X\) where \(C_X\) denotes the censoring time in the experimental group.
+\item \(\CensT = \Ind[X \leq C_X]\) the event indicator in the experimental group.
+\item \(Y\) the time to the occurrence of the event in the control group.
+\item \(\Yobs\) the censored event time in the control group,
+i.e. \(\Yobs = X \wedge C_Y\) where \(C_Y\) denotes the censoring time in the control group.
+\item \(\CensC = \Ind[Y \leq C_Y]\) the event indicator in the control group.
+\end{itemize}
+
+We denote by \(\sample_{ij}=\left(\xobs_{i}, \yobs_{j}, \censT_i, \censC_j
+\right)\) one realization of the random variables \(\left(\Xobs,
+\Yobs, \censT, \censC \right)\). We use the short notation \(x \wedge
+y = \min(x,y)\), \(x \vee y = \max(x,y)\), and \(\sample =
+\left(\sample_{ij}\right)_{i \in \{1,\ldots,n\},j \in
+\{1,\ldots,m\}}\).
+
+
+\subsection{Partial ordering in presence of right-censored data}
+\label{sec:org6dbef8b}
+In presence of right censoring we may not be able to compute the
+partial ordering between two realizations of an outcome, say \(x_l\)
+and \(y_l\). Indeed we only observe a lower bound of the realized
+outcomes \(\xobs_l\) and \(\yobs_l\). But we can re-define the partial
+ordering as the expected ordering given our knowledge of the
+distribution of \(\VX\) and \(\VY\):
+\begin{align*}
+x_k \succ y_k = \Prob\left[x_k \in [y_k + \tau_k, y_k + h(\tau_k)[ | \sample \right]
+\end{align*}
+In a similar fashion we can express the neutral score by:
+\begin{align*}
+\nu_k = \Prob[|x_k - y_k| < \tau_k | \sample] 
+\end{align*}
+and the weights are defined by:
+\begin{align*}
+w_k = \left\{ \begin{array}{c} 1\text{, if } k = 1 \\ \prod_{k' \in S_k} \nu_{k'} \text{, otherwise} \end{array} \right.
+\end{align*}
+
+\subsection{Gehan scoring rule}
+\label{sec:orgc436b52}
+TO BE DONE
+
+\subsection{Peron scoring rule when the survival curve is known}
+\label{sec:orgc986af3}
+
+We use the following estimator for the probability to be in favor of
+the treatment:
+\begin{align*}
+\hat{\Prob}[\VX \succ \VY + \Vtau] \approx \frac{1}{nm} \sum_{k=1}^K \Prob[w_k=1 |\sample]\Prob[X_k \geq Y_k + \tau_k|\sample]
+\end{align*}
+This approximation is exact for independent outcomes or when the same
+outcome is used at several priorities. In presence of correlated
+outcomes we are neglecting a covariance term. To be more precise let
+consider the case of two distincts, not independent, outcomes. We make
+the following approximation:
+\begin{align*}
+\Esp\left[ \Prob[w_k=1|\sample]\Prob[X_k \geq Y_k + \tau_k|\sample] \right] \approx \Esp[]
+\end{align*}
+
+TO BE CONTINUED
+
+\subsection{Peron scoring rule when the survival curve is estimated}
+\label{sec:orga5719e2}
+
+TO BE DONE
+
+\section{Scoring rules in the competing risk case}
+\label{sec:org203e292}
+TO BE DONE
 
 \clearpage
 
-\section{Inverse probability weighting}
-\label{sec:orge2c78fd}
+\section{Corrections for uninformative pairs}
+\label{sec:org6505fcb}
+\subsection{Inverse probability weighting}
+\label{sec:org8bcacc2}
 
 In case of censoring we can use an inverse probability weighting
 approach. Let denote \(\delta_{c,X}\) (resp. \(\delta_{c,Y}\)) the
@@ -1065,50 +952,56 @@ where we used the law of total expectation (first line) and the independence bet
 \clearpage
 
 \section{Asymptotic distribution}
-\label{sec:org365371b}
-
-In this section we restrict ourself to the GPC as defined in
-\citep{buyse2010generalized}, i.e. we do not consider Peron scoring rule
-nor any correction (like inverse probability weighting).
-
-\subsection{Theory}
-\label{sec:org9b9493b}
+\label{sec:orge35da5b}
 
 We consider two independent samples \(x_1,x_2,\ldots,x_m\) and
 \(y_1,y_2,\ldots,y_n\) where the first one contains iid realisations
 of a random variable \(X\) and the second one contains iid
-realisations of a second variable \(Y\). For each realisation we
-observe \(p\) endpoints.
-
-\bigskip
-
-
-The estimator of the net benefit can be written as the difference
-between two estimators:
+realisations of a second variable \(Y\). To simplify the notation
+\(x_1\) represent all the information relative to the first
+observation in the treatment group (e.g. the right-censored time to
+event and event type indicator). For each realisation we observe \(p\)
+endpoints. The estimator of the net benefit can be written as the
+difference between two estimators:
 \begin{align*}
-\hat{\Delta}_\tau = \widehat{\Prob}[X \geq Y+\tau] - \widehat{\Prob}[Y \geq Y+\tau]
+\hat{\Delta}_\tau = \widehat{\Prob}[X \geq Y+\tau] - \widehat{\Prob}[Y \geq X+\tau]
 \end{align*}
-We denote by \(\phi_k\) the scoring rule relative to \(\Prob[X \geq
-Y+\tau]\) for the endpoint \(k\),
-e.g. \(\phi_k(x_1,y_1)=\Ind[x_1>y_1]\) for a binary endpoint. The
-scoring rule may depend of additional arguments, e.g. a threshold
-\(\tau\) but this will be ignored for the moment. Finally, we denote
+These two estimators are symmetric so it is sufficient to study one of
+them. Indeed, we will see that each of them can be express as the sum
+of iid terms, so they are jointly normally distributed. The iid terms
+will enable us to estimate the variance-covariance matrix between the
+two estimators and therefore to obtain the variance of the estimator
+of the net benefit.
+
+\subsection{Gehan scoring rule}
+\label{sec:orga0c1e42}
+\subsubsection{\Hajek projection}
+\label{sec:orgffda209}
+
+In this section we restrict ourself to the GPC as defined in
+\citep{buyse2010generalized}, i.e. we do not consider Peron scoring rule
+nor any correction (like inverse probability weighting). We denote by
+\(\phi_{k}\) the scoring rule relative to \(\Prob[X \geq Y+\tau]\) for
+the endpoint \(k\), e.g. \(\phi_{k}(x_{1},y_{1})=\Ind\left[x_{1k} \geq
+y_{1k}+\tau_k\right]\) for a binary endpoint. The scoring rule may
+depend of additional arguments, e.g. the threshold \(\tau_k\) but this
+will be ignored (since their are known quantities). Finally, we denote
 by \(k_{ij}\) the endpoint at which the pair \((i,j)\) is classified
 as favorable or unfavorable. If this does not happen then
 \(k_{ij}=p\). With this notations, the estimator \(\widehat{\Prob}[X
 \geq Y+\tau]\) can be written as a U-statistic:
 \begin{align*}
-\widehat{\Prob}[X \geq Y+\tau] = \frac{1}{mn} \sum_{i=1}^m \sum_{j=1}^n \phi_{k_{ij}}(x_1,y_1)
+\widehat{\Prob}[X \geq Y+\tau] = \frac{1}{mn} \sum_{i=1}^m \sum_{j=1}^n \phi_{k_{ij}}(x_i,y_j)
 \end{align*}
 This is a two sample U-statistic of order (1,1) with kernel
 \(\phi_{k_{ij}}(x_1,y_1)\) (trivially symmetric in \(x\) and \(y\)
 separately). From the U-statistic theory (e.g. see appendix
 \ref{SM:Ustat}), it follows that \(\widehat{\Prob}[X \geq Y+\tau]\) is
 unbiased, normally distributed, and its iid decomposition is the
-H\(\'{a}\)jek projection:
+\Hajek projection:
 \begin{align*}
-H^{(1)}(\widehat{\Prob}[X \geq Y+\tau]) &= \frac{1}{m} \sum_{i=1}^m \left( \Esp[\phi_{k_{ij}}(x_i,y_j) \bigg| x_i] - \widehat{\Prob}[X \geq Y+\tau] \right) \\
-& \qquad + \frac{1}{n} \sum_{j=1}^n \left( \Esp[\phi_{k_{ij}}(x_i,y_j) \bigg| y_j] - \widehat{\Prob}[X \geq Y+\tau]\right) \\
+H^{(1)}(\widehat{\Prob}[X \geq Y+\tau]) &= \frac{1}{m} \sum_{i=1}^m \left( \Esp[\phi_{k_{ij}}(x_i,y_j) \bigg| x_i] - \Prob[X \geq Y+\tau] \right) \\
+& \qquad + \frac{1}{n} \sum_{j=1}^n \left( \Esp[\phi_{k_{ij}}(x_i,y_j) \bigg| y_j] - \Prob[X \geq Y+\tau]\right) \\
 &= \sum_{l=1}^{m+n} H^{(1)}_l(\widehat{\Prob}[X \geq Y + \tau])
 \end{align*}
 where \(H^{(1)}_l(\widehat{\Prob}[X \geq Y + \tau])\) are the
@@ -1116,18 +1009,55 @@ individual terms of the iid decomposition. For instance in the binary
 case, the term relative to the \(i-th\) observation of the
 experimental group is:
 \begin{align*}
-H^{(1)}_i(\widehat{\Prob}[X \geq Y + \tau]) & = \frac{\Esp[\phi_{k_{ij}}(x_i,y) \bigg| x_i]-\widehat{\Prob}[X \geq Y+\tau]}{m} = \left\{ \begin{array}{cc} 
- \frac{1-p_y-\widehat{\Prob}[X \geq Y+\tau]}{m} \text{ if } x = 1 \\
-\frac{-\widehat{\Prob}[X \geq Y+\tau]}{m} \text{ if } x = 0 \\
+H^{(1)}_i(\widehat{\Prob}[X \geq Y + \tau]) & = \frac{\Esp[\phi_{k_{ij}}(x_i,y) \bigg| x_i]-\Prob[X \geq Y+\tau]}{m} = \left\{ \begin{array}{cc} 
+ \frac{1-p_y-\Prob[X \geq Y+\tau]}{m} \text{ if } x = 1 \\
+\frac{-\Prob[X \geq Y+\tau]}{m} \text{ if } x = 0 \\
 \end{array} \right. 
 \end{align*}
 where \(p_y\) is the proportion of 1 in the control group.
 
+\subsubsection{Variance estimator based on the \Hajek projection}
+\label{sec:orga5f0fbc}
+
+The \Hajek projection can be used to estimate the variance of \(\widehat{\Prob}[X \geq Y+\tau]\).
+Indeed, since:
+\begin{align*}
+\left(\widehat{\Prob}[X \geq Y+\tau] - \Prob[X \geq Y+\tau] \right) = H^{(1)}(\widehat{\Prob}[X \geq Y + \tau]) + o_p \left( n^{-\half} \right)
+\end{align*}
+We obtain that asymptotically:
+\begin{align*}
+\Var\left[\widehat{\Prob}[X \geq Y+\tau]\right] &= \frac{\sigma_{1,0}^2}{n} + \frac{\sigma_{0,1}^2}{m} = \sum_{l=1}^{m+n} \left(H^{(1)}_l(\widehat{\Prob}[X \geq Y + \tau]) \right)^2 \\
+\text{where } \sigma_{1,0}^2 &= \frac{1}{m}\sum_{i=1}^m \left(\Esp[\phi_{k_{ij}}(x_i,y) \bigg| x_i]-\Prob[X \geq Y+\tau]\right)^2 = m\sum_{i=1}^m \left(H^{(1)}_i(\widehat{\Prob}[X \geq Y + \tau]) \right)^2 \\
+\text{and   } \sigma_{0,1}^2 &= \frac{1}{n}\sum_{j=1}^n \left(\Esp[\phi_{k_{ij}}(x_i,y) \bigg| y_j]-\Prob[X \geq Y+\tau] \right)^2 = n\sum_{j=1}^n \left(H^{(1)}_j(\widehat{\Prob}[X \geq Y + \tau]) \right)^2
+\end{align*}
+Similarly we obtain:
+\begin{align*}
+\Var\left[\widehat{\Prob}[Y \geq X+\tau]\right] &= \sum_{l=1}^{m+n} \left(H^{(1)}_l(\widehat{\Prob}[Y \geq X + \tau]) \right)^2 \\
+\Cov\left[\widehat{\Prob}[X \geq Y+\tau],\widehat{\Prob}[Y \geq X+\tau]\right] &= \sum_{l=1}^{m+n} \left(H^{(1)}_l(\widehat{\Prob}[X \geq Y + \tau])H^{(1)}_l(\widehat{\Prob}[Y \geq X + \tau]) \right) \\
+\end{align*}
+
+\subsubsection{Variance estimator based on a second order H-decomposition}
+\label{sec:org0c1727d}
+
+An better estimator (i.e. unbiased) of the variance of
+\(\widehat{\Prob}[X \geq Y+\tau]\) can be obtained using a second
+order H-decomposition. As explained in the appendix \ref{SM:Ustat}, the
+formula for the variance becomes:
+\begin{align*}
+\Var\left[\widehat{\Prob}[X \geq Y+\tau]\right] &= \frac{1}{nm} \left((m-1)\sigma_{1,0}^2 + (n-1)\sigma_{0,1}^2 + \sigma_{1,1}^2\right) \\
+\text{where } \sigma_{1,1}^2 &= \Esp[\phi_{k_{ij}}(x_i,y_j)^2] - \Prob[X \geq Y+\tau]^2
+\end{align*}
+Note that since we consider binary scores,
+\(\phi_{k_{ij}}(x_i,y_j)^2=\phi_{k_{ij}}(x_i,y_j)\) so
+\(\sigma_{1,1}^2=\Prob[X \geq Y+\tau](1-\Prob[X \geq Y+\tau])\). When
+computing the covariance \(\sigma_{1,1}^2 = -\Prob[X \geq
+Y+\tau]\Prob[Y \geq X+\tau]\) because \(\Ind[x_i \geq y_j +
+\tau]\Ind[y_j \geq x_i + \tau]=0\).
 
 \clearpage
 
-\subsection{Example}
-\label{sec:org0c112e8}
+\subsubsection{Example}
+\label{sec:org185f30d}
 
 Let's consider a case with 2 observations per group:
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
@@ -1180,9 +1110,10 @@ We can use the method \texttt{iid} to extract the iid decomposition in the
 BuyseTest package:
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
+BuyseTest.options(order.Hprojection = 1)
 e.BT <- BuyseTest(group ~ bin(toxicity), data = d, 
 				  keep.pairScore = TRUE,
-				  method.inference = "asymptotic", trace = 0)
+				  method.inference = "u-statistic", trace = 0)
 iid(e.BT)
 \end{lstlisting}
 
@@ -1213,8 +1144,8 @@ e.BT@covariance
 \end{lstlisting}
 
 \begin{verbatim}
-         favorable unfavorable covariance
-toxicity    0.0625      0.0625    -0.0625
+             favorable unfavorable covariance netBenefit winRatio
+toxicity_0.5    0.0625      0.0625    -0.0625       0.25        4
 \end{verbatim}
 
 Note that we could also estimate the variance via the formula given in
@@ -1231,29 +1162,116 @@ Y_2\) (when \(X=x_1\) and \(Y_1=Y_2=y_2\)). This is what is performed when calli
 \begin{lstlisting}
 e2.BT <- BuyseTest(group ~ bin(toxicity), data = d, 
 				  keep.pairScore = TRUE,
-				  method.inference = "asymptotic-bebu", trace = 0)
+				  method.inference = "u-statistic-bebu", trace = 0)
 e2.BT@covariance
 \end{lstlisting}
 
 \begin{verbatim}
-         favorable unfavorable covariance
-toxicity    0.0625      0.0625    -0.0625
+             favorable unfavorable covariance netBenefit winRatio
+toxicity_0.5    0.0625      0.0625    -0.0625       0.25        4
 \end{verbatim}
+
+\bigskip
+
+Let's now consider the second order decomposition. For the variance of
+\(\widehat{\Prob}[Y \geq X + \tau]\):
+\begin{itemize}
+\item \(\sigma^{2}_{1,1}=1/4(1-1/4)=3/16\)
+\item \(\sigma^{2}_{1,0}=\frac{(-1/4)^2+(1/4)^2}{2} = 1/16\)
+\item \(\sigma^{2}_{0,1}=\frac{(1/4)^2+(-1/4)^2}{2}  = 1/16\)
+\end{itemize}
+So \(\sigma^2_{favorable}\) becomes
+\(\frac{1}{2*2}\left((2-1)\frac{1}{16}+(2-1)\frac{1}{16}+\frac{3}{16}\right)=\frac{5}{64}\)
+
+\bigskip
+
+For the covariance between \(\widehat{\Prob}[Y \geq X + \tau]\) and
+\(\widehat{\Prob}[X \geq Y + \tau]\):
+\begin{itemize}
+\item \(\sigma^{2}_{1,1}=- (1/4)(1/4)  = -1/16\)
+\item \(\sigma^{2}_{1,0}=- 1/16\)
+\item \(\sigma^{2}_{0,1}=- 1/16\)
+\end{itemize}
+So the covariance betwen the estimators equals
+\(\frac{1}{2*2}\left((2-1)\frac{-1}{16}+(2-1)\frac{-1}{16}-\frac{1}{16}\right)=\frac{3}{64}\). This
+is exactly what BuyseTest outputs:
+
+\lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
+\begin{lstlisting}
+BuyseTest.options(order.Hprojection = 2)
+e.BT <- BuyseTest(group ~ bin(toxicity), data = d, 
+				  keep.pairScore = TRUE,
+				  method.inference = "u-statistic", trace = 0)
+e.BT@covariance
+\end{lstlisting}
+
+\begin{verbatim}
+             favorable unfavorable covariance netBenefit winRatio
+toxicity_0.5  0.078125    0.078125  -0.046875       0.25        4
+\end{verbatim}
+
+
 
 \clearpage
 
+\subsection{Peron scoring rule}
+\label{sec:orgb6e9f70}
+\subsubsection{Decomposition in iid terms}
+\label{sec:org98273ee}
+
+The Peron scoring rule involve survival probabilities that are
+estimated via a Kaplan Meier estimator in each group. These estimators
+admit the following expansion:
+\begin{align*}
+\sqrt{m}\left( \SurvThat - \SurvT \right) &= \frac{1}{\sqrt{m}} \sum_{i=1}^m \psi_{\SurvT}(x_i) + o_p(1)  \\
+\sqrt{n}\left( \SurvChat - \SurvC \right) &= \frac{1}{\sqrt{n}} \sum_{j=1}^n \psi_{\SurvC}(y_j) + o_p(1)
+\end{align*}
+Denoting by \(F\) the cumulative distribution function (cdf) relative
+to \(X\) and \(G\) the one relative to \(Y\). We will denote by
+\(F_n\) and \(G_n\) their empirical counterpart. Then we can re-write
+\(\widehat{\Prob}[X \geq Y+\tau]\) as
+\(\Delta_{\tau}(F_n,G_n,\SurvChat,\SurvThat)\) and obtain the
+following decomposition:
+\begin{align*}
+&\sqrt{N}\left(\Delta_{\tau}(F_n,G_n,\SurvChat,\SurvThat)-\Delta_{\tau}(F,G,\SurvC,\SurvT) \right) \\
+&=  \sqrt{N}\left(\Delta_{\tau}(F_n,G_n,\SurvChat,\SurvThat)-\Delta_{\tau}(F_n,G_n,\SurvC,\SurvT) \right)
++  \sqrt{N}\left(\Delta_{\tau}(F_n,G_n,\SurvC,\SurvT)-\Delta_{\tau}(F,G,\SurvC,\SurvT) \right)
+\end{align*}
+The second term has been treated in the previous section, so we can focus on the first term. 
+\begin{align*}
+\sqrt{N}\left(\Delta_{\tau}(F_n,G_n,\SurvChat,\SurvThat)-\Delta_{\tau}(F_n,G_n,\SurvC,\SurvT) \right)
+&= \frac{\sqrt{N}}{nm} \sum_{i=1}^m \sum_{j=1}^n \phi(x_i,y_j,\SurvChat,\SurvThat) - \phi(x_i,y_j,\SurvC,\SurvT) \\
+\end{align*}
+So for uncensored observations this term is 0. For censored
+observations, we need to take look term by term.
+\begin{itemize}
+\item if \(\phi(x_i,y_j,\SurvC,\SurvT) = 1-\frac{\SurvC(\xobs-\tau)}{\SurvC(\yobs)}\) then:
+\end{itemize}
+\begin{align*}
+\phi(x_i,y_j,\SurvChat,\SurvThat) - \phi(x_i,y_j,\SurvC,\SurvT) &= -\left( \frac{\SurvChat(\xobs_i-\tau)}{\SurvChat(\yobs_j)} - \frac{\SurvC(\xobs_i-\tau)}{\SurvC(\yobs_j)} \right) \\
+&= -\left( \frac{\SurvChat(\xobs_i-\tau)}{\SurvChat(\yobs_j)} - \frac{\SurvC(\xobs_i-\tau)}{\SurvChat(\yobs_j)} + \frac{\SurvC(\xobs_i-\tau)}{\SurvChat(\yobs_j)} - \frac{\SurvC(\xobs_i-\tau)}{\SurvC(\yobs_j)} \right)  \\
+&= -\left( \frac{\SurvChat(\xobs_i-\tau)-\SurvC(\xobs_i-\tau)}{\SurvChat(\yobs_j)} - \frac{\SurvC(\xobs_i-\tau)(\SurvChat(\yobs_j)-\SurvC(\yobs_j))}{\SurvChat(\yobs_j)\SurvC(\yobs_j)} \right)  \\
+&= -\left( \frac{1}{\SurvC(\yobs_j)} \frac{1}{n} \sum_{k=1}^n \psi_{\SurvC,k}(\xobs_i-\tau) - \frac{\SurvC(\xobs_i-\tau)}{\SurvC^2(\yobs_j)} \frac{1}{m} \sum_{k=1}^m \psi_{\SurvT,m}(\yobs_j)\right)  \\
+\end{align*}
+
+
+
+
+\subsubsection{Example}
+\label{sec:org715b87d}
+
 \subsection{Type 1 error in finite sample}
-\label{sec:orgab4b0a3}
+\label{sec:orga01dbf4}
 
 \subsubsection{Binary endpoint}
-\label{sec:org6f6c790}
+\label{sec:org3230a9f}
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 tpsBin <- system.time(
 	eBin.power <- powerBuyseTest(sim = simBuyseTest, n.rep = 1e3, cpus = 4,
 								 formula = Treatment ~ bin(toxicity),
 								 sample.size = c(10,25,50,100,250),                                   
-								 method.inference = "asymptotic", trace = 0,
+								 method.inference = "u-statistic", trace = 0,
 								 transform = c(TRUE,FALSE), order.Hprojection = 1:2)
 )
 \end{lstlisting}
@@ -1307,14 +1325,14 @@ n.T n.C mean.estimate sd.estimate order mean.se rejection (FALSE) rejection (TRU
 \clearpage
 
 \subsubsection{Continuous endpoint}
-\label{sec:org4e2f1b1}
+\label{sec:orgb65faa7}
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 tpsCont <- system.time(
 	eCont.power <- powerBuyseTest(sim = simBuyseTest, n.rep = 1e3, cpus = 4,
 								  formula = Treatment ~ cont(score), 
 								  sample.size = c(10,25,50,100,250), 
-								  method.inference = "asymptotic", trace = 0,
+								  method.inference = "u-statistic", trace = 0,
 								  transform = c(TRUE,FALSE), order.Hprojection = 1:2)
 )
 \end{lstlisting}
@@ -1368,16 +1386,16 @@ n.T n.C mean.estimate sd.estimate order mean.se rejection (FALSE) rejection (TRU
 \clearpage
 
 \subsubsection{Time to event endpoint (Gehan method)}
-\label{sec:org455f214}
+\label{sec:org0fc555e}
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 tpsGehan <- system.time(
 	eGehan.power <- powerBuyseTest(sim = simBuyseTest, n.rep = 1e3, cpus = 4,
 								   formula = Treatment ~ tte(eventtime, 
 															 censoring = status), 
-								   method.tte = "Gehan",
+								   scoring.rule = "Gehan",
 								   sample.size = c(10,25,50,100,250), 
-								   method.inference = "asymptotic", trace = 0
+								   method.inference = "u-statistic", trace = 0
 								   transform = c(TRUE,FALSE), order.Hprojection = 1:2)
 )
 \end{lstlisting}
@@ -1419,16 +1437,16 @@ summary(eGehan.power, statistic = c("netBenefit","winRatio"),
 \clearpage
 
 \subsubsection{Time to event endpoint (Peron method)}
-\label{sec:org3f23fac}
+\label{sec:orgde3aa80}
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}
 tpsPeron <- system.time(
 	ePeron.power <- powerBuyseTest(sim = simBuyseTest, n.rep = 1e3, cpus = 4,
 								   formula = Treatment ~ tte(eventtime, 
 															 censoring = status), 
-								   method.tte = "Peron",
+								   scoring.rule = "Peron",
 								   sample.size = c(10,25,50,100,250), 
-								   method.inference = "asymptotic", trace = 0
+								   method.inference = "u-statistic", trace = 0
 								   transform = c(TRUE,FALSE), order.Hprojection = 1:2)
 )
 \end{lstlisting}
@@ -1470,7 +1488,7 @@ summary(ePeron.power, statistic = c("netBenefit","winRatio"),
 \clearpage
 
 \section{References}
-\label{sec:org981a8dc}
+\label{sec:orgbf35200}
 \begingroup
 \renewcommand{\section}[2]{}
 \bibliographystyle{apalike}
@@ -1487,7 +1505,7 @@ summary(ePeron.power, statistic = c("netBenefit","winRatio"),
 This recall is based on chapter 1 of \cite{lee1990u}.
 
 \subsection{Motivating example}
-\label{sec:org3299456}
+\label{sec:org95bfc16}
 
 We will illustrate basic results on U-statistics with the following
 motivating question: "what is the asymptotic distribution of the
@@ -1499,7 +1517,7 @@ distributed (iid) realisations \((x_1,\ldots,x_n)\) of the random
 variable cholesterol, denoted \(X\). We ignore any measurement error.
 
 \subsection{Estimate, estimator, and functionnal}
-\label{sec:org391a341}
+\label{sec:orgba588dd}
 
 We can compute an \textbf{estimate} of the variance using the following
 \textbf{estimators} \(\hat{\mu}\) and \(\hat{\sigma}^2\):
@@ -1571,7 +1589,7 @@ transforms the data into an estimate.
 \end{itemize}
 
 \subsection{Aim}
-\label{sec:org0fb7494}
+\label{sec:orgcf171a9}
 
 Using formula \eqref{eq:m(F)} and \eqref{eq:s(F)} we can easily estimate
 the variance based on the observed realisations of \(X\) (i.e. the
@@ -1636,7 +1654,7 @@ central limit theorem. It does not give us a formula for the
 asymptotic variance though. 
 
 \subsection{Definition of a U-statistic and examples}
-\label{sec:org9c1b613}
+\label{sec:orge9acc9d}
 
 A U-statistic with kernel \(h\) of order \(k\) is an estimator of the
 form:
@@ -1664,17 +1682,33 @@ function:
 U-statistic, but this requires a little bit more work to see that:
 \begin{align*}
 \hat{\sigma}^2 &= \frac{1}{n-1} \sum_{i=1}^n (x_i-\hat{\mu})^2 = \frac{1}{n-1} \sum_{i=1}^n \left(x_i^2 - 2 x_i \hat{\mu} + \hat{\mu}^2\right) \\
-&=  \frac{1}{n-1} \sum_{i=1}^n \left(x_i^2 - 2 x_i \frac{1}{n} \sum_{j=1}^n x_j + \hat{\mu}^2\right) \\
-&=  \frac{1}{n(n-1)} \sum_{i=1}^n \sum_{j=1}^n \left( x_i^2 - 2 x_i  x_j + \hat{\mu}^2 \right) \\
-&=  \frac{1}{n(n-1)} \sum_{i=1}^n \sum_{j=1}^n \left( (x_i - x_j)^2 - x_j^2 + \hat{\mu}^2 \right) \\
-&=  \frac{1}{n(n-1)} \sum_{i=1}^n \sum_{j=1}^n (x_i - x_j)^2 - \frac{1}{n-1} \sum_{j=1}^n \left(x_j^2 - \hat{\mu}^2\right)
-=  \frac{1}{n(n-1)} \sum_{i=1}^n \sum_{j=1}^n (x_i - x_j)^2 - \hat{\sigma}^2 \\
+&=  \frac{1}{n-1} \sum_{i=1}^n \left(x_i^2 - 2 x_i \frac{1}{n} \sum_{j=1}^n x_j + \hat{\mu}^2\right) =  \frac{1}{n(n-1)} \sum_{i=1}^n \sum_{j=1}^n \left( x_i^2 - 2 x_i  x_j + \hat{\mu}^2 \right) \\
+&=  \frac{1}{n(n-1)} \sum_{i=1}^n \sum_{j=1}^n \left( (x_i - x_j)^2 - x_j^2 + \hat{\mu}^2 \right) =  \frac{1}{n(n-1)} \sum_{i=1}^n \sum_{j=1}^n (x_i - x_j)^2 - \frac{1}{n-1} \sum_{j=1}^n \left(x_j^2 - \hat{\mu}^2\right) \\
+&=  \frac{1}{n(n-1)} \sum_{i=1}^n \sum_{j=1}^n (x_i - x_j)^2 - \hat{\sigma}^2 \\
 \hat{\sigma}^2 &=  \frac{1}{n(n-1)} \sum_{i=1}^n \sum_{j=1}^n \frac{(x_i - x_j)^2}{2} 
 =  \frac{2}{n(n-1)} \sum_{i=1}^n \sum_{i<j}^n \frac{(x_i - x_j)^2}{2}
-\hat{\sigma}^2 =  \frac{1}{{n \choose 2}} \sum_{i=1}^n \sum_{i<j}^n \frac{(x_i - x_j)^2}{2} 
+=  \frac{1}{{n \choose 2}} \sum_{i=1}^n \sum_{i<j}^n \frac{(x_i - x_j)^2}{2} 
 \end{align*}
-So the variance estimator is a U-statistic of order 2 with kernel
-\(h(x_1,x_2)=\frac{(x_1 - x_2)^2}{2}\).
+where we have used that \(\sum_{i=1}^n \left( - 2 x_i \hat{\mu} +
+\hat{\mu}^2\right) = \left( - 2 n \hat{\mu}^2 + n \hat{\mu}^2\right) =
+\sum_{i=1}^n - \hat{\mu}^2\). So the variance estimator is a
+U-statistic of order 2 with kernel \(h(x_1,x_2)=\frac{(x_1 -
+x_2)^2}{2}\).
+
+\clearpage
+
+We can verify that numerically:
+\lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
+\begin{lstlisting}
+M.combn <- combn(length(x),2) ## create all pairs
+xi_minus_xj <- apply(M.combn,2, function(iPair){(x[iPair[1]]-x[iPair[2]])})
+mean(xi_minus_xj^2/2) - var(x)
+\end{lstlisting}
+
+\begin{verbatim}
+[1] 2.3
+\end{verbatim}
+
 
 \bigskip
 
@@ -1707,7 +1741,7 @@ estimator is:
 \end{align*}
 
 \subsection{A major result from the U-statistic theory}
-\label{sec:orgd3ce90b}
+\label{sec:orgd19dfd3}
 
 So far we have seen that our estimator for the variance was a
 U-statistic. We will now use the U-statistic theory to obtain its
@@ -1733,7 +1767,7 @@ remains to see what is this H-decomposition and how can we
 characterize it.
 
 \subsection{The first term of the H-decomposition}
-\label{sec:org8fe7194}
+\label{sec:org9676ff3}
 
 The H-decomposition (short for Hoeffling decomposition) enables us to
 decompose the estimator of a U-statistic of rank \(k\) into a sum of
@@ -1770,7 +1804,7 @@ We can now define the H-decomposition as the projection of
 \right)^{\perp}\). Here \(A^{\perp}\) indicates the space orthogonal
 to \(A\). So the first term of the H-decomposition, denoted
 \(H^{(1)}\), is the projection of \(\hat{U}-U\) on
-\(\mathcal{L}_2^{(1)}\); this is also called the H\(\'{a}\)jek
+\(\mathcal{L}_2^{(1)}\); this is also called the \Hajek
 projection. Clearly all terms of the projection are mutually
 orthogonal (or uncorrelated), they are unique (it is a projection) and
 they correspond to U-statistics of increasing degree (from \(1\) to
@@ -1850,7 +1884,7 @@ the U-statistic.
 \bigskip
 
 \textsc{Example 1}: Sample mean \\
-We first compute the H\(\'{a}\)jek projection of the mean:
+We first compute the \Hajek projection of the mean:
 \begin{align*}
 H^{(1)}_{\hat{\mu}} = \frac{1}{n} \sum_{i=1}^n \Esp[x_i|x_i]-\mu = \frac{1}{n}  \sum_{i=1}^n x_i-\mu
 \end{align*}
@@ -1862,7 +1896,7 @@ And then compute the asymptotic variance as:
 \clearpage
 
 \textsc{Example 2}: Sample variance \\
-We first compute the H\(\'{a}\)jek projection of the variance:
+We first compute the \Hajek projection of the variance:
 \begin{align*}
 H^{(1)}_{\hat{\sigma}^2} &= \frac{2}{n} \sum_{i=1}^n  \Esp[\frac{(x_i-X_2)^2}{2} \bigg|x_i]  - \sigma^2 = \frac{1}{n} \sum_{i=1}^n \Esp[x_i^2 - 2 x_i X_2 + X_2^2 \big|x_i]  - \sigma^2 \\
 &= \frac{1}{n} \sum_{i=1}^n \left( x_i^2 - 2 x_i \mu + \sigma^2 + \mu^2 \right)  - \sigma^2 \\
@@ -1887,7 +1921,7 @@ approximation is sufficient.
 \bigskip
 
 \textsc{Example 3}: Signed rank statistic \\
-We first compute the H\(\'{a}\)jek projection of the signed rank statistic:
+We first compute the \Hajek projection of the signed rank statistic:
 \begin{align*}
  H^{(1)}_{\hat{U}} &=   \frac{2}{n} \sum_{i=1}^n \Esp\left[ \Ind[x_i+X_2>0] \big|x_i \right] - U = \frac{2}{n} \sum_{i=1}^n \Prob[ X_{2} > -x_i \big|x_i] - \Prob[X_{2}> - X_{1}] \\
  &= \frac{2}{n} \sum_{i=1}^n (1 - F(-x_i)) - \Esp[x][(1 - F(-x))] \\
@@ -1904,7 +1938,7 @@ compute the asymptotic variance as:
 \end{align*}
 
 \subsection{Two sample U-statistics}
-\label{sec:orgee4ce38}
+\label{sec:org2f08c9f}
 
 So far we have assumed that all our observations were iid. But in the
 case of GPC, we study two populations (experimental arm and control
@@ -1914,7 +1948,7 @@ contains iid realisations of a random variable \(X\) and the second
 one contains iid realisations of a second variable \(Y\). We can now
 define a two-sample U-statistic of order \(k_x\) and \(k_y\) as:
 \begin{align*}
-\hat{U} = \frac{1}{{m \choose k_x}{n \choose k_y}} \sum_{(\alpha_1,\ldots,\alpha_{k_x})\in \alpha} \sum_{(\beta_1,\ldots,\beta_{k_y})\in \beta} h(x_{\alpha_{k_x}},\ldots,x_{\alpha_j},y_{\beta_1},\ldots,y_{\beta_{k_y}})
+\hat{U} = \frac{1}{{m \choose k_x}{n \choose k_y}} \sum_{(\alpha_1,\ldots,\alpha_{k_x})\in \alpha} \sum_{(\beta_1,\ldots,\beta_{k_y})\in \beta} h(x_{\alpha_{1}},\ldots,x_{\alpha_{k_x}},y_{\beta_1},\ldots,y_{\beta_{k_y}})
 \end{align*}
 where \(\alpha\) (resp. \(\beta\)) is the set of all possible
  permutations between \(k_x\) (resp. \(k_y\)) intergers chosen from
@@ -1932,7 +1966,7 @@ where \(\alpha\) (resp. \(\beta\)) is the set of all possible
 \bigskip
 
 Many results for U-statistics extends to two sample U-statistics. For
-instance the H\(\'{a}\)jek projection of \(\hat{U}-U\) becomes:
+instance the \Hajek projection of \(\hat{U}-U\) becomes:
 \begin{align*}
 H^{(1)} = \frac{k_x}{m} \sum_{i=1}^{m} \left( \Esp[h(x_1,x_2,\ldots,x_{k_x},y_1,\ldots,y_{k_y}) \big| x_i] - U \right) + \frac{k_y}{n} \sum_{j=1}^{n} \left( \Esp[h(x_1,\ldots,x_{k_x},y_1,y_2,\ldots,y_{k_y}) \big| y_j] - U \right)
 \end{align*}
@@ -1976,7 +2010,7 @@ If our parameter of interest is \(\Prob[X \leq Y]\) then the estimator:
 \hat{U} = \frac{1}{mn} \sum_{i=1}^m \sum_{j=1}^n \Ind[x_i \leq y_j]
 \end{align*}
 is a U-statistic of order \(k_x=1\) and \(k_y=1\) with kernel \(h(x,y)=\Ind[x \leq y]\)
-We first compute the H\(\'{a}\)jek projection of the signed rank statistic:
+We first compute the \Hajek projection of the signed rank statistic:
 \begin{align*}
 H_{\hat{U}}^{(1)} &= \frac{1}{m} \sum_{i=1}^m \left( \Esp\left[\Ind[x_i \leq y] \big| x_i\right] - U \right)
 + \frac{1}{n} \sum_{j=1}^n \left( \Esp\left[\Ind[x \leq y_j] \big| y_j\right] - U \right) \\
@@ -2025,40 +2059,73 @@ give the general formal for the variance that becomes in the case of a two sampl
 \Var[\hat{U}] &= \frac{\sigma^2_{1,0}}{m} + \frac{\sigma^2_{0,1}}{n} + \frac{\sigma^2_{1,1}-\sigma^2_{0,1}-\sigma^2_{1,0}}{nm} \\
 &= \frac{1}{nm} \left((n-1)\sigma^2_{1,0} + (m-1)\sigma^2_{0,1} + \sigma^2_{1,1} \right) 
 \end{align*}
-where \(\sigma^2_{1,1} = \Prob[x<y](1-\Prob[x<y])\). Indeed the second
+where \(\sigma^2_{1,1} = \Prob[x \leq y](1-\Prob[x \leq y])\). Indeed the second
 term of the H-decomposition would be the projection of \(\Ind[X \leq
-Y]\) on \(X,Y\) where we substract components of the H\(\'{a}\)jek
+Y]\) on \(X,Y\) where we substract components of the \Hajek
 projection to get the orthogonality between \(H_{\hat{U}}^{(1)}\) and
-\(H_{\hat{U}}^{(2)}\) (see theorem 3 page 4 of \cite{lee1990u} for a
+\(H_{\hat{U}}^{(2)}\) (see formula 11 page 33 of \cite{lee1990u} for a
 generic formula):
 \begin{align*}
 H_{\hat{U}}^{(2)} &= \frac{1}{mn} \sum_{i=1}^m \sum_{j=1}^n \left(\Esp\left[ \Ind[x_i \leq y_j] \big| x_i,y_j\right] - U\right) - \left(\Esp\left[ \Ind[x_i \leq y] \big| x_i\right] - U\right) - \left(\Esp\left[ \Ind[x \leq y_j] \big| y_j\right] - U\right) \\
 &= \frac{1}{mn} \sum_{i=1}^m \sum_{j=1}^n \Ind[x_i \leq y_j] - \Esp\left[ \Ind[x_i \leq y] \big| x_i\right] - \Esp\left[ \Ind[x \leq y_j] \big| y_j\right] + U
 \end{align*}
-and:
+and we retrieve the formula given page 39 of \cite{lee1990u} for the variance of the Mann-Whitney U-statistic:
 \begin{align*}
 \Var[H_{\hat{U}}^{(2)}] 
-&= \frac{1}{mn} \sum_{i=1}^m \sum_{j=1}^n \Var\left[\Ind[x_i \leq y_j]\right] - \Var\left[\Esp\left[ \Ind[x_i \leq y] \big| x_i\right]\right] - \Var\left[\Esp\left[ \Ind[x \leq y_j] \big| y_j\right]\right] \\
-& \qquad \qquad \qquad - \Cov\left[\Ind[x_i \leq y_j],\Esp\left[ \Ind[x_i \leq y] \big| x_i\right]\right] - \Cov\left[\Ind[x_i \leq y_j],\Esp\left[ \Ind[x \leq y_j] \big| y_j\right]\right] \\
-&= \frac{\sigma^2_{1,1}-\sigma^2_{0,1}-\sigma^2_{1,0}}{nm} - \frac{1}{m} \sum_{i=1}^m \sum_{j=1}^n \Cov\left[\Ind[x_i \leq y_j],\Esp\left[ \Ind[x_i \leq y] \big| x_i\right]\right] + \Cov\left[\Ind[x_i \leq y_j],\Esp\left[ \Ind[x \leq y_j] \big| y_j\right]\right]  \\
+&= \frac{1}{(mn)^2} \sum_{i=1}^m \sum_{j=1}^n \Var\left[\Ind[x_i \leq y_j]\right] + \Var\left[\Esp\left[ \Ind[x_i \leq y] \big| x_i\right]\right] + \Var\left[\Esp\left[ \Ind[x \leq y_j] \big| y_j\right]\right] \\
+& \qquad \qquad \qquad -2 \Cov\left[\Ind[x_i \leq y_j],\Esp\left[ \Ind[x_i \leq y] \big| x_i\right]\right] -2 \Cov\left[\Ind[x_i \leq y_j],\Esp\left[ \Ind[x \leq y_j] \big| y_j\right]\right] \\
+&= \frac{1}{(mn)^2} \sum_{i=1}^m \sum_{j=1}^n \Var\left[\Ind[x_i \leq y_j]\right] - \Var\left[\Esp\left[ \Ind[x_i \leq y] \big| x_i\right]\right] - \Var\left[\Esp\left[ \Ind[x \leq y_j] \big| y_j\right]\right] \\
 &= \frac{\sigma^2_{1,1}-\sigma^2_{0,1}-\sigma^2_{1,0}}{nm}
 \end{align*}
-Since:
+where the second line follows from:
 \begin{align*}
-\Cov\left[\Ind[x_i \leq y_j],\Esp\left[ \Ind[x_i \leq y] \big| x_i\right]\right] &= \Cov\left[\Ind[x_i \leq y_j],\Esp\left[1- \Ind[x_i > y] \big| x_i\right]\right] \\
-&= \Cov\left[\Ind[x_i \leq y_j],\Esp\left[- \Ind[y < x_i] \big| x_i\right]\right]
+\Cov\left[\Ind[x_i \leq y_j],\Esp\left[ \Ind[x_i \leq y] \big| x_i\right]\right] &= \Esp\left[\left(\Ind[x_i \leq y_j] - U\right)\left(\Esp\left[ \Ind[x_i \leq y] \big| x_i\right]-U\right)\right] \\
+&= \Esp\left[\Esp\left[\left(\Ind[x_i \leq y_j] - U\right)\Esp\left[ \Ind[x_i \leq y]-U \big| x_i\right]\Big| x_i \right] \right] 
+&= \Esp\left[\Esp\left[ \Ind[x_i \leq y]-U \big| x_i\right]^2 \right] \\
+&= \Var\left[\Esp\left[\Ind[x_i \leq y] \big| x_i\right] \right] 
 \end{align*}
-which under the null hypothesis that \(X\) and \(Y\) have the same
-distribution equals \(-\Cov\left[\Ind[x_i \leq y_j],\Esp\left[ \Ind[x
-\leq y_j]\right] \big| y_j\right]\). It remains to show that this is
-also true under the alternative hypothesis.
+and the last line follows from:
+\begin{align*}
+\Var\left[\Ind[x_i \leq y_j]\right] &= \Esp\left[\Ind[x_i \leq y_j]^2\right] - \Esp\left[\Ind[x_i \leq y_j]\right]^2 
+= \Esp\left[\Ind[x_i \leq y_j]\right] - \Esp\left[\Ind[x_i \leq y_j]\right]^2 \\
+&= \Esp\left[\Ind[x_i \leq y_j]\right]\left(1 - \Esp\left[\Ind[x_i \leq y_j]\right]\right)
+= \Prob[x \leq y]\left(1 - \Prob[x \leq y]\right)
+\end{align*}
 
-
+A final useful result is about the covariance between two 2-samples
+U-statistics.
+\begin{align*}
+\Cov[H_{\hat{U_1}}^{(2)},H_{\hat{U_2}}^{(2)}] 
+&= \frac{1}{(mn)^2} \sum_{i=1}^m \sum_{j=1}^n \Cov\left[U_{1,ij} - \Esp\left[ U_{1,ij} \big| i\right] - \Esp\left[ U_{1,ij} \big| j\right],
+U_{2,ij} - \Esp\left[ U_{2,ij} \big| i\right] - \Esp\left[ U_{2,ij} \big| j\right] \right] \\
+&= \frac{1}{(mn)^2} \sum_{i=1}^m \sum_{j=1}^n \Cov\left[U_{1,ij},U_{2,ij}\right] 
++ \Cov\left[\Esp\left[ U_{1,ij} \big| i\right],\Esp\left[ U_{2,ij} \big| i\right]\right]
++ \Cov\left[\Esp\left[ U_{1,ij} \big| j\right],\Esp\left[ U_{2,ij} \big| j\right]\right] \\
+&\qquad \qquad-\Cov\left[U_{1,ij},\Esp\left[ U_{1,ij} \big| i\right]\right]-\Cov\left[U_{2,ij},\Esp\left[ U_{1,ij} \big| i\right]\right] \\
+&\qquad \qquad-\Cov\left[U_{1,ij},\Esp\left[ U_{1,ij} \big| j\right]\right]-\Cov\left[U_{2,ij},\Esp\left[ U_{1,ij} \big| j\right]\right] \\
+&= \frac{1}{(mn)^2} \sum_{i=1}^m \sum_{j=1}^n \Cov\left[U_{1,ij},U_{2,ij}\right] 
+- \Cov\left[\Esp\left[ U_{1,ij} \big| i\right],\Esp\left[ U_{2,ij} \big| i\right]\right]
+- \Cov\left[\Esp\left[ U_{1,ij} \big| j\right],\Esp\left[ U_{2,ij} \big| j\right]\right] \\
+\end{align*}
+So:
+\begin{align*}
+&\Cov[U_1,U_2] \\
+&= \Cov[H_{\hat{U_1}}^{(1)},H_{\hat{U_2}}^{(1)}] + \Cov[H_{\hat{U_1}}^{(2)},H_{\hat{U_2}}^{(2)}]  \\
+&= \frac{1}{(mn)^2} \sum_{i=1}^n \sum_{j=1}^m
+  (m-1) \Cov\left[\Esp\left[ U_{1,ij} \big| i\right],\Esp\left[ U_{2,ij} \big| i\right]\right]
++ (n-1) \Cov\left[\Esp\left[ U_{1,ij} \big| j\right],\Esp\left[ U_{2,ij} \big| j\right]\right] 
++ \Cov\left[U_{1,ij},U_{2,ij}\right]
+\end{align*}
+where the last term can be computed using that:
+\begin{align*}
+\Cov\left[U_{1,ij},U_{2,ij}\right] 
+&= \Esp[\left(U_{1,ij} U_{2,ij}\right)^2] - \Esp[U_{1,ij} U_{2,ij}]^2
+\end{align*}
 
 \clearpage 
 
 \section{Information about the R session used for this document}
-\label{sec:org19ff907}
+\label{sec:org4ad64b0}
 
 \lstset{language=r,label= ,caption= ,captionpos=b,numbers=none}
 \begin{lstlisting}

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jul 12 2018 (16:58) 
 ## Version: 
-## Last-Updated: okt 30 2018 (16:21) 
+## Last-Updated: mar 28 2019 (15:09) 
 ##           By: Brice Ozenne
-##     Update #: 9
+##     Update #: 12
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,6 +18,7 @@
 if(FALSE){
     library(testthat)
     library(BuyseTest)
+    library(data.table)
 }
 
 context("Check that BuyseTest with competing risks \n")
@@ -45,7 +46,7 @@ df$event <- (df$time2<df$time1)+1 ## type of event
 ## * test
 test_that("tte = 2 is equivalent to continuous with infty when cause=2", {
     e.BT <- BuyseTest(group ~ tte(time, censoring = event), data = df,
-                      method.inference = "none", method.tte = "Gehan",
+                      method.inference = "none", scoring.rule = "Gehan",
                       trace = 0)
     ## summary(e.BT)
     df$timeXX <- df$time

@@ -53,7 +53,11 @@ setMethod(f = "getCount",
 #' @param strata [integer/character vector] the strata for which the scores should be output.
 #' @param rm.withinStrata [logical] should the columns indicating the position of each member of the pair
 #' within each treatment group be removed?
-#' @param rm.weight [logical] should the column weight be remove from the output?
+#' @param rm.strata [logical] should the column containing the level of the strata variable be removed from the output?
+#' @param rm.indexPair [logical] should the column containing the number associated to each pair be removed from the output?
+#' @param rm.weight [logical] should the column weight be removed from the output?
+#' @param rm.corrected [logical] should the columns corresponding to the scores after weighting be removed from the output?
+#' @param sum [logical] should the scores be cumulated over endpoints?
 #' @param unlist [logical] should the structure of the output be simplified when possible?
 #' @param trace [logical] should a message be printed to explain what happened
 #' when the function returned \code{NULL}?
@@ -85,6 +89,8 @@ setMethod(f = "getCount",
 ## * getPairScore (examples)
 #' @rdname BuyseRes-getPairScore
 #' @examples
+#' library(data.table)
+#' 
 #' ## run BuyseTest
 #' data(veteran,package="survival")
 #'
@@ -128,18 +134,19 @@ setMethod(f = "getCount",
 #'    testthat::expect_equal(pUF, pScore[91, unfavorable])
 #'    testthat::expect_equal(pN, pScore[91, neutral])
 #' }
+
 ## * getPairScore (code)
 #' @rdname BuyseRes-getPairScore
 setMethod(f = "getPairScore",
           signature = "BuyseRes",
-          definition = function(object, endpoint, strata,
-                                rm.withinStrata, rm.weight,
+          definition = function(object, endpoint, strata, sum,
+                                rm.withinStrata, rm.strata, rm.indexPair, rm.weight, rm.corrected,
                                 unlist, trace){
 
               if(length(object@tablePairScore)==0){
                   if(trace){
                       cat("pairScore was not exported from the object \n",
-                          "Consider setting the argument \'keep.pairScore\' to \"TRUE\" in BuyseTest.options \n", sep = "")
+                          "Consider setting the argument \'keep.pairScore\' to \"TRUE\" when calling the \"BuyseTest\" function \n", sep = "")
                   }
                   return(invisible(NULL))
               }else{
@@ -179,9 +186,6 @@ setMethod(f = "getPairScore",
                           index.strata <- which(out[[iEndpoint]]$strata %in% strata)
                           out[[iEndpoint]][, c("strata") := factor(.SD$strata, levels = 1:length(strata.names), labels = strata.names)]
                           out[[iEndpoint]] <- out[[iEndpoint]][index.strata]
-                          if(length(strata)==1 && unlist == TRUE){
-                              out[[iEndpoint]][,c("strata") := NULL]
-                          }
                       }
 
                   }
@@ -189,6 +193,24 @@ setMethod(f = "getPairScore",
                   old.names <- c("index.C", "index.T", "indexWithinStrata.C", "indexWithinStrata.T")
                   new.names <- c(paste0("index.",object@level.treatment), paste0("indexWithinStrata.",object@level.treatment))
 
+                  if(sum && length(out)>1){
+                      out.save <- out
+                      out <- out.save[1]                     
+                      for(iEndpoint in 2:length(out.save)){
+                          out[[1]][out.save[[iEndpoint]]$index.pair, c("favorable") := .SD$favorable + out.save[[iEndpoint]]$favorable]
+                          out[[1]][out.save[[iEndpoint]]$index.pair, c("unfavorable") := .SD$unfavorable + out.save[[iEndpoint]]$unfavorable]
+                          out[[1]][out.save[[iEndpoint]]$index.pair, c("neutral") := .SD$neutral + out.save[[iEndpoint]]$neutral]
+                          out[[1]][out.save[[iEndpoint]]$index.pair, c("uninf") := .SD$uninf + out.save[[iEndpoint]]$uninf]
+
+                          out[[1]][out.save[[iEndpoint]]$index.pair, c("weight") := .SD$weight + out.save[[iEndpoint]]$weight]
+
+                          out[[1]][out.save[[iEndpoint]]$index.pair, c("favorableC") := .SD$favorableC + out.save[[iEndpoint]]$favorableC]
+                          out[[1]][out.save[[iEndpoint]]$index.pair, c("unfavorableC") := .SD$unfavorableC + out.save[[iEndpoint]]$unfavorableC]
+                          out[[1]][out.save[[iEndpoint]]$index.pair, c("neutralC") := .SD$neutralC + out.save[[iEndpoint]]$neutralC]
+                          out[[1]][out.save[[iEndpoint]]$index.pair, c("uninfC") := .SD$uninfC + out.save[[iEndpoint]]$uninfC]
+                      }
+                  }
+                  
                   for(iEndpoint in 1:length(out)){ ## iEndpoint <- 1
                       if(rm.withinStrata){
                           out[[iEndpoint]][,c("indexWithinStrata.T","indexWithinStrata.C") := NULL]
@@ -196,13 +218,21 @@ setMethod(f = "getPairScore",
                       }else{
                           setnames(out[[iEndpoint]], old = old.names, new = new.names)
                       }
+                      if(rm.indexPair){
+                          out[[iEndpoint]][,c("index.pair") := NULL]
+                      }
+                      if(rm.strata){
+                          out[[iEndpoint]][,c("strata") := NULL]
+                      }
                       if(rm.weight){
                           out[[iEndpoint]][,c("weight") := NULL]
                       }
+                      if(rm.corrected){
+                          out[[iEndpoint]][,c("favorableC","unfavorableC","neutralC","uninfC") := NULL]
+                      }
                   }
-
                   
-                  if(length(endpoint) == 1 && unlist == TRUE){
+                  if(length(out) == 1 && unlist == TRUE){
                       out <- out[[1]] 
                   }
 
@@ -249,8 +279,8 @@ setMethod(f = "getSurvival",
                   if(trace>0){
                       if(all(tolower(object@type)!="timetoevent")){
                           add.txt <- "No endpoint of type time to event \n"
-                      }else if(tolower(object@method.tte)!="peron"){
-                          add.txt <- "Consider setting the argument \'method.tte\' to \"Peron\" when calling BuyseTest \n"
+                      }else if(tolower(object@scoring.rule)!="peron"){
+                          add.txt <- "Consider setting the argument \'scoring.rule\' to \"Peron\" when calling BuyseTest \n"
                       }else{
                           add.txt <- "Consider setting the argument \'keep.survival\' to TRUE in BuyseTest.options \n"
                       }

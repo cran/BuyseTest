@@ -33,7 +33,9 @@ setClass(
       endpoint = "vector",
       level.treatment = "vector",
       level.strata = "vector",
-      method.tte = "character",
+      scoring.rule = "character",
+      hierarchical = "logical",
+      neutral.as.uninf = "logical",
       correction.uninf = "numeric",
       method.inference = "character",
       strata = "vector",
@@ -44,7 +46,10 @@ setClass(
       DeltaResampling.netBenefit = "matrix",
       DeltaResampling.winRatio = "matrix",
       covariance = "matrix",
-      iid = "list",
+      covarianceResampling = "array",
+      weight = "numeric",
+      iidAverage = "list",
+      iidNuisance = "list",
       tablePairScore = "list",
       tableSurvival = "list"
       )
@@ -69,7 +74,9 @@ methods::setMethod(
                                    endpoint,
                                    level.strata,
                                    level.treatment,
-                                   method.tte,
+                                   scoring.rule,
+                                   hierarchical,
+                                   neutral.as.uninf,
                                    correction.uninf,
                                    method.inference,
                                    strata,
@@ -80,7 +87,12 @@ methods::setMethod(
                                    DeltaResampling.netBenefit,
                                    DeltaResampling.winRatio,
                                    covariance,
-                                   iid,
+                                   covarianceResampling,
+                                   weight,
+                                   iidAverage_favorable,
+                                   iidAverage_unfavorable,
+                                   iidNuisance_favorable,
+                                   iidNuisance_unfavorable,
                                    tablePairScore,
                                    tableSurvival,
                                    args){
@@ -93,6 +105,8 @@ methods::setMethod(
                  dimnames(count.neutral) <- list(level.strata, name.endpoint)
                  dimnames(count.uninf) <- list(level.strata, name.endpoint)
 
+                 names(weight) <- name.endpoint
+                 
                  ## ** delta/Delta
                  dimnames(delta.netBenefit) <- list(level.strata, name.endpoint)
                  dimnames(delta.winRatio) <- list(level.strata, name.endpoint)
@@ -124,7 +138,9 @@ methods::setMethod(
                  .Object@endpoint <- endpoint
                  .Object@level.strata <- level.strata
                  .Object@level.treatment <- level.treatment
-                 .Object@method.tte <- method.tte
+                 .Object@scoring.rule <- scoring.rule
+                 .Object@hierarchical <- hierarchical
+                 .Object@neutral.as.uninf <- neutral.as.uninf
                  .Object@correction.uninf <- correction.uninf
                  .Object@method.inference <- method.inference
                  .Object@strata <- strata
@@ -137,10 +153,28 @@ methods::setMethod(
                  .Object@DeltaResampling.netBenefit <- DeltaResampling.netBenefit
                  .Object@DeltaResampling.winRatio <- DeltaResampling.winRatio
 
-                 .Object@covariance <- covariance$Sigma
-                 .Object@iid <- list(iid1 = covariance$iid1,
-                                     iid2 = covariance$iid2)
+                 .Object@covariance <- covariance
+                 if(NCOL(covariance)>0){
+                     dimnames(.Object@covariance) <- list(name.endpoint,
+                                                          c("favorable","unfavorable","covariance","netBenefit","winRatio"))
+                 }
+                 .Object@covarianceResampling <- covarianceResampling
+                 if(dim(.Object@covarianceResampling)[1]>0){
+                     dimnames(.Object@covarianceResampling) <- list(NULL,name.endpoint,
+                                                            c("favorable","unfavorable","covariance","netBenefit","winRatio"))
+                 }
+                 .Object@weight <- weight
                  
+                 .Object@iidAverage <- list(favorable = iidAverage_favorable,
+                                            unfavorable = iidAverage_unfavorable)
+                 if(!is.null(.Object@iidAverage[[1]])){
+                     colnames(.Object@iidAverage[[1]]) <- name.endpoint
+                 }
+                 if(!is.null(.Object@iidAverage[[2]])){
+                     colnames(.Object@iidAverage[[2]]) <- name.endpoint
+                 }
+                 .Object@iidNuisance <- list(favorable = iidNuisance_favorable,
+                                             unfavorable = iidNuisance_unfavorable)
                  .Object@tablePairScore <- tablePairScore
                  .Object@tableSurvival <- tableSurvival
                  

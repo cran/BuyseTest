@@ -56,7 +56,8 @@ for(iData in 1:3){ ## iData <- 1
         outSurv <- getSurvival(outBT, endpoint = 1, strata = 1, unlist = TRUE)
 
         ## data[,sum(status),by="treatment"]
-    
+        if(iData==3){next} ##  no censoring, outSurv is empty
+        
         ## *** Control at jump times
         test_that("initSurvival (jump times, no strata)",{
             ## correct jump times

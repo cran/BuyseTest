@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: nov 22 2017 (13:39) 
 ## Version: 
-## Last-Updated: okt 15 2018 (21:52) 
+## Last-Updated: mar 28 2019 (15:33) 
 ##           By: Brice Ozenne
-##     Update #: 241
+##     Update #: 257
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -28,7 +28,7 @@
 #'
 
 ## * discreteRoot
-#' @rdname dicreteRoot
+#' @rdname discreteRoot
 #' @export
 discreteRoot <- function(fn, grid, increasing = TRUE, check = TRUE,
                          tol = .Machine$double.eps ^ 0.5) {
@@ -99,7 +99,7 @@ discreteRoot <- function(fn, grid, increasing = TRUE, check = TRUE,
         }
                 
     }
-    
+
 ### ** If did not find a value whose image matched tol, give the closest solution
     if(ncv){
         iIndexInSet <- which.min(abs(value.grid))
@@ -113,7 +113,7 @@ discreteRoot <- function(fn, grid, increasing = TRUE, check = TRUE,
                 value = value,
                 ## grid = setNames(value.grid,grid),
                 counts = iter,
-                cv = ncv,
+                cv = (ncv==FALSE),
                 message = NULL))
 }
 
@@ -130,6 +130,8 @@ discreteRoot <- function(fn, grid, increasing = TRUE, check = TRUE,
 #' and only return the relevant limit (either upper or lower) of the confidence interval.
 #' @param alternative [character] a character string specifying the alternative hypothesis, must be one of "two.sided" (default), "greater" or "less".
 #' @param tol [numeric] the absolute convergence tolerance.
+#' @param checkSign [logical] should a warning be output if the sign of the estimate differs
+#' from the sign of the mean bootstrap value?
 #' @details
 #' For test statistic close to 0, this function returns 1. \cr \cr
 #' 
@@ -147,7 +149,7 @@ discreteRoot <- function(fn, grid, increasing = TRUE, check = TRUE,
 #' }
 #' If the argument alternative is set to \code{"greater"}, it returns 1.
 #' 
-#' @examples 
+#' @examples
 #' set.seed(10)
 #' 
 #' #### no effect ####
@@ -181,7 +183,7 @@ discreteRoot <- function(fn, grid, increasing = TRUE, check = TRUE,
 #' @rdname boot2pvalue
 #' @export
 boot2pvalue <- function(x, null, estimate = NULL, alternative = "two.sided",
-                        FUN.ci = quantileCI,
+                        FUN.ci = quantileCI, checkSign = TRUE,
                         tol = .Machine$double.eps ^ 0.5){ 
   
     x.boot <- na.omit(x)
@@ -191,7 +193,7 @@ boot2pvalue <- function(x, null, estimate = NULL, alternative = "two.sided",
         statistic <- statistic.boot
     }else{
         statistic <- estimate - null
-        if(sign(statistic.boot)!=sign(statistic)){
+        if(checkSign && sign(statistic.boot)!=sign(statistic)){
             warning("the estimate and the average bootstrap estimate do not have same sign \n")
         }
     }
@@ -232,23 +234,14 @@ boot2pvalue <- function(x, null, estimate = NULL, alternative = "two.sided",
         increasing = increasing,
         check = FALSE)
 
-        ## check change sign
-        sign.before <- sign(FUN.ci(x = x.boot,
-                                   p.value = max(0,resSearch$par-1/n.boot),
-                                   alternative = alternative,
-                                   sign.estimate = sign.statistic)-null)
-
-        sign.after <- sign(FUN.ci(x = x.boot,
-                                  p.value = min(1,resSearch$par+1/n.boot),
-                                  alternative = alternative,
-                                  sign.estimate = sign.statistic)-null)
-
-        ##
-        if(is.na(resSearch$value) || length(resSearch$value)==0 || resSearch$par<0 || resSearch$par>1 || sign.before==sign.after){
+        ## cv check
+        if(is.na(resSearch$value) || length(resSearch$value)==0 || resSearch$par<0 || resSearch$par>1 || resSearch$cv == FALSE){
             warning("incorrect convergence of the algorithm finding the critical quantile \n",
                     "p-value may not be reliable \n")
 
         }
+
+        ## do not check unique maximum
         p.value <- resSearch$par
     }
 
