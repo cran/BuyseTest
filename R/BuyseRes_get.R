@@ -13,6 +13,7 @@
 #'   A \code{"vector"} containing the number of pairs
 #'
 #' @keywords get BuyseRes-method
+#' @author Brice Ozenne
 
 ## * getCount (code)
 #' @rdname BuyseRes-getCount
@@ -85,16 +86,18 @@ setMethod(f = "getCount",
 #' (i.e. the weight of the pair that was not informative at the previous endpoint). This is always performed.
 #' For time to event endpoint an additional weighting may be performed to avoid a possible bias in presence of censoring.
 #' @keywords get BuyseRes-method
+#' @author Brice Ozenne
 
 ## * getPairScore (examples)
 #' @rdname BuyseRes-getPairScore
 #' @examples
 #' library(data.table)
+#' library(prodlim)
 #' 
 #' ## run BuyseTest
 #' data(veteran,package="survival")
 #'
-#' BT.keep <- BuyseTest(trt ~ tte(time, threshold = 20, censoring = "status") + cont(karno),
+#' BT.keep <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno),
 #'                      data = veteran, keep.pairScore = TRUE, 
 #'                      trace = 0, method.inference = "none")
 #'
@@ -267,6 +270,7 @@ setMethod(f = "getPairScore",
 #' }
 #'
 #' @keywords get BuyseRes-method
+#' @author Brice Ozenne
 
 ## * getSurvival (code)
 #' @rdname BuyseRes-getSurvival

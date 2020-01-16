@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 17 2018 (16:46) 
 ## Version: 
-## Last-Updated: nov 13 2019 (16:34) 
+## Last-Updated: nov 21 2019 (11:57) 
 ##           By: Brice Ozenne
-##     Update #: 126
+##     Update #: 134
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -41,12 +41,12 @@ dt.sim <- data.table(
 test_that("number of pairs - argument neutral.as.uninf", {
 
     for(iCorrection in c(FALSE,TRUE)){ ## iCorrection <- TRUE
-        BT.T <- BuyseTest(ttt~TTE(timeOS,threshold=0,censoring=eventOS) + cont(Mgrade.tox,threshold=0),
+        BT.T <- BuyseTest(ttt~TTE(timeOS,threshold=0,status=eventOS) + cont(Mgrade.tox,threshold=0),
                           data = dt.sim,
                           neutral.as.uninf = TRUE, scoring.rule = "Gehan", correction.uninf = iCorrection)
         BTS.T <- as.data.table(summary(BT.T, print = FALSE, percentage = FALSE)$table)
 
-        BT.F <- BuyseTest(ttt~TTE(timeOS,threshold=0,censoring=eventOS) + cont(Mgrade.tox,threshold=0),
+        BT.F <- BuyseTest(ttt~TTE(timeOS,threshold=0,status=eventOS) + cont(Mgrade.tox,threshold=0),
                           data = dt.sim,
                           neutral.as.uninf = FALSE, scoring.rule = "Gehan", correction.uninf = iCorrection)
         BTS.F <- as.data.table(summary(BT.F, print = FALSE, percentage = FALSE)$table)
@@ -111,7 +111,7 @@ BT_tau0 <- BuyseTest(data=data,
                      endpoint="time",
                      type="timeToEvent",
                      threshold=as.numeric(0),
-                     censoring="event",
+                     status="event",
                      scoring.rule="Peron",
                      method.inference = "none",
                      cpus=1)
@@ -124,17 +124,17 @@ data(veteran,package="survival")
 
 test_that("ordering of tied event does not affect BuyseTest", {
     ## veteran2[veteran2$time==100,]
-    BT.all <- BuyseTest(trt ~ tte(time, threshold = 0, censoring = "status"),
+    BT.all <- BuyseTest(trt ~ tte(time, threshold = 0, status = "status"),
                         data = veteran, scoring.rule = "Peron", method.inference = "none", correction.uninf = FALSE)
 
     veteran1 <- veteran[order(veteran$time,veteran$status),c("time","status","trt")]
     ## veteran1[veteran2$time==100,]
-    BT1.all <- BuyseTest(trt ~ tte(time, threshold = 0, censoring = "status"),
+    BT1.all <- BuyseTest(trt ~ tte(time, threshold = 0, status = "status"),
                          data = veteran1, scoring.rule = "Peron", method.inference = "none", correction.uninf = FALSE)
 
     veteran2 <- veteran[order(veteran$time,-veteran$status),c("time","status","trt")]
     ## ## veteran2[veteran2$time==100,]
-    BT2.all <- BuyseTest(trt ~ tte(time, threshold = 0, censoring = "status"),
+    BT2.all <- BuyseTest(trt ~ tte(time, threshold = 0, status = "status"),
                          data = veteran2, scoring.rule = "Peron", method.inference = "none", correction.uninf = FALSE)
 
     ## effect of the ordering
@@ -197,7 +197,7 @@ test_that("Multiple thresholds",{
                              endpoint=c("Time","Time","Time","Time","Time","Time","Time","Time","Time","Time","Time","Time","Time","Time","Time"),
                              treatment="group",
                              type=c("TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE","TTE"),
-                             censoring=c("Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event"),
+                             status=c("Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event","Event"),
                              threshold=c(42,39,36,33,30,27,24,21,18,15,12,9,6,3,0),
                              n.resampling=500,
                              trace=0,
@@ -238,7 +238,7 @@ df <- data.frame("survie" = c(2.1, 4.1, 6.1, 8.1, 4, 6, 8, 10),
                  "score" = 1)
 
 test_that("1 TTE endpoint - Gehan (no correction)", {
-    Peron <- BuyseTest(group ~ tte(survie, censoring = event, threshold = 0),
+    Peron <- BuyseTest(group ~ tte(survie, status = event, threshold = 0),
                        data = df, 
                        scoring.rule = "Peron", correction.uninf = FALSE)
 
@@ -306,7 +306,7 @@ test_that("BuyseTest without variability", {
 ## * graemeleehickey (issue #2 on Github): 8 september 2019 p-value bootstrap
 test_that("Boostrap - issue in the summary", {
     data(veteran,package="survival")
-    BT.keep <- BuyseTest(trt ~ tte(time, threshold = 20, censoring = "status") + cont(karno),
+    BT.keep <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno),
                          data = veteran, keep.pairScore = TRUE, scoring.rule = "Gehan", 
                          trace = 0, method.inference = "bootstrap", n.resampling = 20, seed = 10)
     summary(BT.keep, statistic = "winRatio")
@@ -349,11 +349,34 @@ test_that("BuysePower - error in print", {
 ## * brice ozenne: 11/13/19 4:11 hierachical in BuyseTest
 test_that("BuyseTest - hierarchical", {
     data(veteran, package = "survival")
-    BT.nH <- BuyseTest(trt ~ tte(time, threshold = 20, censoring = "status") + cont(karno, threshold = 0),
+    BT.nH <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno, threshold = 0),
                        hierarchical = FALSE, data = veteran, 
                        method.inference = "none", trace = 0)
     expect_equal(coef(BT.nH),
                  c("time_20" = -0.08765836, "karno_1e-12" = -0.11898828),
                  tol = 1e-6)
 
+})
+
+## * graemeleehickey (issue #4 on Github): 6 october 2019 simBuyseTest
+test_that("simBuyseTest - rate vs. scale", {
+    n <- 1e5
+    rate <- 5
+
+    args <- list(rates.T = rate, rates.Censoring.T = rate+1,
+                 rates.C = rate, rates.Censoring.C = rate+1,
+                 rates.CR =  rate)
+    set.seed(10)
+    test <- simBuyseTest(1e4, argsBin = NULL, argsCont = NULL, argsTTE = args,
+                       latent = TRUE)
+    
+    set.seed(10)
+    GS <- rexp(n, rate = rate)
+    GS1 <- rexp(n, rate = rate+1)
+
+    expect_equal(mean(GS),mean(test[treatment == "C", mean(eventtimeUncensored)]), tol = 1e-2)
+    expect_equal(mean(GS),mean(test[treatment == "T", mean(eventtimeUncensored)]), tol = 1e-2)
+
+    expect_equal(mean(GS1),mean(test[treatment == "C", mean(eventtimeCensoring)]), tol = 1e-2)
+    expect_equal(mean(GS1),mean(test[treatment == "T", mean(eventtimeCensoring)]), tol = 1e-2)
 })

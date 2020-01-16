@@ -6,8 +6,8 @@
 \alias{printInference}
 \title{internal functions for BuyseTest - display}
 \usage{
-printGeneral(censoring, D, D.TTE, data, endpoint, hierarchical,
-  level.strata, level.treatment, scoring.rule, neutral.as.uninf,
+printGeneral(status, D, D.TTE, data, endpoint, hierarchical, level.strata,
+  level.treatment, scoring.rule, M.status, neutral.as.uninf,
   correction.uninf, operator, strata, threshold, trace, treatment, type,
   weight, Wscheme, ...)
 
@@ -15,5 +15,8 @@ printInference(method.inference, n.resampling, cpus, seed, ...)
 }
 \description{
 Functions called by \code{\link{BuyseTest}} to display the settings.
+}
+\author{
+Brice Ozenne
 }
 \keyword{internal}

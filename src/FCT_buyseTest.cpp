@@ -1,3 +1,4 @@
+
 // * Preambule
 
 // Enable C++11 via this plugin (Rcpp 0.10.3 or later)
@@ -41,10 +42,10 @@ void updateRP(arma::mat& iRP_score, std::vector< arma::mat >& iRP_Dscore_Dnuisan
 //' @name GPC_cpp
 //' 
 //' @param endpoint A matrix containing the values of each endpoint (in columns) for each observation (in rows). 
-//' @param censoring A matrix containing the values of the censoring variables relative to each endpoint (in columns) for each observation (in rows).
-//' @param indexC A list containing, for each strata, which rows of the endpoint and censoring matrices corresponds to the control observations. Not unique when bootstraping.
+//' @param status A matrix containing the values of the status variables relative to each endpoint (in columns) for each observation (in rows).
+//' @param indexC A list containing, for each strata, which rows of the endpoint and status matrices corresponds to the control observations. Not unique when bootstraping.
 //' @param posC A list containing, for each strata, the unique identifier of each control observations. 
-//' @param indexT A list containing, for each strata, which rows of the endpoint and censoring matrices corresponds to the treatment observations. Not unique when bootstraping.
+//' @param indexT A list containing, for each strata, which rows of the endpoint and status matrices corresponds to the treatment observations. Not unique when bootstraping.
 //' @param posT A list containing, for each strata, the unique identifier of each treatment observations.
 //' @param threshold Store the thresholds associated to each endpoint. Must have length D. The threshold is ignored for binary endpoints. 
 //' @param weight Store the weight associated to each endpoint. Must have length D. 
@@ -54,7 +55,7 @@ void updateRP(arma::mat& iRP_score, std::vector< arma::mat >& iRP_Dscore_Dnuisan
 //' @param n_strata The number of strata. 
 //' @param nUTTE_analyzedPeron_M1 The number of unique time-to-event endpoints that have been analyzed the Peron scoring rule before the current endpoint. Must have length D.
 //' @param index_endpoint The position of the endpoint at each priority in the argument endpoint. Must have length D. 
-//' @param index_censoring The position of the censoring at each priority in the argument censoring. Must have length D. 
+//' @param index_status The position of the status at each priority in the argument status. Must have length D. 
 //' @param index_UTTE The position, among all the unique tte endpoints, of the TTE endpoints. Equals -1 for non tte endpoints. Must have length n_TTE. 
 //' @param list_survTimeC A list of matrix containing the survival estimates (-threshold, 0, +threshold ...) for each event of the control group (in rows).
 //' @param list_survTimeT A list of matrix containing the survival estimates (-threshold, 0, +threshold ...) for each event of the treatment group (in rows).
@@ -74,13 +75,14 @@ void updateRP(arma::mat& iRP_score, std::vector< arma::mat >& iRP_Dscore_Dnuisan
 //' @param returnIID Should the iid be computed?
 //' @param debug Print messages tracing the execution of the function to help debugging. The amount of messages increase with the value of debug (0-5).
 //' @keywords function Cpp BuyseTest
+//' @author Brice Ozenne
 
 // * Function GPC_cpp
 //' @name GPC_cpp
 //' @export
 // [[Rcpp::export]]
 List GPC_cpp(arma::mat endpoint,
-			 arma::mat censoring,
+			 arma::mat status,
 			 std::vector< arma::uvec > indexC,
 			 std::vector< arma::uvec > posC,
 			 std::vector< arma::uvec > indexT,
@@ -93,7 +95,7 @@ List GPC_cpp(arma::mat endpoint,
 			 unsigned int n_strata,
 			 arma::vec nUTTE_analyzedPeron_M1,
 			 std::vector<unsigned int> index_endpoint, 
-			 std::vector<unsigned int> index_censoring, 
+			 std::vector<unsigned int> index_status, 
 			 std::vector<int> index_UTTE, 
 			 std::vector< std::vector< arma::mat > > list_survTimeC,
 			 std::vector< std::vector< arma::mat > > list_survTimeT,
@@ -237,12 +239,12 @@ List GPC_cpp(arma::mat endpoint,
 	  // *** compute scores
 	  if(debug>0){Rcout << " - score("<< iFirstEndpoint <<")" << endl;}
       arma::uvec iUvec_endpoint = {index_endpoint[iter_d]};
-      arma::uvec iUvec_censoring = {index_censoring[iter_d]};
+      arma::uvec iUvec_status = {index_status[iter_d]};
 
 	  iPairScore = calcAllPairs(endpoint.submat(indexC[iter_strata],iUvec_endpoint), endpoint.submat(indexT[iter_strata],iUvec_endpoint), threshold[iter_d],
-								censoring.submat(indexC[iter_strata],iUvec_censoring), censoring.submat(indexT[iter_strata],iUvec_censoring),
+								status.submat(indexC[iter_strata],iUvec_status), status.submat(indexT[iter_strata],iUvec_status),
 								list_survTimeC[iter_d][iter_strata], list_survTimeT[iter_d][iter_strata], list_survJumpC[iter_d][iter_strata], list_survJumpT[iter_d][iter_strata],
-								list_lastSurv[iter_d](iter_strata,0), list_lastSurv[iter_d](iter_strata,1), 
+								list_lastSurv[iter_d].row(iter_strata),
 								iIndex_control, iIndex_treatment, iPairWeight,
 								activeUTTE, D_activeUTTE,
 								Mcount_favorable(iter_strata,iter_d), Mcount_unfavorable(iter_strata,iter_d), Mcount_neutral(iter_strata,iter_d), Mcount_uninf(iter_strata,iter_d),
@@ -266,11 +268,11 @@ List GPC_cpp(arma::mat endpoint,
 		arma::mat iCount_obsC_M1,iCount_obsT_M1;
 		arma::mat iDscore_Dnuisance_C_M1,iDscore_Dnuisance_T_M1;
 
-		// note the values in endpoint, censoring, survTime, survJump, lastSurv are not used (only their dimensions)
+		// note the values in endpoint, status, survTime, survJump, lastSurv are not used (only their dimensions)
 		arma::mat iPairScore_M1 = calcAllPairs(endpoint.submat(indexC[iter_strata],iUvec_endpoint), endpoint.submat(indexT[iter_strata],iUvec_endpoint), threshold[iter_d],
-									   censoring.submat(indexC[iter_strata],iUvec_censoring), censoring.submat(indexT[iter_strata],iUvec_censoring),
+									   status.submat(indexC[iter_strata],iUvec_status), status.submat(indexT[iter_strata],iUvec_status),
 									   list_survTimeC[iter_d][iter_strata], list_survTimeT[iter_d][iter_strata], list_survJumpC[iter_d][iter_strata], list_survJumpT[iter_d][iter_strata],
-									   list_lastSurv[iter_d](iter_strata,0), list_lastSurv[iter_d](iter_strata,1), 
+									   list_lastSurv[iter_d].row(iter_strata), 
 									   iIndex_control, iIndex_treatment, iPairWeight,
 									   activeUTTE, D_activeUTTE,
 									   iCount_favorable_M1, iCount_unfavorable_M1, iCount_neutral_M1, iCount_uninf_M1,
@@ -399,6 +401,7 @@ List GPC_cpp(arma::mat endpoint,
 }
 
 // * updateIID
+// author Brice Ozenne
 void updateIID(arma::mat& iidAverage_favorable, arma::mat& iidAverage_unfavorable, 
 			   arma::mat& iidNuisance_favorable, arma::mat& iidNuisance_unfavorable, 
 			   const std::vector< arma::uvec >& posC, const std::vector< arma::uvec >& posT,
@@ -438,7 +441,7 @@ void updateIID(arma::mat& iidAverage_favorable, arma::mat& iidAverage_unfavorabl
 	}
 
 	// *** iid of the proba/score
-	if(iMethod == 3){
+	if(iMethod == 4){
 	  iidNuisance_favorable.col(iter_d) += iid_survJumpC[iIndex_UTTE][iter_strata] * iDscore_Dnuisance_C.col(0)/vecn_pairs[iter_strata];
 	  iidNuisance_favorable.col(iter_d) += iid_survJumpT[iIndex_UTTE][iter_strata] * iDscore_Dnuisance_T.col(0)/vecn_pairs[iter_strata];
 	  iidNuisance_unfavorable.col(iter_d) += iid_survJumpC[iIndex_UTTE][iter_strata] * iDscore_Dnuisance_C.col(1)/vecn_pairs[iter_strata];
@@ -452,6 +455,7 @@ void updateIID(arma::mat& iidAverage_favorable, arma::mat& iidAverage_unfavorabl
 
 
 // * updatePairScore
+// author Brice Ozenne
 void updatePairScore(std::vector< arma::mat >& pairScore, arma::mat& iPairScore,
 					 unsigned int iter_strata, const std::vector< arma::uvec >& posC, const std::vector< arma::uvec >& posT,
 					 const arma::vec& vecn_control, const arma::vec& vecn_cumpairsM1, unsigned int iter_d){
@@ -480,6 +484,7 @@ void updatePairScore(std::vector< arma::mat >& pairScore, arma::mat& iPairScore,
 }
 
 // * updateRP
+// author Brice Ozenne
 void updateRP(arma::mat& iRP_score, std::vector< arma::mat >& iRP_Dscore_Dnuisance_C, std::vector< arma::mat >& iRP_Dscore_Dnuisance_T,
 			  std::vector<arma::mat>& RP_score, std::vector< std::vector< arma::mat > >& RP_Dscore_Dnuisance_C, std::vector< std::vector< arma::mat > >& RP_Dscore_Dnuisance_T,
 			  arma::vec& iPairWeight_nPeron, int iSize_RP, bool neutralAsUninf, int iter_d, int correctionUninf,

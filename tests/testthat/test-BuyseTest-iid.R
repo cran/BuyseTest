@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jan  8 2019 (11:54) 
 ## Version: 
-## Last-Updated: nov 13 2019 (14:16) 
+## Last-Updated: dec  5 2019 (13:15) 
 ##           By: Brice Ozenne
-##     Update #: 90
+##     Update #: 98
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -317,7 +317,7 @@ test_that("iid: TTE and no strata",{
 ## ** Two endpoints
 ## *** no strata
 set.seed(10)
-d <- simBuyseTest(50)
+d <- simBuyseTest(50, argsTTE = list(rates.T = 1/2, rates.Censoring.T = 1))
 
 BuyseTest.options(order.Hprojection = 1)
 test_that("iid: two endpoints (no strata - first order)", {
@@ -353,10 +353,10 @@ test_that("iid: two endpoints (no strata - first order)", {
                  c(0.00190759, 0.002360218, -0.001708275, 0.007684358, 0.088893573), tol = 1e-6 )
 
     ## same endpoint tte
-    e.BT <- BuyseTest(treatment ~  tte(eventtime, threshold = 1, censoring = status) + tte(eventtime, threshold = 0, censoring = status),
+    e.BT <- BuyseTest(treatment ~  tte(eventtime, threshold = 1, status = status) + tte(eventtime, threshold = 0, status = status),
                                        data = d, scoring.rule = "Gehan",
                                        method.inference = "u-statistic")
-    e2.BT <- BuyseTest(treatment ~  tte(eventtime, threshold = 1, censoring = status) + tte(eventtime, threshold = 0, censoring = status),
+    e2.BT <- BuyseTest(treatment ~  tte(eventtime, threshold = 1, status = status) + tte(eventtime, threshold = 0, status = status),
                                         data = d, keep.pairScore = TRUE, scoring.rule = "Gehan",
                                         method.inference = "u-statistic-bebu")
     expect_equal(e.BT@covariance, e2.BT@covariance)
@@ -411,13 +411,13 @@ test_that("iid: two endpoints (no strata - second order)", {
                  c(0.001935052, 0.002390279, -0.001695749, 0.007716830, 0.089279985), tol = 1e-6 )
 
     ## same endpoint tte
-    e.BT <- BuyseTest(treatment ~  tte(eventtime, threshold = 1, censoring = status) + tte(eventtime, threshold = 0, censoring = status),
+    e.BT <- BuyseTest(treatment ~  tte(eventtime, threshold = 1, status = status) + tte(eventtime, threshold = 0, status = status),
                       data = d, scoring.rule = "Gehan", keep.pairScore = FALSE,
                       method.inference = "u-statistic")
-    e1.BT <- BuyseTest(treatment ~  tte(eventtime, threshold = 1, censoring = status) + tte(eventtime, threshold = 0, censoring = status),
+    e1.BT <- BuyseTest(treatment ~  tte(eventtime, threshold = 1, status = status) + tte(eventtime, threshold = 0, status = status),
                       data = d, scoring.rule = "Gehan", keep.pairScore = TRUE,
                       method.inference = "u-statistic")
-    e2.BT <- BuyseTest(treatment ~  tte(eventtime, threshold = 1, censoring = status) + tte(eventtime, threshold = 0, censoring = status),
+    e2.BT <- BuyseTest(treatment ~  tte(eventtime, threshold = 1, status = status) + tte(eventtime, threshold = 0, status = status),
                        data = d, keep.pairScore = TRUE, scoring.rule = "Gehan",
                        method.inference = "u-statistic-bebu")
 
@@ -572,7 +572,7 @@ test_that("iid with nuisance parameters: 1 TTE + 1 binary",{
     
     n <- 5
     set.seed(10)
-    dt <- simBuyseTest(n)
+    dt <- simBuyseTest(n, argsTTE = list(rates.T = 1/2, rates.Censoring.T = 1))
     
     e.BT_ttebin <- BuyseTest(treatment ~ tte(eventtime, status, threshold = 1) + bin(toxicity),
                              data = dt, 
@@ -603,7 +603,7 @@ test_that("iid with nuisance parameters: 2 TTE",{
                            n.C = n.patients[2],
                            argsBin = list(p.T = c(0.5,0.75)),
                            argsCont = list(mu.T = 1:3, sigma.T = rep(1,3)),
-                           argsTTE = list(rates.T = 1:3, rates.Censoring.T = rep(1,3)))
+                           argsTTE = list(rates.T = 1/(1:3), rates.Censoring.T = rep(1,3)))
     setkeyv(dt.sim,c("treatment","eventtime1"))
     dt.sim[,status1.bis := c(status1[1:(.N-1)],1),by="treatment"] ## make sure last observation is a case
 
@@ -641,5 +641,26 @@ test_that("iid with nuisance parameters: 2 TTE",{
     expect_equal(test,GS, tol = 1e-6)
 
 })
+
+## * normalization iid
+n <- 200
+set.seed(10)
+dt <- simBuyseTest(n, n.strata = 3)
+
+test_that("iid - remove normalization", {
+
+    e.all <- BuyseTest(treatment~bin(toxicity)+cont(score)+strata,
+                       method.inference = "u-statistic",
+                       data = dt, trace = 0)
+    e.strata <- BuyseTest(treatment~bin(toxicity)+cont(score)+strata,
+                          method.inference = "u-statistic",
+                          data = dt[strata=="a"], trace = 0)
+
+    iid.all <- iid(e.all, normalize = FALSE)[which(dt$strata=="a"),]
+    iid.strata <- iid(e.strata, normalize = FALSE)
+
+    expect_equal(unname(iid.all),unname(iid.strata), tol = 1e-9)
+})
+
 ######################################################################
 ### test-BuyseTest-iid.R ends here

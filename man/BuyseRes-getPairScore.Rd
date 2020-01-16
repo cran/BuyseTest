@@ -74,11 +74,12 @@ For time to event endpoint an additional weighting may be performed to avoid a p
 }
 \examples{
 library(data.table)
+library(prodlim)
 
 ## run BuyseTest
 data(veteran,package="survival")
 
-BT.keep <- BuyseTest(trt ~ tte(time, threshold = 20, censoring = "status") + cont(karno),
+BT.keep <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno),
                      data = veteran, keep.pairScore = TRUE, 
                      trace = 0, method.inference = "none")
 
@@ -118,6 +119,9 @@ if(require(testthat)){
    testthat::expect_equal(pUF, pScore[91, unfavorable])
    testthat::expect_equal(pN, pScore[91, neutral])
 }
+}
+\author{
+Brice Ozenne
 }
 \keyword{BuyseRes-method}
 \keyword{get}

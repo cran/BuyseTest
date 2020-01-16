@@ -1,4 +1,5 @@
 ## * inferenceResampling
+## author Brice Ozenne
 inferenceResampling <- function(envir){
 
     cpus <- envir$outArgs$cpus
@@ -19,7 +20,7 @@ inferenceResampling <- function(envir){
         data.table::setkeyv(envir$outArgs$data, cols = attr(method.inference,"resampling-strata"))
 
         envir$outArgs$M.endpoint <- envir$outArgs$M.endpoint[envir$outArgs$data[["..rowIndex.."]],,drop=FALSE]
-        envir$outArgs$M.censoring <- envir$outArgs$M.censoring[envir$outArgs$data[["..rowIndex.."]],,drop=FALSE]
+        envir$outArgs$M.status <- envir$outArgs$M.status[envir$outArgs$data[["..rowIndex.."]],,drop=FALSE]
         envir$outArgs$index.C <- which(envir$outArgs$data$treatment == 0)
         envir$outArgs$index.T <- which(envir$outArgs$data$treatment == 1)
         envir$outArgs$index.strata <- tapply(1:NROW(envir$outArgs$data), envir$outArgs$data[["..strata.."]], list)
@@ -65,7 +66,7 @@ inferenceResampling <- function(envir){
             suppressPackageStartupMessages(library(BuyseTest, quietly = TRUE, warn.conflicts = FALSE, verbose = FALSE))
         })
         ## export functions
-        toExport <- c(".BuyseTest","calcSurvPeron","calcSample")
+        toExport <- c(".BuyseTest","calcPeron","calcSample")
         iB <- NULL ## [:forCRANcheck:] foreach        
         ls.resampling <- foreach::`%dopar%`(
                                       foreach::foreach(iB=1:n.resampling,

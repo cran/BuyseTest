@@ -1,30 +1,33 @@
 Package: BuyseTest
 Type: Package
 Title: Generalized Pairwise Comparisons
-Version: 1.8
-Date: 2019-11-13
+Version: 1.8.3
+Date: 2020-01-14
 Authors@R: c(
     person("Brice", "Ozenne", role = c("aut", "cre"), email = "brice.mh.ozenne@gmail.com", comment = c(ORCID = "0000-0001-9694-2956")),
     person("Julien", "Peron", role = "ctb"),
     person("Eva", "Cantagallo", role = "aut")
 	)
-Description: Implementation of the Generalized Pairwise Comparisons (GPC).
+Description: Implementation of the Generalized Pairwise Comparisons (GPC)
+             as defined in Buyse (2010) <doi:10.1002/sim.3923> for complete observations,
+             and extended in Peron (2018) <doi:10.1177/0962280216658320> to deal with right-censoring.        
              GPC compare two groups of observations (intervention vs. control group)
-			 regarding several prioritized endpoints.
-			 The net benefit and win ratio statistics can then be estimated
-			 and corresponding confidence intervals and p-values can be
-			 estimated using resampling methods or the asymptotic U-statistic
-			 theory. The software enables the use of thresholds of minimal
-			 importance difference, stratification, and corrections to deal
-			 with right-censored endpoints or missing values.
+			 regarding several prioritized endpoints to estimate the probability that a random observation drawn from
+			 one group performs better than a random observation drawn from the other group.
+			 The net benefit and win ratio statistics,
+			 i.e. the difference and ratio between the probabilities relative to the intervention and control groups,
+			 can then be estimated. Confidence intervals and p-values are obtained using permutations, a non-parametric bootstrap, or the asymptotic theory.
+			 The software enables the use of thresholds of minimal importance difference,
+			 stratification, non-prioritized endpoints (O'Brien test), and corrections to deal with missing values.
 License: GPL-3
 Encoding: UTF-8
 URL: https://github.com/bozenne/BuyseTest
 BugReports: https://github.com/bozenne/BuyseTest/issues
-Depends: R (>= 2.10), prodlim, Rcpp
+Depends: R (>= 2.10), Rcpp
 Imports: data.table, doParallel, foreach, methods, lava, parallel,
-        stats, stats4, utils
-Suggests: pbapply, R.rsp, riskRegression, survival, testthat
+        prodlim, stats, stats4, utils
+Suggests: cvAUC, pbapply, pROC, R.rsp, riskRegression, survival,
+        testthat
 LinkingTo: Rcpp, RcppArmadillo
 SystemRequirements: C++11
 VignetteBuilder: R.rsp
@@ -37,13 +40,13 @@ Collate: '0-onLoad.R' '1-setGeneric.R' 'BuyseRes-object.R'
         'BuyseTest-check.R' 'BuyseTest-inference.R'
         'BuyseTest-initialization.R' 'BuyseTest-package.R'
         'BuyseTest-print.R' 'BuyseTest.R' 'BuyseTest.options-object.R'
-        'BuyseTest.options.R' 'PairScore.R' 'RcppExports.R'
+        'BuyseTest.options.R' 'PairScore.R' 'RcppExports.R' 'auc.R'
         'constStrata.R' 'discreteRoot.R' 'powerBuyseTest.R'
         'prodlim-iid.R' 'simBuyseTest.R' 'valid.R'
-Packaged: 2019-11-13 16:22:53.018 UTC; hpl802
+Packaged: 2020-01-14 08:03:22.089 UTC; hpl802
 Author: Brice Ozenne [aut, cre] (<https://orcid.org/0000-0001-9694-2956>),
   Julien Peron [ctb],
   Eva Cantagallo [aut]
 Maintainer: Brice Ozenne <brice.mh.ozenne@gmail.com>
 Repository: CRAN
-Date/Publication: 2019-11-13 16:50:05 UTC
+Date/Publication: 2020-01-16 14:50:03 UTC
