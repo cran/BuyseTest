@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: dec  2 2019 (16:29) 
 ## Version: 
-## Last-Updated: jan  7 2020 (10:46) 
+## Last-Updated: jan 29 2020 (13:04) 
 ##           By: Brice Ozenne
-##     Update #: 158
+##     Update #: 159
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -234,9 +234,7 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL, direction 
     class(out) <- append("BuyseTestAuc",class(out))
     attr(out, "contrast") <- e.BT@level.treatment
     attr(out, "n.fold") <- n.fold
-    if(!is.null(observation)){
-        attr(out, "iid") <- M.iid
-    }
+    attr(out, "iid") <- M.iid
     return(out)
  
 }
