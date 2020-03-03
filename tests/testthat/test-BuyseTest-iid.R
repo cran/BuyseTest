@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jan  8 2019 (11:54) 
 ## Version: 
-## Last-Updated: dec  5 2019 (13:15) 
+## Last-Updated: mar  3 2020 (10:53) 
 ##           By: Brice Ozenne
-##     Update #: 98
+##     Update #: 102
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -20,7 +20,7 @@ if(FALSE){
     library(BuyseTest)
     library(data.table)
 }
-
+## options("stringsAsFactors" = TRUE)
 context("Check correct computation of the variance \n")
 var2 <- function(x){var(x)*(length(x)-1)/length(x)}
 cov2 <- function(x,y){cov(x,y)*(length(x)-1)/length(x)}
@@ -28,6 +28,7 @@ cov2 <- function(x,y){cov(x,y)*(length(x)-1)/length(x)}
 ## * Settings
 BuyseTest.options(check = TRUE,
                   keep.pairScore = FALSE,
+                  method.inference = "u-statistic",
                   trace = 0)
 
 ## * iid average
@@ -364,6 +365,10 @@ test_that("iid: two endpoints (no strata - first order)", {
                  c(0.0001065024, 0.0001116864, -0.0000153344, 0.0002488576, 0.4454834743), tol = 1e-6 )
     expect_equal(as.double(e.BT@covariance["eventtime_1e-12",]),
                  c(0.00194112, 0.00143968, -0.00028544, 0.00395168, 0.38625867), tol = 1e-6 )
+
+    ## cluster argument
+    expect_equal(unname(iid(e.BT, cluster = 1:NROW(d))), unname(iid(e.BT)), tol = 1e-6)
+    expect_equal(confint(e.BT, cluster = 1:NROW(d)),  confint(e.BT), tol = 1e-6)
 })
 
 BuyseTest.options(order.Hprojection = 2)
@@ -460,6 +465,10 @@ test_that("iid: two endpoints (strata)", {
     expect_equal(as.double(e0.BT@covariance),
                  c(0.0009537952, 0.001180109, -0.0008541376, 0.0038421792, 0.0444467864), tol = 1e-6 )
 
+    ## cluster argument
+    expect_equal(unname(iid(e.BT, cluster = 1:NROW(d2))), unname(iid(e.BT)), tol = 1e-6)
+    expect_equal(confint(e.BT, cluster = 1:NROW(d2)),  confint(e.BT), tol = 1e-6)
+
     ## second order
     BuyseTest.options(order.Hprojection = 2)
     e.BT <- BuyseTest(treatment ~ cont(score1, threshold = 1) + cont(score2, threshold = 1) + strata,
@@ -480,6 +489,7 @@ test_that("iid: two endpoints (strata)", {
     expect_equal(as.double(e1.BT@covariance["score2_1",]),
                  c(0.0009675260, 0.0011951397, -0.0008478746, 0.0038584150, 0.0446399926), tol = 1e-6 )
 
+
 })
 
 
@@ -496,7 +506,7 @@ test_that("iid with nuisance parameters: 1 TTE",{
     set.seed(10)
     dt <- simBuyseTest(n)
     dt$X0 <- 0
-    dt$treatment2 <- 1-as.numeric(dt$treatment)
+    dt$treatment2 <- as.numeric(dt$treatment=="C")
     ## dt <- data.table("treatment" = c("C", "C", "C", "C", "C", "T", "T", "T", "T", "T"), 
     ##                  "toxicity" = c(1, 1, 1, 1, 1, 1, 1, 0, 1, 0), 
     ##                  "score" = c( 0.54361539, -0.70762484, -0.36944577, -1.32197565,  1.28059746,  0.01874617, -0.18425254, -1.37133055, -0.59916772,  0.29454513), 
