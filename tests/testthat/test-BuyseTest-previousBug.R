@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 17 2018 (16:46) 
 ## Version: 
-## Last-Updated: mar  3 2020 (09:51) 
+## Last-Updated: apr 26 2020 (15:09) 
 ##           By: Brice Ozenne
-##     Update #: 137
+##     Update #: 167
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -40,12 +40,11 @@ dt.sim <- data.table(
 
 test_that("number of pairs - argument neutral.as.uninf", {
 
-    for(iCorrection in c(FALSE,TRUE)){ ## iCorrection <- TRUE
+    for(iCorrection in c(FALSE,TRUE)){ ## iCorrection <- TRUE ; iCorrection <- FALSE
         BT.T <- BuyseTest(ttt~TTE(timeOS,threshold=0,status=eventOS) + cont(Mgrade.tox,threshold=0),
                           data = dt.sim,
                           neutral.as.uninf = TRUE, scoring.rule = "Gehan", correction.uninf = iCorrection)
         BTS.T <- as.data.table(summary(BT.T, print = FALSE, percentage = FALSE)$table)
-
         BT.F <- BuyseTest(ttt~TTE(timeOS,threshold=0,status=eventOS) + cont(Mgrade.tox,threshold=0),
                           data = dt.sim,
                           neutral.as.uninf = FALSE, scoring.rule = "Gehan", correction.uninf = iCorrection)
@@ -115,7 +114,8 @@ BT_tau0 <- BuyseTest(data=data,
                      status="event",
                      scoring.rule="Peron",
                      method.inference = "none",
-                     cpus=1)
+                     cpus=1,
+                     trace = 0)
 
 ## * Brice: 09/06/18 6:51 (Tied event with tte endpoint)
 ## when computing the integral for peron with double censoring
@@ -139,13 +139,13 @@ test_that("ordering of tied event does not affect BuyseTest", {
                          data = veteran2, scoring.rule = "Peron", method.inference = "none", correction.uninf = FALSE)
 
     ## effect of the ordering
-    expect_equal(BT.all@Delta.winRatio, BT1.all@Delta.winRatio)
-    expect_equal(BT.all@Delta.winRatio, BT2.all@Delta.winRatio)
+    expect_equal(coef(BT.all, statistic = "winRatio"), coef(BT1.all, statistic = "winRatio"))
+    expect_equal(coef(BT.all, statistic = "winRatio"), coef(BT2.all, statistic = "winRatio"))
 
     ## number of pairs
-    expect_equal(BT.all@n.pairs, prod(table(veteran$trt)), tol = 1e-5)
-    expect_equal(BT1.all@n.pairs, prod(table(veteran$trt)), tol = 1e-5)
-    expect_equal(BT2.all@n.pairs, prod(table(veteran$trt)), tol = 1e-5)
+    expect_equal(as.double(BT.all@n.pairs), prod(table(veteran$trt)), tol = 1e-5)
+    expect_equal(as.double(BT1.all@n.pairs), prod(table(veteran$trt)), tol = 1e-5)
+    expect_equal(as.double(BT2.all@n.pairs), prod(table(veteran$trt)), tol = 1e-5)
 
     ## values of the pairs
     expect_true(all(getPairScore(BT.all, endpoint = 1)[["favorable"]]>=0))
@@ -161,10 +161,10 @@ test_that("ordering of tied event does not affect BuyseTest", {
 
     ## survival
     ## getSurvival(BT.all, endpoint = 1, strata = 1)$lastSurv: only 0 so no uninformative paris
-    expect_equal(as.double(BT.all@count.uninf), 0.0, tol = 1e-12)
+    expect_equal(as.double(coef(BT.all, statistic = "count.uninf", cumulative = FALSE)), 0.0, tol = 1e-12)
     
     ## result
-    expect_equal(as.double(BT.all@Delta.winRatio), 0.8384569, tol = 1e-5)
+    expect_equal(as.double(coef(BT.all, statistic = "winRatio")), 0.8384569, tol = 1e-5)
     
 
 })
@@ -214,22 +214,23 @@ test_that("Multiple thresholds",{
 
     ## butils::object2script(as.double(BuyseresPer@count.favorable), digit = 2)
     GS <- c(260.64, 35.93, 37.33, 147.32, 272.14, 263.6, 235.7, 213.21, 390.29, 408.73, 514.7, 514.34, 744.78, 865.21, 1095.26)
-    expect_equal(as.double(BuyseresPer@count.favorable), GS, tol = 1e-1)
+    expect_equal(as.double(coef(BuyseresPer, statistic = "count.favorable", cumulative = FALSE)), GS, tol = 1e-5)
     ## butils::object2script(as.double(BuyseresPer@count.unfavorable), digit = 2)
     GS <- c(0, 0, 6.97, 25.66, 43.89, 34.8, 46.38, 105.42, 199.85, 338.55, 407.72, 521.83, 548.02, 782.94, 938.8)
-    expect_equal(as.double(BuyseresPer@count.unfavorable), GS, tol = 1e-1)
+    expect_equal(as.double(coef(BuyseresPer, statistic = "count.unfavorable", cumulative = FALSE)), GS, tol = 1e-5)
     ## butils::object2script(as.double(BuyseresPer@count.neutral), digit = 2)
-    GS <- c(9617.63, 9611.09, 9596.16, 9448.36, 9149.12, 8863.32, 8581.24, 8262.61, 7676.67, 6933.58, 6011.17, 4975, 3682.21, 2034.06, 0)
-    expect_equal(as.double(BuyseresPer@count.neutral), GS, tol = 1e-1)
+    GS <- c(9580.24173298, 9580.24173298, 9573.26856493, 9433.45578036, 9140.84153639, 8860.00546388, 8577.9282735, 8259.29654759, 7675.01664374, 6933.58435144, 6011.16786378, 4975.00117239, 3682.20846492, 2034.06256111, 0)
+    expect_equal(as.double(coef(BuyseresPer, statistic = "count.neutral", cumulative = FALSE)), GS, tol = 1e-5)
     ## butils::object2script(as.double(BuyseresPer@count.uninf), digit = 2)
-    GS <- c(121.73, 92.35, 62.96, 37.78, 20.99, 8.4, 8.4, 8.4, 4.2, 0, 0, 0, 0, 0, 0)
-    expect_equal(as.double(BuyseresPer@count.uninf), GS, tol = 1e-1)
+    GS <- c(159.12095011, 123.19041299, 85.85998481, 52.68680886, 29.27044937, 11.70817975, 11.70817975, 11.70817975, 5.85408987, 0, 0, 0, 0, 0, 0)
+    expect_equal(as.double(coef(BuyseresPer, statistic = "count.uninf", cumulative = FALSE)), GS, tol = 1e-1)
+    
     ## butils::object2script(as.double(BuyseresPer@delta.netBenefit), digit = 5)
     GS <- c(0.02606, 0.00359, 0.00304, 0.01217, 0.02282, 0.02288, 0.01893, 0.01078, 0.01904, 0.00702, 0.0107, -0.00075, 0.01968, 0.00823, 0.01565)
-    expect_equal(as.double(BuyseresPer@delta.netBenefit), GS, tol = 1e-3)
+    expect_equal(as.double(coef(BuyseresPer, statistic = "netBenefit", cumulative = FALSE)), GS, tol = 1e-3)
     ## butils::object2script(as.double(BuyseresPer@delta.winRatio), digit = 5)
     GS <- c(Inf, Inf, 5.35344, 5.74093, 6.19986, 7.57457, 5.08161, 2.02241, 1.95291, 1.2073, 1.2624, 0.98564, 1.35904, 1.10508, 1.16666)
-    expect_equal(as.double(BuyseresPer@delta.winRatio), GS, tol = 1e-3)
+    expect_equal(as.double(coef(BuyseresPer, statistic = "winRatio", cumulative = FALSE)), GS, tol = 1e-3)
 })
 
 ## * Brice: 30/10/18 4:36 Neutral pairs with 0 threshold
@@ -244,7 +245,7 @@ test_that("1 TTE endpoint - Gehan (no correction)", {
                        data = df, 
                        scoring.rule = "Peron", correction.uninf = FALSE)
 
-    expect_equal(as.double(Peron@count.neutral),0) ## should not be any neutral pair with a threshold of 0
+    expect_equal(as.double(coef(Peron, statistic = "count.neutral", cumulative = FALSE)),0) ## should not be any neutral pair with a threshold of 0
 })
 
 ## * Hickey, Graeme: 8 mars 2019 14:54 p-value permutation
@@ -262,9 +263,15 @@ test_that("same p.value (permutation test) for winRatio and net Benefit", {
     netBenefit.perm <- confint(e.perm, statistic = "netBenefit")
     winRatio.perm <- confint(e.perm, statistic = "winRatio")
 
-    manual <- c(netBenefit = mean(abs(e.perm@DeltaResampling.netBenefit[,1]) >= abs(e.perm@Delta.netBenefit)),
-                winRatio = mean(abs(e.perm@DeltaResampling.winRatio[,1]-1) >= abs(e.perm@Delta.winRatio-1)),
-                winRatio.log = mean(abs(log(e.perm@DeltaResampling.winRatio[,1])) >= abs(log(e.perm@Delta.winRatio)))
+    Delta.netBenefit <- coef(e.perm, statistic = "netBenefit")
+    Delta.winRatio <- coef(e.perm, statistic = "winRatio")
+    DeltaResampling.netBenefit <- e.perm@DeltaResampling[,1,"netBenefit"]
+    DeltaResampling.winRatio <- e.perm@DeltaResampling[,1,"winRatio"]
+    
+    manual <- c(netBenefit = mean(abs(DeltaResampling.netBenefit) >= abs(Delta.netBenefit)),
+                netBenefit.atanh = mean(abs(atanh(DeltaResampling.netBenefit)) >= abs(atanh(Delta.netBenefit))),
+                winRatio = mean(abs(DeltaResampling.winRatio-1) >= abs(Delta.winRatio-1)),
+                winRatio.log = mean(abs(log(DeltaResampling.winRatio)) >= abs(log(Delta.winRatio)))
                 )
 
     expect_equal(netBenefit.perm[,"p.value"], winRatio.perm[,"p.value"])
@@ -273,12 +280,7 @@ test_that("same p.value (permutation test) for winRatio and net Benefit", {
 
     ## note CI are not agreeing with p-values
     confint(e.perm, statistic = "netBenefit", conf.level = 1-0.48)
-    ##              estimate        se lower.ci upper.ci p.value
-    ## toxicity_0.5      0.1 0.1010618     0.04      0.2    0.48
-
     confint(e.perm, statistic = "winRatio", conf.level = 1-0.48)
-    ##              estimate        se lower.ci upper.ci p.value
-    ## toxicity_0.5 1.496032 0.4939202 1.175454 2.238111    0.48
 
 })
 
@@ -313,7 +315,7 @@ test_that("Boostrap - issue in the summary", {
     BT.keep <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno),
                          data = veteran, keep.pairScore = TRUE, scoring.rule = "Gehan", 
                          trace = 0, method.inference = "bootstrap", n.resampling = 20, seed = 10)
-    summary(BT.keep, statistic = "winRatio")
+    capture.output(summary(BT.keep, statistic = "winRatio"))
 })
 
 ## * graemeleehickey (issue #3 on Github): 22 september 2019 BuysePower
@@ -326,8 +328,11 @@ test_that("BuysePower - error in print", {
     }
 
     ## the error was when setting trace to 4
-    xx <- powerBuyseTest(sim = simFCT, sample.sizeC = c(100), sample.sizeT = c(100), n.rep = 2,
-                   formula = T ~ cont(Y), method.inference = "u-statistic", trace = 4)
+    tempo <- capture.output({
+        xx <- powerBuyseTest(sim = simFCT, sample.sizeC = c(100), sample.sizeT = c(100), n.rep = 2,
+                             formula = T ~ cont(Y), method.inference = "u-statistic", trace = 4,
+                             seed = 10)
+    })
 
     yy <- powerBuyseTest(sim = function(n.C, n.T){
         out <- data.table(Y=rnorm(n.C+n.T),
@@ -335,7 +340,8 @@ test_that("BuysePower - error in print", {
                           )
         return(out)
     }, sample.sizeC = c(100), sample.sizeT = c(100), n.rep = 2,
-    formula = T ~ cont(Y), method.inference = "u-statistic", trace = 0)
+    formula = T ~ cont(Y), method.inference = "u-statistic", trace = 0,
+    seed = 10)
 
     expect_equal(xx,yy)
 
@@ -384,6 +390,54 @@ test_that("simBuyseTest - rate vs. scale", {
     expect_equal(mean(GS1),mean(test[treatment == "C", mean(eventtimeCensoring)]), tol = 1e-2)
     expect_equal(mean(GS1),mean(test[treatment == "T", mean(eventtimeCensoring)]), tol = 1e-2)
 })
+
+## * graemeleehickey (issue #6 on Github): 15 march 2020 powerBuyseTest
+
+args <- list(rates.T = c((3:5) / 10), rates.Censoring.T = rep(1, 3))
+simFCT <- function(n.C, n.T) {
+  simBuyseTest(100, argsBin = NULL, argsCont = NULL, argsTTE = args)
+}
+
+test_that("powerBuyseTest - status vs. censoring", {
+    valid <- powerBuyseTest(sim = simFCT, sample.size = c(100), n.rep = 2,
+                            formula = treatment ~ tte(eventtime1, status = status1),
+                            method.inference = "u-statistic",
+                            scoring.rule = "Gehan", trace = 0)
+
+    expect_error(powerBuyseTest(sim = simFCT, sample.size = c(100), n.rep = 2,
+                                formula = treatment ~ tte(eventtime1, censoring = status1),
+                                method.inference = "u-statistic",
+                                scoring.rule = "Gehan"))
+
+    valid <- capture.output(powerBuyseTest(sim = simFCT, sample.size = c(100), n.rep = 2,
+                                           formula = treatment ~ tte(eventtime1, status = status1),
+                                           method.inference = "u-statistic",
+                                           scoring.rule = "Gehan", trace = 4))
+})
+
+## * brice ozenne : 04/26/20 2:36 uninformative pairs Peron
+dt.prodlim <- rbind(data.table(treat=0,
+                               time = c(1:8,rep(9,12)),
+                               status = c(rep(1,8),rep(0,12))
+                               ),
+                    data.table(treat=1,
+                               time = c(1:8,rep(9,12)),
+                               status = c(0,rep(1,7),rep(0,12))
+                               ))
+
+e.prodlim <- prodlim(Hist(time, status) ~ treat, data = dt.prodlim)
+plot(e.prodlim)
+
+dt.sim <- data.table(treat = c(0:1), time = 8, status = 0)
+e.BP <- BuyseTest(treat ~ tte(time, status, threshold=2),
+                  model.tte = e.prodlim, data = dt.sim, method.inference = "none")
+
+test_that("uniformative pair after last observation",{
+    expect_equal(as.double(e.BP@count.neutral), 0)
+    expect_equal(as.double(e.BP@count.uninf), 1)
+})
+
+
 
 ## * new
 ## set.seed(10)

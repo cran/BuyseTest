@@ -9,26 +9,23 @@
 #include <Rmath.h>
 
 // :cppFile:{FCT_buyseTest.cpp}:end:
-using namespace Rcpp ;
-using namespace std ;
-using namespace arma ;
 
-void calcStatistic(arma::mat& delta_netBenefit, arma::mat& delta_winRatio, arma::vec & Delta_netBenefit, arma::vec& Delta_winRatio,
+void calcStatistic(arma::cube& delta, arma::mat& Delta,
                    const arma::mat& Mcount_favorable, const arma::mat& Mcount_unfavorable, 
-                   arma::mat& iidAverage_favorable, arma::mat& iid_unfavorable, arma::mat& iidNuisance_favorable, arma::mat& iidNuisance_unfavorable,
-				   arma::mat& Mvar, int returnIID,
-				   std::vector< arma::uvec >& posC, std::vector< arma::uvec >& posT,
+                   arma::mat& iidAverage_favorable, arma::mat& iidAverage_unfavorable, arma::mat& iidNuisance_favorable, arma::mat& iidNuisance_unfavorable,
+		   arma::mat& Mvar, int returnIID,
+		   std::vector< arma::uvec >& posC, std::vector< arma::uvec >& posT,
                    const unsigned int& D, const int& n_strata, const arma::vec& n_pairs, const arma::vec& n_control, const arma::vec& n_treatment,
-				   const arma::vec& weight, int hprojection, const std::vector< arma::mat >& lsScore, bool keepScore);
+		   const arma::vec& weight, int hprojection, const std::vector< arma::mat >& lsScore, bool keepScore);
 
 // * calcStatistic
-void calcStatistic(arma::mat& delta_netBenefit, arma::mat& delta_winRatio, arma::vec & Delta_netBenefit, arma::vec& Delta_winRatio,
+void calcStatistic(arma::cube& delta, arma::mat& Delta,
                    const arma::mat& Mcount_favorable, const arma::mat& Mcount_unfavorable, 
-                   arma::mat& iidAverage_favorable, arma::mat& iid_unfavorable, arma::mat& iidNuisance_favorable, arma::mat& iidNuisance_unfavorable,
-				   arma::mat& Mvar, int returnIID,
-				   std::vector< arma::uvec >& posC, std::vector< arma::uvec >& posT,
+                   arma::mat& iidAverage_favorable, arma::mat& iidAverage_unfavorable, arma::mat& iidNuisance_favorable, arma::mat& iidNuisance_unfavorable,
+		   arma::mat& Mvar, int returnIID,
+		   std::vector< arma::uvec >& posC, std::vector< arma::uvec >& posT,
                    const unsigned int& D, const int& n_strata, const arma::vec& n_pairs, const arma::vec& n_control, const arma::vec& n_treatment,
-				   const arma::vec& weight, int hprojection, const std::vector< arma::mat >& lsScore, bool keepScore){
+		   const arma::vec& weight, int hprojection, const std::vector< arma::mat >& lsScore, bool keepScore){
   
   // ** total number of pairs and patients in each arm
   double ntot_pair = 0;
@@ -45,8 +42,8 @@ void calcStatistic(arma::mat& delta_netBenefit, arma::mat& delta_winRatio, arma:
   arma::vec cumWcount_unfavorable(D);
 
   // sum over strata
-  count_favorable = conv_to<vec>::from(sum(Mcount_favorable,0));
-  count_unfavorable = conv_to<vec>::from(sum(Mcount_unfavorable,0)); 
+  count_favorable = arma::conv_to<arma::vec>::from(sum(Mcount_favorable,0));
+  count_unfavorable = arma::conv_to<arma::vec>::from(sum(Mcount_unfavorable,0)); 
 
   // weight endpoints and cumulate over endpoints
   cumWcount_favorable = count_favorable;
@@ -57,15 +54,22 @@ void calcStatistic(arma::mat& delta_netBenefit, arma::mat& delta_winRatio, arma:
   cumWcount_unfavorable %= weight;
   cumWcount_unfavorable = cumsum(cumWcount_unfavorable); 
 
+  // Mann Whitney parameter equals number of favorable pairs divided by the number of pairs (i.e. proportion in favor of the treatment)  
+  delta.slice(0) = Mcount_favorable;
+  delta.slice(0).each_col() /= n_pairs;
+  Delta.col(0) = cumWcount_favorable/(double)(ntot_pair);
+
+  delta.slice(1) = Mcount_unfavorable;
+  delta.slice(1).each_col() /= n_pairs;
+  Delta.col(1) = cumWcount_unfavorable/(double)(ntot_pair);
+
   // net benefit equals (number of favorable pairs minus number of unfavorable pairs) divided by number of pairs
-  Delta_netBenefit = (cumWcount_favorable - cumWcount_unfavorable)/(double)(ntot_pair);
-  delta_netBenefit = (Mcount_favorable - Mcount_unfavorable);
-  delta_netBenefit.each_col() /= n_pairs;
+  delta.slice(2) = delta.slice(0) - delta.slice(1);
+  Delta.col(2) = Delta.col(0) - Delta.col(1);
 
   // win ratio equals number of favorable pairs divided by the number of favorable plus unfavorable pairs  
-  Delta_winRatio = cumWcount_favorable / cumWcount_unfavorable;
-  delta_winRatio = Mcount_favorable / Mcount_unfavorable;
-
+  delta.slice(3) = delta.slice(0) / delta.slice(1);
+  Delta.col(3) = Delta.col(0) / Delta.col(1);
 	  
   // ** iid and variance estimation
   if(returnIID > 0){
@@ -78,71 +82,71 @@ void calcStatistic(arma::mat& delta_netBenefit, arma::mat& delta_winRatio, arma:
     for(int iter_strata=0 ; iter_strata < n_strata ; iter_strata ++){ // loop over strata
       iidAverage_favorable.rows(posC[iter_strata]) /= n_treatment[iter_strata];
       iidAverage_favorable.rows(posT[iter_strata]) /= n_control[iter_strata];
-      iid_unfavorable.rows(posC[iter_strata]) /= n_treatment[iter_strata];
-      iid_unfavorable.rows(posT[iter_strata]) /= n_control[iter_strata];
+      iidAverage_unfavorable.rows(posC[iter_strata]) /= n_treatment[iter_strata];
+      iidAverage_unfavorable.rows(posT[iter_strata]) /= n_control[iter_strata];
     }
 	
     // *** center
-    iidAverage_favorable.each_row() -= conv_to<rowvec>::from(delta_favorable);
-    iid_unfavorable.each_row() -= conv_to<rowvec>::from(delta_unfavorable);
+    iidAverage_favorable.each_row() -= arma::conv_to<arma::rowvec>::from(delta_favorable);
+    iidAverage_unfavorable.each_row() -= arma::conv_to<arma::rowvec>::from(delta_unfavorable);
 
     // *** rescale
     for(int iter_strata=0 ; iter_strata < n_strata ; iter_strata ++){ 
       iidAverage_favorable.rows(posC[iter_strata]) /= ntot_control;
       iidAverage_favorable.rows(posT[iter_strata]) /= ntot_treatment;
-      iid_unfavorable.rows(posC[iter_strata]) /= ntot_control;
-      iid_unfavorable.rows(posT[iter_strata]) /= ntot_treatment;
+      iidAverage_unfavorable.rows(posC[iter_strata]) /= ntot_control;
+      iidAverage_unfavorable.rows(posT[iter_strata]) /= ntot_treatment;
     }
 	
     // *** weight endpoints and cumulate them
-    arma::rowvec rowweight = conv_to<rowvec>::from(weight);
+    arma::rowvec rowweight = arma::conv_to<arma::rowvec>::from(weight);
 
     iidAverage_favorable.each_row() %= rowweight;
     iidAverage_favorable = cumsum(iidAverage_favorable,1);
   
-    iid_unfavorable.each_row() %= rowweight;
-    iid_unfavorable = cumsum(iid_unfavorable,1);
+    iidAverage_unfavorable.each_row() %= rowweight;
+    iidAverage_unfavorable = cumsum(iidAverage_unfavorable,1);
 
-	if(returnIID>1){
-	  iidNuisance_favorable.each_row() %= rowweight;
-	  iidNuisance_favorable = cumsum(iidNuisance_favorable,1);
+    if(returnIID>1){
+      iidNuisance_favorable.each_row() %= rowweight;
+      iidNuisance_favorable = cumsum(iidNuisance_favorable,1);
   
-	  iidNuisance_unfavorable.each_row() %= rowweight;
-	  iidNuisance_unfavorable = cumsum(iidNuisance_unfavorable,1);
-	}
+      iidNuisance_unfavorable.each_row() %= rowweight;
+      iidNuisance_unfavorable = cumsum(iidNuisance_unfavorable,1);
+    }
 	
     // *** sufficient statistics
-    arma::vec sigmaC_favorable = zeros<vec>(D);
-    arma::vec sigmaT_favorable = zeros<vec>(D);
-    arma::vec sigmaC_unfavorable = zeros<vec>(D);
-    arma::vec sigmaT_unfavorable = zeros<vec>(D);
-    arma::vec sigmaC_mixed = zeros<vec>(D);
-    arma::vec sigmaT_mixed = zeros<vec>(D);
+    arma::vec sigmaC_favorable = arma::zeros<arma::vec>(D);
+    arma::vec sigmaT_favorable = arma::zeros<arma::vec>(D);
+    arma::vec sigmaC_unfavorable = arma::zeros<arma::vec>(D);
+    arma::vec sigmaT_unfavorable = arma::zeros<arma::vec>(D);
+    arma::vec sigmaC_mixed = arma::zeros<arma::vec>(D);
+    arma::vec sigmaT_mixed = arma::zeros<arma::vec>(D);
 
     arma::mat iidTotal_favorable = iidAverage_favorable;
-    arma::mat iidTotal_unfavorable = iid_unfavorable;
-	if(returnIID>1){
+    arma::mat iidTotal_unfavorable = iidAverage_unfavorable;
+    if(returnIID>1){
       iidTotal_favorable += iidNuisance_favorable;
       iidTotal_unfavorable += iidNuisance_unfavorable;
     }
   
     for(int iter_strata=0 ; iter_strata < n_strata ; iter_strata ++){ // loop over strata
-      sigmaC_favorable += conv_to<vec>::from( ntot_control * sum(pow(iidTotal_favorable.rows(posC[iter_strata]),2),0) );
-      sigmaT_favorable += conv_to<vec>::from( ntot_treatment * sum(pow(iidTotal_favorable.rows(posT[iter_strata]),2),0) );
+      sigmaC_favorable += arma::conv_to<arma::vec>::from( ntot_control * sum(pow(iidTotal_favorable.rows(posC[iter_strata]),2),0) );
+      sigmaT_favorable += arma::conv_to<arma::vec>::from( ntot_treatment * sum(pow(iidTotal_favorable.rows(posT[iter_strata]),2),0) );
 	
-      sigmaC_unfavorable += conv_to<vec>::from(ntot_control * sum(pow(iidTotal_unfavorable.rows(posC[iter_strata]),2),0) );
-      sigmaT_unfavorable += conv_to<vec>::from(ntot_treatment * sum(pow(iidTotal_unfavorable.rows(posT[iter_strata]),2),0) );
+      sigmaC_unfavorable += arma::conv_to<arma::vec>::from(ntot_control * sum(pow(iidTotal_unfavorable.rows(posC[iter_strata]),2),0) );
+      sigmaT_unfavorable += arma::conv_to<arma::vec>::from(ntot_treatment * sum(pow(iidTotal_unfavorable.rows(posT[iter_strata]),2),0) );
 	
-      sigmaC_mixed += conv_to<vec>::from(ntot_control * sum(iidTotal_favorable.rows(posC[iter_strata]) % iidTotal_unfavorable.rows(posC[iter_strata]),0) );
-      sigmaT_mixed += conv_to<vec>::from(ntot_treatment * sum(iidTotal_favorable.rows(posT[iter_strata]) % iidTotal_unfavorable.rows(posT[iter_strata]),0) );
+      sigmaC_mixed += arma::conv_to<arma::vec>::from(ntot_control * sum(iidTotal_favorable.rows(posC[iter_strata]) % iidTotal_unfavorable.rows(posC[iter_strata]),0) );
+      sigmaT_mixed += arma::conv_to<arma::vec>::from(ntot_treatment * sum(iidTotal_favorable.rows(posT[iter_strata]) % iidTotal_unfavorable.rows(posT[iter_strata]),0) );
     }
 
     Mvar.col(0) = sigmaC_favorable/ntot_control + sigmaT_favorable/ntot_treatment;
     Mvar.col(1) = sigmaC_unfavorable/ntot_control + sigmaT_unfavorable/ntot_treatment; 
     Mvar.col(2) = sigmaC_mixed/ntot_control + sigmaT_mixed/ntot_treatment;
     // Mvar.col(0) = trans(sum(pow(iidAverage_favorable,2), 0));
-    // Mvar.col(1) = trans(sum(pow(iid_unfavorable,2), 0));
-    // Mvar.col(2) = trans(sum(iidAverage_favorable % iid_unfavorable, 0));
+    // Mvar.col(1) = trans(sum(pow(iidAverage_unfavorable,2), 0));
+    // Mvar.col(2) = trans(sum(iidAverage_favorable % iidAverage_unfavorable, 0));
 
     // second order
     if(hprojection==2){
@@ -150,8 +154,8 @@ void calcStatistic(arma::mat& delta_netBenefit, arma::mat& delta_winRatio, arma:
       if(keepScore){
 
 		// reconstruct individual score
-		arma::mat pairScoreF(ntot_pair,D,fill::zeros);
-		arma::mat pairScoreUF(ntot_pair,D,fill::zeros);
+		arma::mat pairScoreF(ntot_pair,D,arma::fill::zeros);
+		arma::mat pairScoreUF(ntot_pair,D,arma::fill::zeros);
 		arma::uvec indexRemainingPair;
 		arma::uvec iUvec_iter_d(1);
 		arma::vec n_cumcontrol = cumsum(n_control);
@@ -162,7 +166,7 @@ void calcStatistic(arma::mat& delta_netBenefit, arma::mat& delta_winRatio, arma:
 			pairScoreUF.col(0) = lsScore[0].col(12);
 		  }else{
 			iUvec_iter_d = {iter_d};
-			indexRemainingPair = conv_to<uvec>::from(lsScore[iter_d].col(3));
+			indexRemainingPair = arma::conv_to<arma::uvec>::from(lsScore[iter_d].col(3));
 			pairScoreF.submat(indexRemainingPair, iUvec_iter_d) = lsScore[iter_d].col(11);
 			pairScoreUF.submat(indexRemainingPair, iUvec_iter_d) = lsScore[iter_d].col(12);
 		  }
@@ -173,8 +177,8 @@ void calcStatistic(arma::mat& delta_netBenefit, arma::mat& delta_winRatio, arma:
 		pairScoreUF = cumsum(pairScoreUF,1);
 
 		// compute second order h-projection and corresponding moments
-		rowvec H2_favorable, H2_unfavorable;
-		arma::mat H2_moments(5,D,fill::zeros);
+		arma::rowvec H2_favorable, H2_unfavorable;
+		arma::mat H2_moments(5,D,arma::fill::zeros);
 		int iter_strata, iter_C, iter_T;
 		
 		for(int iter_pair=0; iter_pair<ntot_pair ; iter_pair++){ 
@@ -203,7 +207,7 @@ void calcStatistic(arma::mat& delta_netBenefit, arma::mat& delta_winRatio, arma:
 		Mvar.col(2) += (- cumWdelta_favorable % cumWdelta_unfavorable - sigmaC_mixed - sigmaT_mixed)/(ntot_pair);
 	  }
 	}
-	// Rcout << endl << "delta method" << endl;  
+	// Rcpp::Rcout << std::endl << "delta method" << std::endl;  
     // delta method
     // var(A-B) = var(A) + var(B) - 2 * cov(A,B)
     // indeed (A-B)' = A' - B' so (A-B)^'2 = A'A' + B'B'  - 2*A'B'
@@ -211,6 +215,7 @@ void calcStatistic(arma::mat& delta_netBenefit, arma::mat& delta_winRatio, arma:
     // var(A/B) = var(A)/B^2 + var(B)*(A^2/B^4) - 2*cov(A,B)A/B^3
     // indeed (A/B)' = A'/B - B'A/B^2 so (A/B)^'2 = A'A'/B^2 + B'B'A^2/B^2 - 2B'A' A/B^3
     Mvar.col(4) = Mvar.col(0)/pow(cumWdelta_unfavorable, 2) + Mvar.col(1) % pow(cumWdelta_favorable,2)/pow(cumWdelta_unfavorable,4) - 2 * Mvar.col(2) % cumWdelta_favorable/pow(cumWdelta_unfavorable, 3);
+    // Mann-Whitney parameter is the same as the proportion in favor of treatment
 	// check if no variability then set var(win ratio) to 0.
 	for(unsigned int iEndpoint = 0; iEndpoint<D; iEndpoint++){
 	  if( (Mvar(iEndpoint,0)==0) && (Mvar(iEndpoint,1)==0)){

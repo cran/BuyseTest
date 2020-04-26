@@ -4,13 +4,33 @@
 \alias{BuyseTest}
 \title{Generalized Pairwise Comparisons (GPC)}
 \usage{
-BuyseTest(formula, data, scoring.rule = NULL, correction.uninf = NULL,
-  model.tte = NULL, method.inference = NULL, n.resampling = NULL,
-  strata.resampling = NULL, hierarchical = NULL, weight = NULL,
-  neutral.as.uninf = NULL, keep.pairScore = NULL, seed = 10,
-  cpus = NULL, trace = NULL, treatment = NULL, endpoint = NULL,
-  type = NULL, threshold = NULL, status = NULL, operator = NULL,
-  censoring = NULL, strata = NULL, keep.comparison, method.tte)
+BuyseTest(
+  formula,
+  data,
+  scoring.rule = NULL,
+  correction.uninf = NULL,
+  model.tte = NULL,
+  method.inference = NULL,
+  n.resampling = NULL,
+  strata.resampling = NULL,
+  hierarchical = NULL,
+  weight = NULL,
+  neutral.as.uninf = NULL,
+  keep.pairScore = NULL,
+  seed = NULL,
+  cpus = NULL,
+  trace = NULL,
+  treatment = NULL,
+  endpoint = NULL,
+  type = NULL,
+  threshold = NULL,
+  status = NULL,
+  operator = NULL,
+  censoring = NULL,
+  strata = NULL,
+  keep.comparison,
+  method.tte
+)
 }
 \arguments{
 \item{formula}{[formula] a symbolic description of the GPC model,
@@ -31,7 +51,7 @@ See Details, section "Handling missing values".}
 Models must \code{prodlim} objects and stratified on the treatment and strata variable. When used, the uncertainty from the estimates of these survival models is ignored.}
 
 \item{method.inference}{[character] method used to compute confidence intervals and p-values.
-Can be \code{"none"}, \code{"u-statistic"}, \code{"permutation"}, \code{"bootstrap"}, \code{"bootstrap"}, \code{"studentized bootstrap"}.
+Can be \code{"none"}, \code{"u-statistic"}, \code{"permutation"}, \code{"studentized permutation"}, \code{"bootstrap"}, \code{"studentized bootstrap"}.
 See Details, section "Statistical inference".}
 
 \item{n.resampling}{[integer] the number of permutations/samples used for computing the confidence intervals and the p.values. 
@@ -51,7 +71,7 @@ See Details, section "Handling missing values".}
 
 \item{keep.pairScore}{[logical] should the result of each pairwise comparison be kept?}
 
-\item{seed}{[integer, >0] the seed to consider for the permutation test.
+\item{seed}{[integer, >0] the seed to consider when performing resampling.
 If \code{NULL} no seed is set.}
 
 \item{cpus}{[integer, >0] the number of CPU to use.
@@ -69,7 +89,7 @@ See Details, section "Specification of the GPC model".}
 \item{method.tte}{Obsolete. Alias for 'scoring.rule'.}
 }
 \value{
-An \R object of class \code{\linkS4class{BuyseRes}}.
+An \R object of class \code{\linkS4class{S4BuyseTest}}.
 }
 \description{
 Performs Generalized Pairwise Comparisons for binary, continuous and time-to-event endpoints.
@@ -141,6 +161,7 @@ The variance is computed using a H-projection of order 1 (default option), which
 An unbiased estimator can be obtained using a H-projection of order 2 (only available for the uncorrected Gehan's scoring rule, see \code{BuyseTest.options}).
 \bold{WARNING}: the current implementation of the H-projection has not been validated when using corrections for uninformative pairs (\code{correction.uninf=1}, or \code{correction.uninf=2}).
   \item argument \code{method.inference="permutation"}: perform a permutation test, estimating in each sample the summary statistics (net benefit, win ratio).
+  \item argument \code{method.inference="studentized permutation"}: perform a permutation test, estimating in each sample the summary statistics (net benefit, win ratio) and the variance-covariance matrix of the estimate.
   \item argument \code{method.inference="bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio).
   \item argument \code{method.inference=" studentized bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio) and the variance-covariance matrix of the estimator.
 }
@@ -240,16 +261,14 @@ if(require(survival)){
  
   ## scoring.rule = "Gehan"
   BT_Gehan <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,status=status), 
-                        data=veteran, scoring.rule="Gehan",
-                        method.inference = "permutation", n.resampling = 1e3)
+                        data=veteran, scoring.rule="Gehan")
   
   summary_Gehan <- summary(BT_Gehan)
   summary_Gehan <- summary(BT_Gehan, statistic = "winRatio")
   
   ## scoring.rule = "Peron"
   BT_Peron <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,status=status), 
-                        data=veteran, scoring.rule="Peron",
-                        method.inference = "permutation", n.resampling = 1e3)
+                        data=veteran, scoring.rule="Peron")
 
   class(BT_Peron)
   summary(BT_Peron)
@@ -264,8 +283,8 @@ On the Gehan's scoring rule: Gehan EA (1965). \bold{A generalized two-sample Wil
 On inference in GPC using the U-statistic theory: I. Bebu, J. M. Lachin (2015). \bold{Large sample inference for a win ratio analysis of a composite outcome based on prioritized components}. \emph{Biostatistics} 17(1):178-187 \cr
 }
 \seealso{
-\code{\link{BuyseRes-summary}} for a summary of the results of generalized pairwise comparison. \cr
-\code{\link{BuyseRes-class}} for a presentation of the \code{BuyseRes} object. \cr
+\code{\link{S4BuyseTest-summary}} for a summary of the results of generalized pairwise comparison. \cr
+\code{\link{S4BuyseTest-class}} for a presentation of the \code{S4BuyseTest} object. \cr
 \code{\link{constStrata}} to create a strata variable from several clinical variables. \cr
 }
 \author{

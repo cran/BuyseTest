@@ -68,6 +68,7 @@ initializeArgs <- function(status,
     if(is.null(strata.resampling)){ strata.resampling <- option$strata.resampling }
     if(is.null(neutral.as.uninf)){ neutral.as.uninf <- option$neutral.as.uninf }
     if(is.null(trace)){ trace <- option$trace }
+    engine <- option$engine
     alternative <- option$alternative
     
     ## ** convert formula into separate arguments
@@ -229,7 +230,10 @@ initializeArgs <- function(status,
     
     ## ** correction.uninf
     correction.uninf <- as.numeric(correction.uninf)
-
+    if(correction.uninf>0){
+        engine <- "GPC_cpp"
+    }
+    
     ## ** model.tte
     if(identical(scoring.rule,1)){
         if((!is.null(model.tte)) && (length(unique(endpoint.TTE)) == 1) && inherits(model.tte, "prodlim")){
@@ -247,9 +251,6 @@ initializeArgs <- function(status,
     iid <- attr(method.inference,"studentized") || (method.inference == "u-statistic")
     if(iid){
         attr(method.inference,"hprojection") <- option$order.Hprojection
-        if(attr(method.inference,"hprojection")==2 & identical(scoring.rule,1)){
-            keep.pairScore <- TRUE ## need the detail of the score to perform the 2nd order projection
-        }
     }else{
         attr(method.inference,"hprojection") <- NA
     }
@@ -260,6 +261,11 @@ initializeArgs <- function(status,
         cpus <- parallel::detectCores() # this function detect the number of CPU cores 
     }
 
+    ## ** trace
+    if(is.logical(trace)){
+        trace <- as.numeric(trace)
+    }
+    
     ## ** export
     return(list(
         name.call = name.call,
@@ -272,6 +278,7 @@ initializeArgs <- function(status,
         data = data,
         endpoint = endpoint,
         endpoint.TTE = endpoint.TTE,
+        engine = engine,
         formula = formula,
         iid = iid,
         iidNuisance = iidNuisance,
@@ -304,7 +311,7 @@ initializeArgs <- function(status,
 ## * initializeData
 #' @rdname internal-initialization
 initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, status, Ustatus, method.inference, operator, censoring, strata, treatment, hierarchical, copy,
-                           endpoint.TTE, status.TTE, iidNuisance){
+                           keep.pairScore, endpoint.TTE, status.TTE, iidNuisance){
 
     if (!data.table::is.data.table(data)) {
         data <- data.table::as.data.table(data)
@@ -326,7 +333,7 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
     }
 
     ## ** operator
-    operator.endpoint <- setNames(operator, endpoint)[!duplicated(endpoint)]
+    operator.endpoint <- stats::setNames(operator, endpoint)[!duplicated(endpoint)]
     name.negative <- names(operator.endpoint)[operator.endpoint=="<0"]
     if(length(name.negative)>0){
         name.negative.binary <- intersect(name.negative, endpoint[type==1])
@@ -350,7 +357,7 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
         level.strata <- levels(data[["..strata.."]])        
         data[ , c("..strata..") := as.numeric(.SD[["..strata.."]])] # convert to numeric
         
-        n.obsStrata <- data[,.N, by = "..strata.."][,setNames(.SD[[1]],.SD[[2]]),.SD = c("N","..strata..")]
+        n.obsStrata <- data[,.N, by = "..strata.."][,stats::setNames(.SD[[1]],.SD[[2]]),.SD = c("N","..strata..")]
     }else{
         
         data[ , c("..strata..") := 1]
@@ -362,7 +369,7 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
 
     ## ** convert treatment to binary indicator
     level.treatment <- levels(as.factor(data[[treatment]]))
-    trt2bin <- setNames(0:1,level.treatment)
+    trt2bin <- stats::setNames(0:1,level.treatment)
     data[ , c(treatment) := trt2bin[as.character(.SD[[1]])], .SDcols = treatment]
 
     ## ** rowIndex
@@ -378,9 +385,11 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
         test.status <- sapply(status.TTE, function(iC){any(data[[iC]]==0)})
         if(all(test.status==FALSE)){
             scoring.rule <- 0
-            iidNuisance <- FALSE
-        }        
-
+            iidNuisance <- FALSE            
+        }else if(identical(attr(method.inference,"hprojection"),2)){
+            keep.pairScore <- TRUE ## need the detail of the score to perform the 2nd order projection
+        }
+        
         ## distinct time to event endpoints
         endpoint.UTTE <- unique(endpoint.TTE[test.status])
         status.UTTE <- unique(status.TTE[test.status])
@@ -469,7 +478,8 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
                 endpoint.UTTE = endpoint.UTTE,
                 status.UTTE = status.UTTE,
                 D.UTTE = D.UTTE,
-                index.UTTE = index.UTTE
+                index.UTTE = index.UTTE,
+                keep.pairScore = keep.pairScore
                 ))
 }
 

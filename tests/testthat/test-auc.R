@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: dec  2 2019 (16:55) 
 ## Version: 
-## Last-Updated: dec  5 2019 (15:46) 
+## Last-Updated: apr  6 2020 (11:44) 
 ##           By: Brice Ozenne
-##     Update #: 21
+##     Update #: 29
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -21,9 +21,9 @@ if(FALSE){
     library(data.table)
 }
 
-context("Check auc calculation vs. pROC")
-library(pROC)
-library(cvAUC)
+context("Check auc calculation vs. cvAUC")
+## library(pROC)
+## library(cvAUC)
 
 ## * Compare AUC and CI
 n <- 200
@@ -36,11 +36,12 @@ dt <- data.table(Y = as.factor(rbinom(n, size = 1, prob = 1/(1+exp(1/2-X)))),
 ## ** no CV
 test_that("AUC - BuyseTest vs pROC",{
     test <- auc(labels = dt$Y, predictions = dt$X, direction = ">")
-    test2 <- cvAUC(predictions = dt$X,
+    test <- auc(labels = as.character(dt$Y), predictions = dt$X, direction = ">")
+    test2 <- cvAUC::cvAUC(predictions = dt$X,
                    labels = dt$Y)
-    test3 <- ci.cvAUC(predictions = dt$X,
+    test3 <- cvAUC::ci.cvAUC(predictions = dt$X,
                       labels = dt$Y)
-    GS <- roc(dt$Y, -dt$X, ci = TRUE, direction = ">")
+    GS <- pROC::roc(dt$Y, -dt$X, ci = TRUE, direction = ">")
 
     expect_equal(GS$auc[1], as.double(test[test$fold == "global","estimate"]), tol = 1e-6)
     expect_equal(GS$ci[1], as.double(test[test$fold == "global","lower"]), tol = 1e-3)
@@ -62,9 +63,9 @@ test_that("AUC after CV - BuyseTest vs cvAUC",{
     
     test0 <- auc(labels = dt$Y, prediction = dt$X,
                  fold = dt$fold0, observation = 1:NROW(dt))
-    GS0 <- ci.cvAUC(predictions = dt$X,
-                    labels = dt$Y,
-                    folds = dt$fold0)
+    GS0 <- cvAUC::ci.cvAUC(predictions = dt$X,
+                           labels = dt$Y,
+                           folds = dt$fold0)
 
     expect_equal(test0[test0$fold=="global", "estimate"],
                  GS0$cvAUC, tol = 1e-6)

@@ -93,16 +93,13 @@ simCompetingRisks <- function(n.T, n.C, p.1C = NULL, v.1C, v.1T, v.2C, v.2T, sHR
     stop("Missing input argument: please provide either (b.1T, b.1C, b.2T, b.2C) or (p.1C, sHR)")
   }
 
-  rF1T <- function(x) log(1 - v.1T * log(1 - x) / b.1T) / v.1T ## inverse of eq:6 in Jeong J-H. and Fine J. (2006) 
+  rF1T <- function(x) log(1 - v.1T * log(1 - x) / b.1T) / v.1T
   rF1C <- function(x) log(1 - v.1C * log(1 - x) / b.1C) / v.1C
   rF2T <- function(x) log(1 - v.2T * log(1 - x) / b.2T) / v.2T
   rF2C <- function(x) log(1 - v.2C * log(1 - x) / b.2C) / v.2C
   n <- (n.T + n.C)
   u <- stats::runif(n, 0, 1)
-  data <- data.frame(treatment = c(rep(1, n.T), rep(0, n.C)),
-                     event.time = rep(0, n),
-                     event.type = rep(0, n),
-                     stringsAsFactors = FALSE)
+  data <- data.frame(treatment = c(rep(1, n.T), rep(0, n.C)), event.time = rep(0, n), event.type = rep(0, n))
   indexT1 <- which(data$treatment == 1 & u < p.1T)
   indexT2 <- which(data$treatment == 1 & u >= p.1T)
   indexC1 <- which(data$treatment == 0 & u < p.1C)
