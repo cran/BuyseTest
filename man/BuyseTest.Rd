@@ -104,6 +104,7 @@ A \emph{Vector interface} using  the following arguments \itemize{
 Must have only two levels (e.g. \code{0} and \code{1}).
   \item \code{endpoint}: [character vector] the name of the endpoint variable(s).
   \item \code{threshold}: [numeric vector] critical values used to compare the pairs (threshold of minimal important difference).
+A pair will be classified as neutral if the difference in endpoint is strictly below this threshold.
 There must be one threshold for each endpoint variable; it must be \code{NA} for binary endpoints and positive for continuous or time to event endpoints. 
   \item \code{status}: [character vector] the name of the binary variable(s) indicating whether the endpoint was observed or censored.
 Must value \code{NA} when the endpoint is not a time to event.
@@ -159,7 +160,7 @@ Available methods are:
 The U-statistic theory indicates that this approximation is asymptotically exact.
 The variance is computed using a H-projection of order 1 (default option), which is a consistent but downward biased estimator.
 An unbiased estimator can be obtained using a H-projection of order 2 (only available for the uncorrected Gehan's scoring rule, see \code{BuyseTest.options}).
-\bold{WARNING}: the current implementation of the H-projection has not been validated when using corrections for uninformative pairs (\code{correction.uninf=1}, or \code{correction.uninf=2}).
+\bold{WARNING}: the current implementation of the H-projection is not valid when using corrections for uninformative pairs (\code{correction.uninf=1}, or \code{correction.uninf=2}).
   \item argument \code{method.inference="permutation"}: perform a permutation test, estimating in each sample the summary statistics (net benefit, win ratio).
   \item argument \code{method.inference="studentized permutation"}: perform a permutation test, estimating in each sample the summary statistics (net benefit, win ratio) and the variance-covariance matrix of the estimate.
   \item argument \code{method.inference="bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio).
@@ -191,14 +192,11 @@ Additional (hidden) arguments are \itemize{
 \examples{
 library(data.table)
 
-# reset the default value of the number of permuation sample
-BuyseTest.options(method.inference = "none") # no permutation test
-
 #### simulate some data ####
 set.seed(10)
 df.data <- simBuyseTest(1e2, n.strata = 2)
 
-                                       # display 
+## display 
 if(require(prodlim)){
    resKM_tempo <- prodlim(Hist(eventtime,status)~treatment, data = df.data)
    plot(resKM_tempo)
@@ -211,7 +209,7 @@ summary(BT) # net benefit
 summary(BT, percentage = FALSE)  
 summary(BT, statistic = "winRatio") # win Ratio
 
-## bootstrap to compute the CI
+## permutation instead of asymptotics to compute the p-value
 \dontrun{
     BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
                     method.inference = "permutation", n.resampling = 1e3)
@@ -223,7 +221,7 @@ summary(BT, statistic = "winRatio") # win Ratio
 summary(BT, statistic = "netBenefit") ## default
 summary(BT, statistic = "winRatio") 
 
-## parallel bootstrap
+## parallel permutation
 \dontrun{
     BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
                     method.inference = "permutation", n.resampling = 1e3, cpus = 2)
@@ -252,8 +250,8 @@ BT <- BuyseTest(f, data=df.data)
 summary(BT)
 
 #### real example : Veteran dataset of the survival package ####
-#### Only one endpoint. Type = Time-to-event. Thresold = 0. Stratfication by histological subtype
-#### scoring.rule = "Gehan"
+## Only one endpoint. Type = Time-to-event. Thresold = 0. Stratfication by histological subtype
+## scoring.rule = "Gehan"
 
 if(require(survival)){
 \dontrun{
@@ -290,5 +288,5 @@ On inference in GPC using the U-statistic theory: I. Bebu, J. M. Lachin (2015). 
 \author{
 Brice Ozenne
 }
-\keyword{BuyseTes}
+\keyword{BuyseTest}
 \keyword{function}

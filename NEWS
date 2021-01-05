@@ -1,10 +1,35 @@
 # -*- mode: org -*-
 
-* Version 2.1
+* Version 2.2
+
+** User visible changes
+- NEW FEATURE: method.inference="u-statistic" can now be used in
+  presence of competing risks with the Peron's scoring rule (WARNING:
+  NOT YET VALIDATED)
 
 ** Internal change
+- c++ for the competing risk has been updated to compute the influence function
+- calculation of the survival/cumulative incidence function/influence
+  function of the survival model for the Peron's scoring rule has been
+  re-written. 
 
-- fix c++ memory issue (version 2.1.1)
+* Version 2.1
+
+** User visible changes
+- NEW FEATURE (version 2.1.3): simBuyseTest now can simulate time to event endpoints
+  and categorical endpoints that are correlated (argument argsTTE,
+  element rho.T). The user interface of argument argsTTE has also been modified.
+- NEW FEATURE (version 2.1.5): simBuyseTest simulates time to event
+  endpoints using a Weibull distribution. The argument rates are now
+  called scales (i.e. correspond to the inverse of the previous
+  arguments).
+ 
+** Internal change
+
+- add options precompute in BuyseTest.options (version 2.1.4): when
+  set to TRUE, the integrals over the survival and their derivatives are
+  pre-computed instead of being computed on the fly when scoring the pairs.
+- fix c++ memory issue (version 2.1.1-2.1.3)
 - fix calculation of probability of being uninformative (version 2.1.0)
 
 * Version 2.0

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr  1 2019 (23:06) 
 ## Version: 
-## Last-Updated: maj  5 2020 (10:37) 
+## Last-Updated: nov 18 2020 (16:41) 
 ##           By: Brice Ozenne
-##     Update #: 106
+##     Update #: 124
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -52,9 +52,6 @@
 #' @export
 iid.prodlim <- function(object, add0 = FALSE, ...){
 
-    if(!inherits(object,"prodlim")){
-        stop("Argument \'object\' must inherit from prodlim \n")
-    }
     if(object$type!="surv"){
         stop("Influence function only available for survival models \n")
     }
@@ -84,7 +81,10 @@ iid.prodlim <- function(object, add0 = FALSE, ...){
                     dimnames = list(NULL, strataVar))
         cbind("strata.index" = iS, data.frame(M, stringsAsFactors = FALSE))
     }))
-    tableHazard <- data.table::data.table(df.strata, hazard = object$hazard, survival = object$surv, time = object$time,
+    tableHazard <- data.table::data.table(df.strata,
+                                          hazard = object$hazard,
+                                          survival = object$surv,
+                                          time = object$time,
                                           event = object$n.event,
                                           atrisk = object$n.risk)
     tableHazard.red <- tableHazard[tableHazard$event>0]
@@ -107,6 +107,7 @@ iid.prodlim <- function(object, add0 = FALSE, ...){
     IFhazard <- vector(mode = "list", length = n.strata)
     IFcumhazard <- vector(mode = "list", length = n.strata)
     IFsurvival <- vector(mode = "list", length = n.strata)
+    IFcif <- vector(mode = "list", length = n.strata)
     ls.Utime1 <- vector(mode = "list", length = n.strata)
     
     for(iStrata in 1:n.strata){ ## iStrata <- 1
@@ -120,6 +121,7 @@ iid.prodlim <- function(object, add0 = FALSE, ...){
         IFhazard[[iStrata]] <- matrix(0, nrow = n.obs, ncol = iN.time)
         IFcumhazard[[iStrata]] <- matrix(0, nrow = n.obs, ncol = iN.time)
         IFsurvival[[iStrata]] <- matrix(0, nrow = n.obs, ncol = iN.time)
+        IFcif[[iStrata]] <- matrix(0, nrow = n.obs, ncol = iN.time)
 
         ## only keep observation in the strata and with eventtime at or after the first jump
         iSubsetObs <- intersect(which(vec.strataNum==iStrata),
@@ -132,6 +134,7 @@ iid.prodlim <- function(object, add0 = FALSE, ...){
         
         ## hazard
         iHazard_iS0 <- iHazard/iTableHazard$atrisk
+
         iIndEvent <- do.call(cbind, lapply(ls.Utime1[[iStrata]], function(iT){
             (abs(iT - iVec.eventtime ) < 1e-12) * iDelta_iS0
         }))
@@ -139,16 +142,16 @@ iid.prodlim <- function(object, add0 = FALSE, ...){
             (iT <= iIndexJump) * iHazard_iS0[iT]
         }))
         IFhazard[[iStrata]][iSubsetObs,] <- - iRatio + iIndEvent
-         
+        
         ## cumulative hazard
-        IFcumhazard[[iStrata]][iSubsetObs,] <- t(apply(IFhazard[[iStrata]][iSubsetObs,,drop=FALSE],1,cumsum))
+        IFcumhazard[[iStrata]][iSubsetObs,] <- .rowCumSum_cpp(IFhazard[[iStrata]][iSubsetObs,,drop=FALSE])
 
         ## survival
         ## note use exp(-surv) instead of product limit for consistency with riskRegression
-        IFsurvival[[iStrata]][iSubsetObs,] <- sweep(-IFcumhazard[[iStrata]][iSubsetObs,,drop=FALSE], FUN = "*", STATS = exp(-cumsum(iTableHazard$hazard)), MARGIN = 2)
-        ## IFsurvival[[iStrata]][iSubsetObs,] <- sweep(-IFcumhazard[[iStrata]][iSubsetObs,], FUN = "*", STATS = iTableHazard$survival, MARGIN = 2)
+        IFsurvival[[iStrata]][iSubsetObs,] <- .rowMultiply_cpp(-IFcumhazard[[iStrata]][iSubsetObs,,drop=FALSE], scale = exp(-cumsum(iTableHazard$hazard)))
+        IFcif[[iStrata]][iSubsetObs,] <- 1 - IFsurvival[[iStrata]][iSubsetObs,]
     }
-
+    
     ## ** Modification used by BuyseTest to enable the user to easily specify model.tte
     if(!is.null(object$XX) && !identical(object$X,object$XX)){
         

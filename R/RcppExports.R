@@ -36,6 +36,7 @@
 #' @param hprojection Order of the H-projection used to compute the variance.
 #' @param neutralAsUninf Should paired classified as neutral be re-analyzed using endpoints of lower priority? 
 #' @param keepScore Should the result of each pairwise comparison be kept?
+#' @param precompute Have the integrals relative to the survival be already computed and stored in list_survTimeC/list_survTimeT and list_survJumpC/list_survJumpT (derivatives)
 #' @param returnIID Should the iid be computed?
 #' @param debug Print messages tracing the execution of the function to help debugging. The amount of messages increase with the value of debug (0-5).
 #'
@@ -50,19 +51,18 @@ NULL
 
 #' @name GPC_cpp
 #' @export
-GPC_cpp <- function(endpoint, status, indexC, posC, indexT, posT, threshold, weight, method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint, index_status, index_UTTE, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, zeroPlus, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, returnIID, debug) {
-    .Call(`_BuyseTest_GPC_cpp`, endpoint, status, indexC, posC, indexT, posT, threshold, weight, method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint, index_status, index_UTTE, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, zeroPlus, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, returnIID, debug)
+GPC_cpp <- function(endpoint, status, indexC, posC, indexT, posT, threshold, weight, method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint, index_status, index_UTTE, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, zeroPlus, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, precompute, returnIID, debug) {
+    .Call(`_BuyseTest_GPC_cpp`, endpoint, status, indexC, posC, indexT, posT, threshold, weight, method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint, index_status, index_UTTE, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, zeroPlus, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, precompute, returnIID, debug)
 }
 
 #' @name GPC_cpp
 #' @export
-GPC2_cpp <- function(endpoint, status, indexC, posC, indexT, posT, threshold, weight, method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint, index_status, index_UTTE, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, zeroPlus, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, returnIID, debug) {
-    .Call(`_BuyseTest_GPC2_cpp`, endpoint, status, indexC, posC, indexT, posT, threshold, weight, method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint, index_status, index_UTTE, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, zeroPlus, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, returnIID, debug)
+GPC2_cpp <- function(endpoint, status, indexC, posC, indexT, posT, threshold, weight, method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint, index_status, index_UTTE, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, zeroPlus, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, precompute, returnIID, debug) {
+    .Call(`_BuyseTest_GPC2_cpp`, endpoint, status, indexC, posC, indexT, posT, threshold, weight, method, D, D_UTTE, n_strata, nUTTE_analyzedPeron_M1, index_endpoint, index_status, index_UTTE, list_survTimeC, list_survTimeT, list_survJumpC, list_survJumpT, list_lastSurv, p_C, p_T, iid_survJumpC, iid_survJumpT, zeroPlus, correctionUninf, hierarchical, hprojection, neutralAsUninf, keepScore, precompute, returnIID, debug)
 }
 
 #' @title C++ Function Computing the Integral Terms for the Peron Method in the survival case. 
 #' @description Compute the integral with respect to the jump in survival for pairs where both outcomes are censored.
-#' @name calcIntegralSurv_cpp
 #' 
 #' @param survival [matrix] Contains the jump times in the first column,
 #' the survival in the other arm at times plus threshold in the second column,
@@ -71,20 +71,18 @@ GPC2_cpp <- function(endpoint, status, indexC, posC, indexT, posT, threshold, we
 #' @param lastSurv [numeric,>0] last survival value for the survival function in the second column.
 #' @param lastdSurv [numeric,>0] last survival value for the survival function in the third column.
 #' @param returnDeriv [logical] should the derivative regarding the survival parameters be return. 
-#' @param column [integer] column of \code{derivSurv} and \code{derivSurvD} to be filled.
 #' @param derivSurv [matrix] matrix column filled of 0 whose number of rows is the number of parameters of the survival.
 #' @param derivSurvD [matrix] matrix column filled of 0 whose number of rows is the number of parameters of the survival used to compute the jumps.
 #'
 #' @keywords function Cpp internal
 #' @author Brice Ozenne
 #' @export
-calcIntegralSurv_cpp <- function(survival, start, lastSurv, lastdSurv, returnDeriv, column, derivSurv, derivSurvD) {
-    .Call(`_BuyseTest_calcIntegralSurv_cpp`, survival, start, lastSurv, lastdSurv, returnDeriv, column, derivSurv, derivSurvD)
+.calcIntegralSurv_cpp <- function(survival, start, lastSurv, lastdSurv, returnDeriv, derivSurv, derivSurvD) {
+    .Call(`_BuyseTest_calcIntegralSurv_cpp`, survival, start, lastSurv, lastdSurv, returnDeriv, derivSurv, derivSurvD)
 }
 
 #' @title C++ Function Computing the Integral Terms for the Peron Method in the presence of competing risks (CR).
 #' @description Compute the integral with respect to the jump in CIF for pairs where both outcomes are censored.
-#' @name calcIntegralCif_cpp
 #'
 #' @param cif [matrix] cif[1] = jump times in control group (event of interest), cif[2-3] = CIF of event of interest in group
 #' T at times - tau and times + tau, cif[4] : jump in cif of control group at times (event of interest).
@@ -95,11 +93,114 @@ calcIntegralSurv_cpp <- function(survival, start, lastSurv, lastdSurv, returnDer
 #' @param type [numeric] Indicates the type of integral to compute (1 for wins, 2 for losses, 3 for neutral pairs with two
 #' events of interest - integral with t+tau and xi - and 4 for neutral pairs with two events of interest - integral with
 #' t+tau and t-tau).
+#' @param returnDeriv [logical] should the derivative regarding the survival parameters be return. 
+#' @param derivSurv [matrix] matrix column filled of 0 whose number of rows is the number of parameters of the survival.
+#' @param derivSurvD [matrix] matrix column filled of 0 whose number of rows is the number of parameters of the survival used to compute the jumps.
 #'
 #' @keywords function Cpp internal
 #' @author Eva Cantagallo
 #' @export
-calcIntegralCif_cpp <- function(cif, start_val, stop_val, CIF_t, lastCIF, type) {
-    .Call(`_BuyseTest_calcIntegralCif_cpp`, cif, start_val, stop_val, CIF_t, lastCIF, type)
+.calcIntegralCif_cpp <- function(cifJump, start_val, stop_val, cifTimeT, lastCIF, type, returnDeriv, derivSurv, derivSurvD) {
+    .Call(`_BuyseTest_calcIntegralCif_cpp`, cifJump, start_val, stop_val, cifTimeT, lastCIF, type, returnDeriv, derivSurv, derivSurvD)
+}
+
+#' @title C++ Function pre-computing the Integral Terms for the Peron Method in the survival case. 
+#' @description Compute the integral with respect to the jump in survival for pairs where both outcomes are censored, i.e. \eqn{\int S1(t+\tau) dS2(t)}.
+#' @name calcIntegralSurv2_cpp
+#' 
+#' @param time [numeric vector] vector of jump time for S2.
+#' @param survival [numeric vector] the survival at each jump time: \eqn{S1(t+\tau)}.
+#' @param dsurvival [numeric vector] the jump in survival at each jump time: \eqn{S2(t+)-S2(t-)}
+#' @param index_survival [numeric vector] the position of survival parameter \eqn{S1(t+\tau)} among all parameters relative to S1.
+#' @param index_dSurvival1 [numeric vector] the position of survival parameter \eqn{S2(t-)} among all parameters relative to S2.
+#' @param index_dSurvival2 [numeric vector] the position of survival parameter \eqn{S2(t+)} among all parameters relative to S2.
+#' @param lastSurv [numeric] the value of S1 at the end of the follow-up.
+#' @param lastSurv [numeric] the value of S2 at the end of the follow-up.
+#' @param iidNuisance [logical] should the derivative of the integral relative to the S1 and S2 parameter be output.
+#' @param nJump [integer] the number of jump times relative to S2.
+#'
+#' @keywords function Cpp internal
+#' @author Brice Ozenne
+#' @export
+calcIntegralSurv2_cpp <- function(time, survival, dSurvival, index_survival, index_dSurvival1, index_dSurvival2, lastSurv, lastdSurv, iidNuisance, nJump) {
+    .Call(`_BuyseTest_calcIntegralSurv2_cpp`, time, survival, dSurvival, index_survival, index_dSurvival1, index_dSurvival2, lastSurv, lastdSurv, iidNuisance, nJump)
+}
+
+#' Apply cumsum in each column 
+#'
+#' @description Fast computation of apply(x,2,cumsum)
+#' @param X A matrix.
+#' @return A matrix of same size as x.
+.rowCumSum_cpp <- function(X) {
+    .Call(`_BuyseTest_rowCumSum_cpp`, X)
+}
+
+#' Apply cumprod in each row 
+#'
+#' @description Fast computation of t(apply(x,1,cumprod))
+#' @param X A matrix.
+#' @return A matrix of same size as x.
+.rowCumProd_cpp <- function(X) {
+    .Call(`_BuyseTest_rowCumProd_cpp`, X)
+}
+
+#' Substract a vector of values in each column 
+#'
+#' @description Fast computation of sweep(X, FUN = "-", STATS = center, MARGIN = 1)
+#' @param X A matrix.
+#' @param center A vector with length the number of rows of X .
+#' @return A matrix of same size as x.
+.colCenter_cpp <- function(X, center) {
+    .Call(`_BuyseTest_colCenter_cpp`, X, center)
+}
+
+#' Substract a vector of values in each row
+#'
+#' @description Fast computation of sweep(X, FUN = "-", STATS = center, MARGIN = 2)
+#' @param X A matrix.
+#' @param center A vector with length the number of columns of X.
+#' @return A matrix of same size as x.
+.rowCenter_cpp <- function(X, center) {
+    .Call(`_BuyseTest_rowCenter_cpp`, X, center)
+}
+
+#' Divide by a vector of values in each column 
+#'
+#' @description Fast computation of sweep(X, FUN = "/", STATS = scale, MARGIN = 1)
+#' @param X A matrix.
+#' @param scale A vector with length the number of rows of X .
+#' @return A matrix of same size as x.
+.colScale_cpp <- function(X, scale) {
+    .Call(`_BuyseTest_colScale_cpp`, X, scale)
+}
+
+#' Dividy by a vector of values in each row
+#'
+#' @description Fast computation of sweep(X, FUN = "/", STATS = center, MARGIN = 2)
+#' @param X A matrix.
+#' @param scale A vector with length the number of columns of X.
+#' @return A matrix of same size as x.
+.rowScale_cpp <- function(X, scale) {
+    .Call(`_BuyseTest_rowScale_cpp`, X, scale)
+}
+
+#' Multiply by a vector of values in each column 
+#'
+#' @description Fast computation of sweep(X, FUN = "*", STATS = scale, MARGIN = 1)
+#' @param X A matrix.
+#' @param scale A vector with length the number of rows of X .
+#' @return A matrix of same size as x.
+.colMultiply_cpp <- function(X, scale) {
+    .Call(`_BuyseTest_colMultiply_cpp`, X, scale)
+}
+
+#' Multiply by a vector of values in each row
+#'
+#' @description Fast computation of sweep(X, FUN = "*", STATS = center, MARGIN = 2)
+#' @param X A matrix.
+#' @param scale A vector with length the number of columns of X.
+#' @return A matrix of same size as x.
+.rowMultiply_cpp <- function(X, scale) {
+    .Call(`_BuyseTest_rowMultiply_cpp`, X, scale)
 }
 

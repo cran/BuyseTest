@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 27 2018 (23:32) 
 ## Version: 
-## Last-Updated: apr  6 2020 (10:37) 
+## Last-Updated: okt 13 2020 (09:01) 
 ##           By: Brice Ozenne
-##     Update #: 221
+##     Update #: 238
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -118,6 +118,14 @@ testArgs <- function(name.call,
              "endoints : ",paste(endpoint[type!=3],collapse=" "),"\n",
              "proposed \'status\' for these endoints: ",paste(status[type!=3],collapse=" "),"\n")
     }
+    Ustatus.TTE <- unique(status[type==3])
+    if(is.null(strata)){
+        if(any(sapply(Ustatus.TTE, function(iS){sum(data[[iS]]!=0)})==0)){
+            warning("BuyseTest: time to event variables with only censored events \n")
+        }   
+    }else if(any(sapply(Ustatus.TTE, function(iS){tapply(data[[iS]], data[[strata]], function(iVec){sum(iVec!=0)})})==0)){
+        warning("BuyseTest: time to event variables with only censored events in at least one strata \n")
+    }
 
     ## ** censoring
     if(any(is.na(censoring))){
@@ -130,7 +138,6 @@ testArgs <- function(name.call,
              "\'censoring\' must be \"left\" or \"right\" for TTE endpoints \n")
     }
 
-    
     ## ** cpus
     if(cpus>1){
         validInteger(cpus,
@@ -282,7 +289,7 @@ testArgs <- function(name.call,
         stop("Argument \'strata.resampling\' should not contain the variable used to form the treatment groups when using a permutation test. \n")
     }
     if(iid && correction.uninf > 0){
-        warning("The current implementation of the asymptotic distribution has not been validated when using a correction. \n",
+        warning("The current implementation of the asymptotic distribution is valid when using a correction. \n",
                 "Standard errors / confidence intervals / p-values may not be correct. \n",
                 "Consider using a resampling approach or checking the control of the type 1 error with powerBuyseTest. \n")
     }

@@ -42,8 +42,8 @@
 #'   \item \code{neutral(\%)} lists the percentage of pairs classified as neutral at the current priority.
 #'   \item \code{uninf} lists the number of pairs that could not be classified at the current priority (due to missing values/censoring).
 #'   \item \code{uninf(\%)} lists the percentage of pairs that could not be classified at the current priority (due to missing values/censoring).
-#'   \item \code{delta} lists the value of the statistic (i.e. net benefit or win ratio) computed on the pairs analyzed at the current priority only.
-#'   \item \code{Delta} lists the value of the statistic (i.e. net benefit or win ratio) computed on all the pairs analyzed up to the current priority.
+#'   \item \code{delta} lists the value of the statistic (e.g. net benefit or win ratio) computed on the pairs analyzed at the current priority only.
+#'   \item \code{Delta} lists the value of the statistic (e.g. net benefit or win ratio) computed on all the pairs analyzed up to the current priority.
 #'   \item \code{Delta(\%)} lists the  net benefit or win ratio fraction (i.e. statistic up to the current priority divided by the final statistic).
 #'   \item \code{information(\%)} lists the information fraction (i.e. number of favorable and unfavorable pairs up to the current priority divided by the final number of favorable and unfavorable pairs).
 #'   \item \code{CI} Confidence interval for the value of \code{Delta} (performed independently at each priority, no adjustment for multiple comparison).
@@ -53,6 +53,15 @@
 #' }
 #' Note: when using the Peron scoring rule or a correction for uninformative pairs, the columns \code{total}, \code{favorable}, \code{unfavorable}, \code{neutral}, and \code{uninf} are computing by summing the contribution of the pairs. This may lead to a decimal value.
 #' 
+#' \bold{statistic}: when considering a single endpoint and denoting
+#' \eqn{Y} the endpoint in the treatment group,
+#' \eqn{X} the endpoint in the control group,
+#' and \eqn{\tau} the threshold of clinical relevance,
+#' the net benefit is \eqn{P[Y \ge X + \tau] - P[X \ge Y + \tau]},
+#' the win ratio is \eqn{\frac{P[Y \ge X + \tau]}{P[X \ge Y + \tau]}},
+#' the proportion in favor of treatment is \eqn{P[Y \ge X + \tau]},
+#' the proportion in favor of control is \eqn{P[X \ge Y + \tau]}.
+#'
 #' \bold{Statistical inference} \cr
 #' When the interest is in obtaining p-values, we recommand the use of a permutation test.
 #' However, when using a permutation test confidence intervals are not displayed in the summary.
@@ -227,6 +236,9 @@ setMethod(f = "summary",
               }
               if(identical(strata, "global")){
                   rm.display <- c(rm.display,"strata")
+              }
+              if("delta" %in% type.display && "Delta" %in% type.display && n.endpoint == 1){
+                  rm.display <- union("delta", rm.display)
               }
               type.display <- setdiff(type.display,rm.display)
 
@@ -408,14 +420,14 @@ setMethod(f = "summary",
                   ## *** display
                   cat("       Generalized pairwise comparisons ",txt.endpoint,txt.strata,"\n\n", sep = "")
                   if(statistic == "winRatio"){
-                      cat(" > statistic       : win ratio (delta: endpoint specific, Delta: global) \n",
-                          " > null hypothesis : Delta == 1 \n", sep = "")
+                      cat(" - statistic       : win ratio (delta: endpoint specific, Delta: global) \n",
+                          " - null hypothesis : Delta == 1 \n", sep = "")
                   }else {
-                      cat(" > statistic       : net benefit (delta: endpoint specific, Delta: global) \n",
-                          " > null hypothesis : Delta == 0 \n", sep = "")
+                      cat(" - statistic       : net benefit (delta: endpoint specific, Delta: global) \n",
+                          " - null hypothesis : Delta == 0 \n", sep = "")
                   }
                   if(method.inference != "none"){
-                      cat(" > confidence level: ",1-alpha," \n", sep = "")
+                      cat(" - confidence level: ",1-alpha," \n", sep = "")
 
                       if(attr(method.inference,"permutation")){
                           txt.method <- "permutation test"
@@ -454,11 +466,11 @@ setMethod(f = "summary",
                           
                           txt.method <- paste0(txt.method,"                     ",txt.method.ci," \n")
                       }
-                      cat(" > inference       : ",txt.method, sep = "")
+                      cat(" - inference       : ",txt.method, sep = "")
                   }
                   
-                  cat(" > treatment groups: ",object@level.treatment[1]," (control) vs. ",object@level.treatment[2]," (treatment) \n", sep = "")
-                  if(any(object@type == "TimeToEvent")){
+                  cat(" - treatment groups: ",object@level.treatment[1]," (control) vs. ",object@level.treatment[2]," (treatment) \n", sep = "")
+                  if(any(object@type == "TimeToEvent") && any(attr(object@scoring.rule,"test.censoring"))){
                       
                       if(all(attr(object@scoring.rule,"method.score")[object@type=="TimeToEvent"]==5)){
                           txt.Peron <- "cif"
@@ -472,25 +484,24 @@ setMethod(f = "summary",
                                                  "Gehan" = "deterministic score or uninformative",
                                                  "Peron" = paste0("probabilistic score based on the ",txt.Peron," curves")
                                                  )
-
-                      cat(" > right-censored pairs: ",txt.scoring.rule,"\n", sep = "")
+                      cat(" - censored pairs  : ",txt.scoring.rule,"\n", sep = "")
                   }
                   if(n.endpoint>1 && any(object@count.neutral>0)){
                       txt.neutral <- switch(as.character(object@neutral.as.uninf),
                                             "TRUE" = "re-analyzed using lower priority endpoints",
                                             "FALSE" = "ignored at lower priority endpoints")
-                      cat(" > neutral pairs   : ",txt.neutral,"\n", sep = "")
+                      cat(" - neutral pairs   : ",txt.neutral,"\n", sep = "")
                   }
                   if(!( (object@correction.uninf == 0) && (all(object@count.uninf==0)) )){
                       txt.uninf <- switch(as.character(object@correction.uninf),
-                                          "0" = "no contribution at the current endpoint, analyzed at later endpoints",
+                                          "0" = if(n.endpoint==1){"no contribution"}else{"no contribution at the current endpoint, analyzed at later endpoints"},
                                           "1" = "score equals the averaged score of all informative pairs",
                                           "2" = "no contribution, their weight is passed to the informative pairs using IPCW"
                                           )
-                      cat(" > uninformative pairs: ",txt.uninf,"\n", sep = "")
+                      cat(" - uninformative pairs: ",txt.uninf,"\n", sep = "")
                   }
                   
-                  cat(" > results\n")
+                  cat(" - results\n")
                   table.print2 <- table.print
                   if("significance" %in% names(table.print)){
                       names(table.print2)[names(table.print2) == "significance"] <- ""

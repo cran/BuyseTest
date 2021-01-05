@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 17 2018 (16:46) 
 ## Version: 
-## Last-Updated: maj  5 2020 (18:11) 
+## Last-Updated: dec  5 2020 (21:54) 
 ##           By: Brice Ozenne
-##     Update #: 168
+##     Update #: 178
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -370,30 +370,25 @@ test_that("BuyseTest - hierarchical", {
 
 ## * graemeleehickey (issue #4 on Github): 6 october 2019 simBuyseTest
 test_that("simBuyseTest - rate vs. scale", {
-    n <- 1e5
-    rate <- 5
+    scale <- 2
 
-    args <- list(rates.T = rate, rates.Censoring.T = rate+1,
-                 rates.C = rate, rates.Censoring.C = rate+1,
-                 rates.CR =  rate)
+    args <- list(scale.T = scale, scale.Censoring.T = scale+1,
+                 scale.C = scale, scale.Censoring.C = scale+1,
+                 scale.CR =  scale)
     set.seed(10)
     test <- simBuyseTest(1e4, argsBin = NULL, argsCont = NULL, argsTTE = args,
                        latent = TRUE)
     
-    set.seed(10)
-    GS <- rexp(n, rate = rate)
-    GS1 <- rexp(n, rate = rate+1)
+    expect_equal(scale,mean(test[treatment == "C", mean(eventtimeUncensored)]), tol = 1e-2)
+    expect_equal(scale,mean(test[treatment == "T", mean(eventtimeUncensored)]), tol = 1e-2)
 
-    expect_equal(mean(GS),mean(test[treatment == "C", mean(eventtimeUncensored)]), tol = 1e-2)
-    expect_equal(mean(GS),mean(test[treatment == "T", mean(eventtimeUncensored)]), tol = 1e-2)
-
-    expect_equal(mean(GS1),mean(test[treatment == "C", mean(eventtimeCensoring)]), tol = 1e-2)
-    expect_equal(mean(GS1),mean(test[treatment == "T", mean(eventtimeCensoring)]), tol = 1e-2)
+    expect_equal(scale+1,mean(test[treatment == "C", mean(eventtimeCensoring)]), tol = 1e-1)
+    expect_equal(scale+1,mean(test[treatment == "T", mean(eventtimeCensoring)]), tol = 1e-1)
 })
 
 ## * graemeleehickey (issue #6 on Github): 15 march 2020 powerBuyseTest
 
-args <- list(rates.T = c((3:5) / 10), rates.Censoring.T = rep(1, 3))
+args <- list(scale.T = c((3:5) / 10), scale.Censoring.T = rep(1, 3))
 simFCT <- function(n.C, n.T) {
   simBuyseTest(100, argsBin = NULL, argsCont = NULL, argsTTE = args)
 }
@@ -429,20 +424,57 @@ e.prodlim <- prodlim(Hist(time, status) ~ treat, data = dt.prodlim)
 ## plot(e.prodlim)
 
 dt.sim <- data.table(treat = c(0:1), time = 8, status = 0)
-e.BP <- BuyseTest(treat ~ tte(time, status, threshold=2),
-                  model.tte = e.prodlim, data = dt.sim, method.inference = "none")
 
 test_that("uniformative pair after last observation",{
+    ## warning because only uninformative
+    expect_warning(e.BP <- BuyseTest(treat ~ tte(time, status, threshold=2),
+                                     model.tte = e.prodlim, data = dt.sim, method.inference = "none"))
     expect_equal(as.double(e.BP@count.neutral), 0)
     expect_equal(as.double(e.BP@count.uninf), 1)
 })
 
 
 
-## * new
-## set.seed(10)
-## d <- simBuyseTest(1e2)
+## * brice ozenne : 10/08/20 3:26  last time tie (event/censor)
+## butils::object2script(mydata, digit = 3)
+dt <- data.table("bras" = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1), 
+                 "OS" = c(0.427, 1.708, 2.004, 2.792, 3.088, 3.384, 3.417, 3.647, 3.778, 3.844, 5.092, 5.355, 5.453, 6.012, 6.209, 6.209, 6.307, 6.702, 7.786, 8.049, 8.739, 9.461, 11.367, 11.728, 11.925, 11.991, 12.648, 12.746, 13.042, 13.338, 13.436, 13.666, 13.798, 16.097, 16.097, 0.854, 1.84, 3.055, 3.515, 4.172, 5.059, 5.158, 5.223, 5.519, 5.585, 6.307, 6.34, 6.373, 6.767, 6.899, 6.965, 7.129, 7.589, 7.589, 7.589, 7.753, 8.18, 9.133, 9.198, 9.855, 10.315, 11.498, 13.141, 13.239, 13.305, 13.568, 13.929, 15.21, 16.459, 19.087, 20.237, 20.532, 21.846, 22.273, 26.445, 27.989), 
+                 "etat" = c(0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1))
 
-## e.BT <- BuyseTest(treatment ~ toxicity + cont(score), data = d, method.inference = "permutation")
-## e.BT <- BuyseTest(treatment ~ cont(score), data = d, method.inference = "permutation")
-## summary(e.BT)
+
+test_that("last time is a tie with both event and censor",{
+    test <- BuyseTest(bras ~ tte(OS, status = etat),
+                      data = dt, method.inference = "u-statistic", scoring.rule = "Peron",
+                      trace = 0)
+    expect_equal(as.double(c(coef(test,"count.favorable"),coef(test,"count.unfavorable"),coef(test,"count.neutral"))),
+                 c(892.6111, 520.3092,   0.0000 ), tol = 1e-3)
+
+    ## dt[c(1,36)]
+                 
+})
+
+## * brice ozenne : 10/12/20 9:46 only censored event in one group
+test_that("one group with only censoring, one group with no censoring",{
+    dt <- data.table("treatment" = c(rep("C",10),rep("T",10)),
+                     "time" = c(1:10,1:10),
+                     "status" = c(rep(1,10),rep(0,10)))
+
+    e.Peron <- BuyseTest(treatment ~ tte(time, status = status, threshold = 0),
+                         data = dt, scoring.rule = "Peron")
+    expect_equal(as.double(coef(e.Peron,"netBenefit")),1)
+
+    dt2 <- data.table("treatment" = c(rep("C",10),rep("T",10)),
+                      "time" = c(1:10,1:10),
+                      "status" = c(c(rep(1,9),0),rep(0,10)))
+
+    e2.Peron <- BuyseTest(treatment ~ tte(time, status = status, threshold = 0),
+                          data = dt2, scoring.rule = "Peron")
+    expect_equal(as.double(coef(e2.Peron,"netBenefit")),0.9)
+
+    dt3 <- data.table("treatment" = c("C", "C", "C", "C", "C", "C", "C", "C", "C", "C", "T", "T", "T", "T", "T", "T", "T", "T", "T", "T"), 
+                     "time" = c(0.302, 0.307, 0.336, 0.347, 0.348, 0.459, 0.494, 0.525, 0.587, 0.588, 0.098, 0.116, 0.180, 0.229, 0.306, 0.318, 0.452, 0.485, 1.025, 1.339), 
+                     "status" = c(0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+    e3.Peron <- BuyseTest(treatment ~ tte(time, status = status, threshold = 0),
+                          data = dt3, scoring.rule = "Peron")
+    expect_equal(as.double(coef(e3.Peron,"netBenefit")),0.733333333)
+})

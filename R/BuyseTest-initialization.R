@@ -68,8 +68,10 @@ initializeArgs <- function(status,
     if(is.null(strata.resampling)){ strata.resampling <- option$strata.resampling }
     if(is.null(neutral.as.uninf)){ neutral.as.uninf <- option$neutral.as.uninf }
     if(is.null(trace)){ trace <- option$trace }
+    fitter.model.tte <- option$fitter.model.tte
     engine <- option$engine
     alternative <- option$alternative
+    precompute <- option$precompute
     
     ## ** convert formula into separate arguments
     if(!missing(formula)){
@@ -130,7 +132,8 @@ initializeArgs <- function(status,
     D <- length(endpoint)
     D.TTE <- length(endpoint.TTE)
     
-    Uendpoint <- unique(endpoint)
+    Uendpoint <- unique(endpoint) 
+    Uendpoint.TTE <- unique(endpoint.TTE) 
     
     ## ** default values 
     if(is.null(formula)){
@@ -246,7 +249,12 @@ initializeArgs <- function(status,
     }else{
         model.tte <- NULL
     }
-    
+    if(!is.null(model.tte)){
+        fitter.model.tte <- unlist(lapply(model.tte, class))
+    }else{
+        fitter.model.tte <- setNames(rep(fitter.model.tte, length(Uendpoint.TTE)), Uendpoint.TTE)
+    }
+
     ## ** iid
     iid <- attr(method.inference,"studentized") || (method.inference == "u-statistic")
     if(iid){
@@ -279,6 +287,7 @@ initializeArgs <- function(status,
         endpoint = endpoint,
         endpoint.TTE = endpoint.TTE,
         engine = engine,
+        fitter.model.tte = fitter.model.tte,
         formula = formula,
         iid = iid,
         iidNuisance = iidNuisance,
@@ -295,6 +304,7 @@ initializeArgs <- function(status,
         operator = operator,
         censoring = censoring,
         order.Hprojection = option$order.Hprojection,
+        precompute = precompute,
         seed = seed,
         strata = strata,
         threshold = threshold,
@@ -325,7 +335,7 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
         data.class <- sapply(data,class)
         test.num <- (data.class %in% c("numeric","integer"))
         if(any(test.num==FALSE)){
-            endpoint.char <- names(data.class)[test.num==FALSE]
+            endpoint.char <- setdiff(names(data.class)[test.num==FALSE],treatment)
             for(iE in endpoint.char){
                 data[, c(iE) := as.double(as.factor(.SD[[1]]))-1.0, .SDcols = iE]
             }
@@ -406,7 +416,8 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
     
     ## ** scoring method for each endpoint
     ## check if status
-    test.CR <- sapply(Ustatus, function(iC){max(data[[iC]])>1})[status]
+    n.CR <- sapply(status, function(iC){max(data[[iC]])})
+    test.CR <- n.CR[status]>1
     test.censoring <- sapply(Ustatus, function(iC){any(data[[iC]]==0)})[status]
 
     method.score <- sapply(1:D, function(iE){ ## iE <- 1
@@ -418,6 +429,8 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
             return(4 + test.CR[iE]) ## 4/5 Peron (survival/competing risks)
         }
     })
+    attr(method.score,"test.censoring") <- test.censoring
+    attr(method.score,"test.CR") <- test.CR
     
     ## ** previously analyzed distinct TTE endpoints
     if((scoring.rule==1) && hierarchical){ ## only relevant when using Peron scoring rule with hierarchical GPC
@@ -447,11 +460,13 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
                           survTimeT = lapply(1:D, function(iE){lapply(1:n.strata, function(iS){matrix(nrow=0,ncol=0)})}),
                           survJumpC = lapply(1:D, function(iE){lapply(1:n.strata, function(iS){matrix(nrow=0,ncol=0)})}),
                           survJumpT = lapply(1:D, function(iE){lapply(1:n.strata, function(iS){matrix(nrow=0,ncol=0)})}),
-                          lastSurv = lapply(1:D, function(iS){matrix(nrow = n.strata, ncol = 4)}), ## 4 for competing risk setting, 2 is enough for survival
+                          lastSurv = lapply(1:D, function(iS){matrix(nrow = n.strata, ncol = 2*max(1,n.CR[iS]))}), ## 4 for competing risk setting, 2 is enough for survival
                           p.C = matrix(-100, nrow = n.strata, ncol = D),
-                          p.T = matrix(-100, nrow = n.strata, ncol = D)
+                          p.T = matrix(-100, nrow = n.strata, ncol = D),
+                          iid = list(survJumpC = lapply(1:D.UTTE, function(IE){lapply(1:n.strata, matrix, nrow = 0, ncol = 0)}),
+                                     survJumpT = lapply(1:D.UTTE, function(IE){lapply(1:n.strata, matrix, nrow = 0, ncol = 0)})
+                                     )
                           )
-
 
     ## ** export
     keep.cols <- union(c(treatment, "..strata.."),

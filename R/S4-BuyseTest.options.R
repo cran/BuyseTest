@@ -18,12 +18,14 @@ setClass(
   
   representation(
       alternative = "character",
+      args.model.tte = "list",
       check = "logical",
       conf.level = "numeric",
       correction.uninf = "numeric",
       cpus = "numeric",
       debug = "numeric",
       engine = "character",
+      fitter.model.tte = "character",
       hierarchical = "logical",
       keep.pairScore = "logical",
       keep.survival = "logical",      
@@ -33,6 +35,7 @@ setClass(
       strata.resampling = "character",
       neutral.as.uninf = "logical",
       order.Hprojection = "numeric",
+      precompute = "logical",
       print.display = "character",
       statistic = "character",
       summary.display = "list",
@@ -81,6 +84,11 @@ setClass(
                      valid.values = c("GPC_cpp","GPC2_cpp"),
                      valid.length = 1,
                      method = "Class BuyseTest.options")
+      validCharacter(object@fitter.model.tte,
+                     name1 = "@fitter.model.tte",
+                     valid.values = c("prodlim", "survreg"),
+                     valid.length = 1,
+                     method = "Class BuyseTest.options")
       validLogical(object@hierarchical,
                    name1 = "@hierarchical",
                    valid.length = 1,
@@ -123,6 +131,10 @@ setClass(
                    name1 = "@order.Hprojection",
                    min = 1,
                    max = 2,
+                   valid.length = 1,
+                   method = "Class BuyseTest.options")
+      validLogical(object@precompute,
+                   name1 = "@precompute",
                    valid.length = 1,
                    method = "Class BuyseTest.options")
       validCharacter(object@print.display,

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: maj 19 2018 (23:37) 
 ## Version: 
-## Last-Updated: apr  6 2020 (20:08) 
+## Last-Updated: jan  5 2021 (12:13) 
 ##           By: Brice Ozenne
-##     Update #: 740
+##     Update #: 749
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -49,6 +49,15 @@
 #' \code{\link{S4BuyseTest-summary}} for a more detailed presentation of the \code{S4BuyseTest} object.
 #' 
 #' @details
+#' \bold{statistic}: when considering a single endpoint and denoting
+#' \eqn{Y} the endpoint in the treatment group,
+#' \eqn{X} the endpoint in the control group,
+#' and \eqn{\tau} the threshold of clinical relevance,
+#' the net benefit is \eqn{P[Y \ge X + \tau] - P[X \ge Y + \tau]},
+#' the win ratio is \eqn{\frac{P[Y \ge X + \tau]}{P[X \ge Y + \tau]}},
+#' the proportion in favor of treatment is \eqn{P[Y \ge X + \tau]},
+#' the proportion in favor of control is \eqn{P[X \ge Y + \tau]}.
+#' 
 #' \bold{method.ci.resampling}: when using bootstrap/permutation, p-values and confidence intervals are computing as follow: \itemize{
 #' \item \code{percentile} (bootstrap): compute the confidence interval using the quantiles of the bootstrap estimates.
 #' Compute the p-value by finding the confidence level at which a bound of the confidence interval equals the null hypothesis.
@@ -239,7 +248,6 @@ setMethod(f = "confint",
                   Delta.resampling <- NULL
                   Delta.se.resampling <- NULL
               }
-
               
               if(attr(method.inference,"ustatistic") || attr(method.inference,"studentized")){
                   Delta.se <- sqrt(object@covariance[,statistic])
@@ -251,7 +259,7 @@ setMethod(f = "confint",
               ## safety
               test.model.tte <- all(unlist(lapply(object@iidNuisance,dim))==0)
               if(method.inference %in% c("u-statistic","u-statistic-bebu") && object@correction.uninf > 0){
-                  warning("The current implementation of the asymptotic distribution has not been validated when using a correction. \n",
+                  warning("The current implementation of the asymptotic distribution is not valid when using a correction. \n",
                           "Standard errors / confidence intervals / p-values may not be correct. \n",
                           "Consider using a resampling approach or checking the control of the type 1 error with powerBuyseTest. \n")
               }
