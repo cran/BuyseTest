@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 27 2018 (23:32) 
 ## Version: 
-## Last-Updated: jan  8 2021 (15:55) 
+## Last-Updated: feb 18 2021 (12:16) 
 ##           By: Brice Ozenne
-##     Update #: 257
+##     Update #: 267
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -123,14 +123,20 @@ testArgs <- function(name.call,
              "proposed \'status\' for these endoints: ",paste(status[type!=3],collapse=" "),"\n")
     }
     Ustatus.TTE <- unique(status[type==3])
+
     if(is.null(strata)){
         if(any(sapply(Ustatus.TTE, function(iS){sum(data[[iS]]!=0)})==0)){
             warning("BuyseTest: time to event variables with only censored events \n")
         }   
-    }else if(any(sapply(Ustatus.TTE, function(iS){tapply(data[[iS]], data[[strata]], function(iVec){sum(iVec!=0)})})==0)){
-        warning("BuyseTest: time to event variables with only censored events in at least one strata \n")
+    }else{
+        strata.tempo <- data[[strata]]
+        if(is.factor(strata.tempo)){strata.tempo <- droplevels(strata.tempo)} ## otherwise the next tapply statement generates NA when there are empty levels which leads to an error
+        
+        if(any(sapply(Ustatus.TTE, function(iS){tapply(data[[iS]], strata.tempo, function(iVec){sum(iVec!=0)})})==0)){
+            warning("BuyseTest: time to event variables with only censored events in at least one strata \n")
+        }
     }
-
+    
     ## ** censoring
     if(any(is.na(censoring))){
         stop("BuyseTest: wrong specification of \'censoring\'. \n",
@@ -315,7 +321,7 @@ testArgs <- function(name.call,
 
     ## ** neutral.as.uninf
     validLogical(neutral.as.uninf,
-                 valid.length = 1,
+                 valid.length = D,
                  method = "BuyseTest")
 
     ## ** operator

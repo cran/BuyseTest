@@ -314,12 +314,11 @@ simBuyseTest_bin <- function(modelT,
         }
         iLatent.T <- paste0("eta_",name[iterE])
         iLatent.C <- paste0("eta_",name[iterE])
-
         iCut.T <- qnormweibull(cumsum(p.T[[iterE]])[-length(p.T[[iterE]])], scale = scale.T[iterE], shape = shape.T[iterE], rho = rho.T[iterE])
         iFct.T <- paste0("function(x, xcut = c(",paste0(iCut.T,collapse=","),"), xname = c(\"",paste0(names.values[[iterE]],collapse="\",\""),"\")){\n",
                          "    return(factor(findInterval(x[,1], vec = xcut), levels = 0:length(xcut), labels = xname))\n",
                          "}")
-        if(rho.T[iterE] != 0){
+        if(abs(rho.T[iterE]) > 1e-12){
             lava::regression(modelT) <- as.formula(paste0(iLatent.T," ~ ",rho.T," * ",latentTTE[iterE]))
         }
         modelT <- lava::`transform<-`(modelT, as.formula(paste0(name[iterE],"~",iLatent.T)), value = eval(parse(text = iFct.T)))
@@ -329,7 +328,7 @@ simBuyseTest_bin <- function(modelT,
         iFct.C <- paste0("function(x, xcut = c(",paste0(iCut.C,collapse=","),"), xname = c(\"",paste0(names.values[[iterE]],collapse="\",\""),"\")){\n",
                        "    return(factor(findInterval(x[,1], vec = xcut), levels = 0:length(xcut), labels = xname))\n",
                        "}")
-        if(rho.C[iterE] != 0){
+        if(abs(rho.C[iterE]) > 1e-12){
             lava::regression(modelC) <- as.formula(paste0(iLatent.C," ~ ",rho.C," * ",latentTTE[iterE]))
         }
         modelC <- lava::`transform<-`(modelC, as.formula(paste0(name[iterE],"~",iLatent.C)), value = eval(parse(text = iFct.C)))

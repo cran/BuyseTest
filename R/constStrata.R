@@ -19,7 +19,7 @@
 #' @examples
 #' library(data.table)
 #' 
-#' data(veteran,package="survival")
+#' library(survival) ## import veteran
 #'   
 #' # strata with two variables : celltype and karno
 #' veteran$strata1 <- constStrata(veteran,c("celltype","karno"))

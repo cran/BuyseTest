@@ -90,7 +90,7 @@ library(data.table)
 library(prodlim)
 
 ## run BuyseTest
-data(veteran,package="survival")
+library(survival) ## import veteran
 
 BT.keep <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno),
                      data = veteran, keep.pairScore = TRUE, 
