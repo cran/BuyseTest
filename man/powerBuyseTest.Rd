@@ -38,9 +38,7 @@ Disregarded if any of the arguments \code{sample.sizeC} or \code{sample.sizeT} a
 \item{null}{[numeric vector] For each statistic of interest, the null hypothesis to be tested.
 The vector should be named with the names of the statistics.}
 
-\item{cpus}{[integer, >0] the number of CPU to use.
-Only the permutation test can use parallel computation.
-Default value read from \code{BuyseTest.options()}.}
+\item{cpus}{[integer, >0] the number of CPU to use. Default value is 1.}
 
 \item{seed}{[integer, >0] the seed to consider for the simulation study.}
 
@@ -72,7 +70,7 @@ library(data.table)
 ## only point estimate
 powerBuyseTest(sim = simBuyseTest, sample.size = c(10, 50, 100), n.rep = 10,
                formula = treatment ~ bin(toxicity), seed = 10,
-               method.inference = "none", trace = 4)
+               method.inference = "none", trace = 2)
 
 ## point estimate with rejection rate
 powerBuyseTest(sim = simBuyseTest, sample.size = c(10, 50, 100), n.rep = 10,

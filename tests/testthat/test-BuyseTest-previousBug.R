@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 17 2018 (16:46) 
 ## Version: 
-## Last-Updated: feb 18 2021 (12:11) 
+## Last-Updated: Apr 15 2021 (11:59) 
 ##           By: Brice Ozenne
-##     Update #: 184
+##     Update #: 189
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -19,6 +19,7 @@ if(FALSE){
     library(testthat)
     library(BuyseTest)
     library(data.table)
+    library(survival)
 }
 
 context("Check that bugs that have been reported are fixed \n")
@@ -121,7 +122,6 @@ BT_tau0 <- BuyseTest(data=data,
 ## when computing the integral for peron with double censoring
 ## the ordering of the data modified the ouput
 ## this has been correct with version 1.4
-data(veteran,package="survival")
 
 test_that("ordering of tied event does not affect BuyseTest", {
     ## veteran2[veteran2$time==100,]
@@ -311,7 +311,6 @@ test_that("BuyseTest without variability", {
 
 ## * graemeleehickey (issue #2 on Github): 8 september 2019 p-value bootstrap
 test_that("Boostrap - issue in the summary", {
-    data(veteran,package="survival")
     BT.keep <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno),
                          data = veteran, keep.pairScore = TRUE, scoring.rule = "Gehan", 
                          trace = 0, method.inference = "bootstrap", n.resampling = 20, seed = 10)
@@ -358,7 +357,6 @@ test_that("BuysePower - error in print", {
 
 ## * brice ozenne: 11/13/19 4:11 hierachical in BuyseTest
 test_that("BuyseTest - hierarchical", {
-    data(veteran, package = "survival")
     BT.nH <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno, threshold = 0),
                        hierarchical = FALSE, data = veteran, 
                        method.inference = "none", trace = 0)
