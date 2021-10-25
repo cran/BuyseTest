@@ -10,6 +10,7 @@ getIid(
   object,
   endpoint = NULL,
   statistic = NULL,
+  cumulative = TRUE,
   normalize = TRUE,
   type = "all",
   cluster = NULL
@@ -19,6 +20,7 @@ getIid(
   object,
   endpoint = NULL,
   statistic = NULL,
+  cumulative = TRUE,
   normalize = TRUE,
   type = "all",
   cluster = NULL
@@ -31,6 +33,9 @@ getIid(
 If \code{NULL} returns the sum of the H-decomposition over all endpoints.}
 
 \item{statistic}{[character] statistic relative to which the H-decomposition should be output.}
+
+\item{cumulative}{[logical] should the influence function be cumulated over endpoints?
+Otherwise display the contribution of each endpoint.}
 
 \item{normalize}{[logical] if \code{TRUE} the iid is centered and multiplied by the sample size.
 Otherwise not.}

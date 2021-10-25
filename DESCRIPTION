@@ -1,8 +1,8 @@
 Package: BuyseTest
 Type: Package
 Title: Generalized Pairwise Comparisons
-Version: 2.3.0
-Date: 2021-04-23
+Version: 2.3.5
+Date: 2021-10-24
 Authors@R: c(
     person("Brice", "Ozenne", role = c("aut", "cre"), email = "brice.mh.ozenne@gmail.com", comment = c(ORCID = "0000-0001-9694-2956")),
     person("Julien", "Peron", role = "ctb"),
@@ -16,9 +16,10 @@ Description: Implementation of the Generalized Pairwise Comparisons (GPC)
 			 one group performs better than a random observation drawn from the other group (Mann-Whitney parameter).
 			 The net benefit and win ratio statistics,
 			 i.e. the difference and ratio between the probabilities relative to the intervention and control groups,
-			 can then also be estimated. Confidence intervals and p-values are obtained using permutations, a non-parametric bootstrap, or the asymptotic theory.
+			 can then also be estimated. Confidence intervals and p-values are obtained based on asymptotic results (Ozenne 2021 <doi:10.1177/09622802211037067>),
+			 non-parametric bootstrap, or permutations.
 			 The software enables the use of thresholds of minimal importance difference,
-			 stratification, non-prioritized endpoints (O'Brien test), and can handle right-censoring and competing-risks.
+			 stratification, non-prioritized endpoints (O Brien test), and can handle right-censoring and competing-risks.
 License: GPL-3
 Encoding: UTF-8
 URL: https://github.com/bozenne/BuyseTest
@@ -26,14 +27,14 @@ BugReports: https://github.com/bozenne/BuyseTest/issues
 Depends: R (>= 2.10), Rcpp
 Imports: data.table, doParallel, foreach, ggplot2, methods, lava,
         parallel, prodlim, stats, stats4, utils
-Suggests: cvAUC, pbapply, pROC, R.rsp, riskRegression, survival,
-        testthat
+Suggests: cvAUC, mvtnorm, pbapply, pROC, R.rsp, riskRegression,
+        survival, testthat
 LinkingTo: Rcpp, RcppArmadillo
 SystemRequirements: C++11
 VignetteBuilder: R.rsp
 NeedsCompilation: yes
 RoxygenNote: 7.1.1
-Collate: '0-onLoad.R' '1-setGeneric.R' 'BuyseTTEM.R'
+Collate: '0-onLoad.R' '1-setGeneric.R' 'BuyseMultComp.R' 'BuyseTTEM.R'
         'BuyseTest-Peron.R' 'BuyseTest-check.R' 'BuyseTest-inference.R'
         'BuyseTest-initialization.R' 'BuyseTest-package.R'
         'BuyseTest-print.R' 'BuyseTest.R' 'BuyseTest.options.R'
@@ -42,13 +43,14 @@ Collate: '0-onLoad.R' '1-setGeneric.R' 'BuyseTTEM.R'
         'S4-BuyseTest.R' 'S4-BuyseTest-coef.R' 'S4-BuyseTest-confint.R'
         'S4-BuyseTest-get.R' 'S4-BuyseTest-sensitivity.R'
         'S4-BuyseTest-summary.R' 'S4-BuyseTest-show.R'
-        'S4-BuyseTest.options.R' 'auc.R' 'constStrata.R'
-        'discreteRoot.R' 'iid.prodlim.R' 'normexp.R' 'powerBuyseTest.R'
-        'simBuyseTest.R' 'simCompetingRisks.R' 'valid.R'
-Packaged: 2021-04-23 15:05:28 UTC; hpl802
+        'S4-BuyseTest.options.R' 'auc.R' 'brier.R' 'constStrata.R'
+        'discreteRoot.R' 'iid.prodlim.R' 'normexp.R' 'performance.R'
+        'powerBuyseTest.R' 'predict.logit.R' 'simBuyseTest.R'
+        'simCompetingRisks.R' 'valid.R'
+Packaged: 2021-10-24 09:08:59 UTC; bozenne
 Author: Brice Ozenne [aut, cre] (<https://orcid.org/0000-0001-9694-2956>),
   Julien Peron [ctb],
   Eva Cantagallo [aut]
 Maintainer: Brice Ozenne <brice.mh.ozenne@gmail.com>
 Repository: CRAN
-Date/Publication: 2021-04-23 16:50:03 UTC
+Date/Publication: 2021-10-25 07:00:31 UTC

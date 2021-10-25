@@ -60,6 +60,8 @@ setMethod(f = "getCount",
 #' Otherwise not.
 #' @param cluster [numeric vector] return the H-decomposition aggregated by cluster.
 #' @param statistic [character] statistic relative to which the H-decomposition should be output.
+#' @param cumulative [logical] should the influence function be cumulated over endpoints?
+#' Otherwise display the contribution of each endpoint.
 #' 
 #' @seealso 
 #' \code{\link{BuyseTest}} for performing a generalized pairwise comparison. \cr
@@ -72,15 +74,32 @@ setMethod(f = "getCount",
 #' @rdname S4BuyseTest-getIid
 setMethod(f = "getIid",
           signature = "S4BuyseTest",
-          definition = function(object, endpoint = NULL, statistic = NULL, normalize = TRUE, type = "all", cluster = NULL){
+          definition = function(object, endpoint = NULL, statistic = NULL, 
+                                cumulative = TRUE, normalize = TRUE, type = "all", cluster = NULL){
 
               option <- BuyseTest.options()
-              n.obs <- NROW(object@iidAverage$favorable)
+              if(is.null(cluster)){
+                  n.obs <- NROW(object@iidAverage$favorable)
+              }else{
+                  if(length(cluster) != NROW(object@iidAverage$favorable)){
+                      stop("Incorrect length for argument \'cluster\'. Should be of length ",NROW(object@iidAverage$favorable),".\n")
+                  }
+                  Ucluster <- sort(unique(cluster))
+                  n.obs <- length(Ucluster)
+              }
               valid.endpoint <- paste0(object@endpoint,"_",object@threshold)
               n.endpoint <- length(valid.endpoint)
               if(!is.null(cluster) && !is.numeric(cluster)){
                   cluster <- as.numeric(as.factor(cluster))
               }
+
+              n.strata <- length(object@level.strata)
+              weight <- object@weight
+              n.pairs <- object@n.pairs
+              ntot.pair <- sum(n.pairs)
+              indexC <- attr(object@level.treatment,"indexC")
+              indexT <- attr(object@level.treatment,"indexT")
+              indexStrata <- attr(object@level.strata,"index")
               
               ## ** check arguments              
               if(is.numeric(endpoint)){
@@ -103,7 +122,6 @@ setMethod(f = "getIid",
                   stop("No H-decomposition in the object \n",
                        "Set the argument \'method.inference\' to \"u-statistic\" when calling BuyseTest \n")
               }
-              validInteger(cluster, valid.length = n.obs, min = 1, max = n.obs, refuse.NA = TRUE, refuse.NULL = FALSE, refuse.duplicates = FALSE)
 
               if(is.null(statistic)){
                   statistic <- option$statistic
@@ -123,15 +141,16 @@ setMethod(f = "getIid",
                                  refuse.duplicates = TRUE,
                                  method = "getIid[S4BuyseTest]")
               }
+              
               ## ** extract favorable/unfavorable
-              delta.favorable <- colSums(object@count.favorable)/sum(object@n.pairs)
-              delta.unfavorable <- colSums(object@count.unfavorable)/sum(object@n.pairs)
-              Delta.favorable <- sum(delta.favorable)
-              Delta.unfavorable <- sum(delta.unfavorable)
-
+              delta.favorable <- coef(object, statistic = "favorable", cumulative = FALSE, stratified = TRUE)
+              delta.unfavorable <- coef(object, statistic = "unfavorable", cumulative = FALSE, stratified = TRUE)
+              Delta.favorable <- coef(object, statistic = "favorable", cumulative = TRUE, stratified = FALSE)
+              Delta.unfavorable <- coef(object, statistic = "unfavorable", cumulative = TRUE, stratified = FALSE)
+                            
               ## ** extract H-decomposition
               if(type %in% c("all","u-statistic")){
-                  object.iid <- object@iidAverage
+                  object.iid <- object@iidAverage[c("favorable","unfavorable")]
               }else{
                   object.iid <- list(favorable = matrix(0, nrow = n.obs, ncol = n.endpoint,
                                                         dimnames = list(NULL, valid.endpoint)),
@@ -140,36 +159,66 @@ setMethod(f = "getIid",
                                      )
               }
               if(type %in% c("all","nuisance") && (object@scoring.rule=="Peron")){
-                  object.iid$favorable <- object.iid$favorable + object@iidNuisance$favorable
-                  object.iid$unfavorable <- object.iid$unfavorable + object@iidNuisance$unfavorable
+                  if(length(object@iidNuisance$favorable)>0){
+                      object.iid$favorable <- object.iid$favorable + object@iidNuisance$favorable
+                  } ## otherwise model.tte has been passed as argument and there is no uncertainty regarding nuisance
+                  if(length(object@iidNuisance$unfavorable)>0){
+                      object.iid$unfavorable <- object.iid$unfavorable + object@iidNuisance$unfavorable
+                  } ## otherwise model.tte has been passed as argument and there is no uncertainty regarding nuisance
               }
 
               if(normalize==FALSE){
-                  indexC <- attr(object@level.treatment,"indexC")
-                  indexT <- attr(object@level.treatment,"indexT")
+                  for(iter_strata in 1:n.strata){ 
+                      iStrataC <- intersect(indexC,indexStrata[[iter_strata]])
+                      iStrataT <- intersect(indexT,indexStrata[[iter_strata]])
 
-                  ## remove scaling 
-                  object.iid$favorable[indexC,] <- length(indexC) * object.iid$favorable[indexC,]
-                  object.iid$favorable[indexT,] <- length(indexT) * object.iid$favorable[indexT,]
+                      ## remove scaling (pooling across strata)
+                      if(n.strata>1){
+                          object.iid$favorable[c(iStrataC,iStrataT),] <- object.iid$favorable[c(iStrataC,iStrataT),,drop=FALSE] / (n.pairs[iter_strata] / ntot.pair);
+                          object.iid$unfavorable[c(iStrataC,iStrataT),] <- object.iid$unfavorable[c(iStrataC,iStrataT),,drop=FALSE] / (n.pairs[iter_strata] / ntot.pair);
+                      }
 
-                  object.iid$unfavorable[indexC,] <- length(indexC) * object.iid$unfavorable[indexC,]
-                  object.iid$unfavorable[indexT,] <- length(indexT) * object.iid$unfavorable[indexT,]
+                      if(!is.null(attr(normalize,"skipScaleCenter")) && identical(attr(normalize,"skipScaleCenter"),TRUE)){next}
+                      
+                      ## remove scaling (by the sample size: \sum_i IF_i^2 -> 1/n^2 \sum_i IF_i^2)
+                      object.iid$favorable[iStrataC,] <- length(iStrataC) * object.iid$favorable[iStrataC,,drop=FALSE]
+                      object.iid$favorable[iStrataT,] <- length(iStrataT) * object.iid$favorable[iStrataT,,drop=FALSE]
 
-                  ## remove centering
-                  object.iid$unfavorable <- sweep(object.iid$unfavorable, MARGIN = 2, FUN = "+", STATS = cumsum(delta.unfavorable*object@weight))
-                  object.iid$favorable <- sweep(object.iid$favorable, MARGIN = 2, FUN = "+", STATS = cumsum(delta.favorable*object@weight))
+                      object.iid$unfavorable[iStrataC,] <- length(iStrataC) * object.iid$unfavorable[iStrataC,,drop=FALSE]
+                      object.iid$unfavorable[iStrataT,] <- length(iStrataT) * object.iid$unfavorable[iStrataT,,drop=FALSE]
+
+                      if(!is.null(attr(normalize,"skipCenter")) && identical(attr(normalize,"skipCenter"),TRUE)){next}
+
+                      ## remove centering
+                      object.iid$favorable[c(iStrataC,iStrataT),] <- .rowCenter_cpp(object.iid$favorable[c(iStrataC,iStrataT),,drop=FALSE], - delta.favorable[iter_strata,,drop=FALSE])
+                      object.iid$unfavorable[c(iStrataC,iStrataT),] <- .rowCenter_cpp(object.iid$unfavorable[c(iStrataC,iStrataT),,drop=FALSE], -delta.unfavorable[iter_strata,,drop=FALSE])
+                  }
+
               }
-              ## ** accumulate H-decomposition
+
+              if(cumulative && n.endpoint > 1){
+              
+                  ## *** weight endpoints and cumulate them to obtain (cumulative) first order projection
+                  keep.names <- list(favorable = colnames(object.iid$favorable),
+                                     unfavorable = colnames(object.iid$unfavorable))
+                  object.iid$favorable <- .rowCumSum_cpp(.rowMultiply_cpp(object.iid$favorable, weight))
+                  colnames(object.iid$favorable) <- keep.names$favorable
+                  object.iid$unfavorable <- .rowCumSum_cpp(.rowMultiply_cpp(object.iid$unfavorable, weight))
+                  colnames(object.iid$unfavorable) <- keep.names$unfavorable
+
+              }
+
+              ## ** accumulate H-decomposition over clusters
               if(is.null(endpoint)){                  
-                  ## iid decomposition over all endpoints
+                  ## iid decomposition for the last endpoint
                   object.iid <- do.call(cbind,lapply(object.iid, function(iI){
-                      iIID <- iI[, NCOL(iI)]
+                      iIID <- iI[,n.endpoint]
                       if(!is.null(cluster)){
                           iIID <- tapply(iIID,cluster,sum)
                       }
                       return(iIID)
                   }))
-                  out <- matrix(NA, nrow = NROW(object.iid), ncol = length(statistic), dimnames = list(NULL, statistic))
+                  out <- matrix(NA, nrow = n.obs, ncol = length(statistic), dimnames = list(NULL, statistic))
                   if("favorable" %in% statistic){
                       out[,"favorable"] <- object.iid[,"favorable"]
                   }
@@ -180,7 +229,7 @@ setMethod(f = "getIid",
                       out[,"netBenefit"] <- object.iid[,"favorable"] - object.iid[,"unfavorable"]
                   }
                   if("winRatio" %in% statistic){
-                      out[,"winRatio"] <- object.iid[,"favorable"]/Delta.unfavorable - object.iid[,"unfavorable"]*Delta.favorable/Delta.unfavorable^2
+                      out[,"winRatio"] <- object.iid[,"favorable"]/Delta.unfavorable[n.endpoint] - object.iid[,"unfavorable"]*Delta.favorable[n.endpoint]/Delta.unfavorable[n.endpoint]^2
                   }
 
               }else{
@@ -192,11 +241,23 @@ setMethod(f = "getIid",
                           iIID <- cbind(favorable = tapply(iIID[,"favorable"],cluster,sum),
                                         unfavorable = tapply(iIID[,"unfavorable"],cluster,sum))
                       }
-                      return(iIID)
+                      iOut <- matrix(NA, nrow = n.obs, ncol = length(statistic), dimnames = list(NULL, statistic))
+                      if("favorable" %in% statistic){
+                          iOut[,"favorable"] <- iIID[,"favorable"]
+                      }
+                      if("unfavorable" %in% statistic){
+                          iOut[,"unfavorable"] <- iIID[,"unfavorable"]
+                      }
+                      if("netBenefit" %in% statistic){
+                          iOut[,"netBenefit"] <- iIID[,"favorable"] - iIID[,"unfavorable"]
+                      }
+                      if("winRatio" %in% statistic){
+                          iOut[,"winRatio"] <- iIID[,"favorable"]/Delta.unfavorable[iE] - iIID[,"unfavorable"]*Delta.favorable[iE]/Delta.unfavorable[iE]^2
+                      }
+                      return(iOut)
                   })
                   names(out) <- endpoint
               }
-
 
               ## ** output H-decomposition
               return(out)
@@ -517,14 +578,14 @@ setMethod(f = "getPseudovalue",
               object.delta <- coef(object, statistic = statistic)[endpoint]
               count.favorable <- coef(object, statistic = "favorable")[endpoint]
               count.unfavorable <- coef(object, statistic = "unfavorable")[endpoint]
-              object.iid <- getIid(object, endpoint = endpoint)[[1]]
-              n <- NROW(object.iid)
+              object.iid <- getIid(object, endpoint = endpoint, statistic = c("favorable","unfavorable"))[[1]]
+              n.obs <- NROW(object.iid)
 
               out <- switch(statistic,
-                            "favorable" = n * object.iid[,"favorable"] + object.delta,
-                            "unfavorable" = n * object.iid[,"unfavorable"] + object.delta,
-                            "netBenefit" = n * (object.iid[,"favorable"] - object.iid[,"unfavorable"]) + object.delta,
-                            "winRatio" = n * (object.iid[,"favorable"] / count.unfavorable - object.iid[,"unfavorable"] * (count.favorable/count.unfavorable^2)) + object.delta,
+                            "favorable" = n.obs * object.iid[,"favorable"] + object.delta,
+                            "unfavorable" = n.obs * object.iid[,"unfavorable"] + object.delta,
+                            "netBenefit" = n.obs * (object.iid[,"favorable"] - object.iid[,"unfavorable"]) + object.delta,
+                            "winRatio" = n.obs * (object.iid[,"favorable"] / count.unfavorable - object.iid[,"unfavorable"] * (count.favorable/count.unfavorable^2)) + object.delta,
                             )
 
               ## ** export

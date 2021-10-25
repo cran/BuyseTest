@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 12 2019 (10:45) 
 ## Version: 
-## Last-Updated: apr  6 2020 (10:50) 
+## Last-Updated: okt 20 2021 (09:13) 
 ##           By: Brice Ozenne
-##     Update #: 65
+##     Update #: 103
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -26,10 +26,13 @@
 #' 
 #' @param object output of \code{\link{BuyseTest}}
 #' @param statistic [character] the type of summary statistic. See the detail section.
+#' @param endpoint [character] for which endpoint(s) the summary statistic should be output?
+#' If \code{NULL} returns the summary statistic for all endpoints.
 #' @param stratified [logical] should the summary statistic be strata-specific?
 #' Otherwise a summary statistic over all strata is returned.
 #' @param cumulative [logical] should the score be cumulated over endpoints?
 #' Otherwise display the contribution of each endpoint.
+#' 
 #' @param ... ignored.
 #'
 #' @details
@@ -48,6 +51,7 @@
 #' \item \code{"pc.neutral"}: returns the percentage of neutral pairs.
 #' \item \code{"pc.uninf"}: returns the percentage of uninformative pairs.
 #' }
+#' 
 #' @keywords coef S4BuyseTest-method
 #' @author Brice Ozenne
 
@@ -57,6 +61,7 @@
 setMethod(f = "coef",
           signature = "S4BuyseTest",
           definition = function(object,
+                                endpoint = NULL,
                                 statistic = NULL,
                                 stratified = FALSE,
                                 cumulative = TRUE,
@@ -64,11 +69,12 @@ setMethod(f = "coef",
 
               ## ** normalize arguments
               option <- BuyseTest.options()
+
+              ## statistic
               if(is.null(statistic)){
                   statistic <- option$statistic
               }
 
-              
               statistic <- switch(gsub("[[:blank:]]", "", tolower(statistic)),
                                   "netbenefit" = "netBenefit",
                                   "winratio" = "winRatio",
@@ -85,29 +91,64 @@ setMethod(f = "coef",
                              valid.length = 1,
                              method = "coef[S4BuyseTest]")
 
+              ## endpoint
+              if(!is.null(endpoint)){
+                  valid.endpoint <- paste0(object@endpoint,"_",object@threshold)
+                  n.endpoint <- length(valid.endpoint)
+                  if(is.numeric(endpoint)){
+                      validInteger(endpoint,
+                                   name1 = "endpoint",
+                                   min = 1, max = length(valid.endpoint),
+                                   valid.length = NULL,
+                                   method = "iid[BuyseTest]")
+                      endpoint <- valid.endpoint[endpoint]
+                  }else{
+                      validCharacter(endpoint,
+                                     valid.length = 1:length(valid.endpoint),
+                                     valid.values = valid.endpoint,
+                                     refuse.NULL = FALSE)
+                  }
+              }
+
               ## ** extract information
               if(statistic %in% c("netBenefit","winRatio","favorable","unfavorable")){
-                  if(stratified || (cumulative==FALSE)){
+                  if((stratified==FALSE) && (cumulative==TRUE)){
+                      out <- slot(object, "Delta")[,statistic]
+                      names(out) <- paste0(object@endpoint,"_",object@threshold)
+
+                  }else if((stratified==FALSE) && (cumulative==FALSE)){
+                      if(statistic=="favorable"){
+                          out <- colSums(object@count.favorable)/sum(object@n.pairs)
+                          names(out) <- paste0(object@endpoint,"_",object@threshold)
+                      }else if(statistic=="unfavorable"){
+                          out <- colSums(object@count.unfavorable)/sum(object@n.pairs)
+                          names(out) <- paste0(object@endpoint,"_",object@threshold)
+                      }else if(statistic=="netBenefit"){
+                          out <- colSums(object@count.favorable-object@count.unfavorable)/sum(object@n.pairs)
+                          names(out) <- paste0(object@endpoint,"_",object@threshold)
+                      }else if(statistic=="winRatio"){
+                          out <- colSums(object@count.favorable)/colSums(object@count.unfavorable)
+                          names(out) <- paste0(object@endpoint,"_",object@threshold)
+                      }
+                      
+                  }else if(stratified==TRUE){
                       out <- slot(object, "delta")[,,statistic]
                       if(!is.matrix(out)){
                           out <- matrix(out, nrow = length(object@level.strata), ncol = length(object@endpoint),
                                         dimnames = list(object@level.strata,paste0(object@endpoint,"_",object@threshold)))
                       }
                       if(cumulative && length(object@endpoint)>1){
+                          out <- sweep(out, FUN = "*", MARGIN = 2, STATS = object@weight)
                           if(length(object@level.strata)==1){
                               out <- matrix(cumsum(out), nrow = 1,
                                             dimnames = list(object@level.strata, paste0(object@endpoint,"_",object@threshold))
                                             )
                           }else{
-                              out <- t(apply(out,1,cumsum))
+                              keep.dimnames <- dimnames(out)
+                              out <- .rowCumSum_cpp(out)
+                              dimnames(out) <- keep.dimnames
                           }
                       }
-                      if(!stratified){
-                          out <- colSums(out)
-                      }
-                  }else{
-                      out <- slot(object, "Delta")[,statistic]
-                      names(out) <- paste0(object@endpoint,"_",object@threshold)
                   }
                   
               }else if(statistic %in% type.count){                  
@@ -118,7 +159,9 @@ setMethod(f = "coef",
                                         dimnames = list(object@level.strata, paste0(object@endpoint,"_",object@threshold))
                                         )
                       }else{
-                          out <- t(apply(out,1,cumsum))
+                          keep.dimnames <- dimnames(out)
+                          out <- .rowCumSum_cpp(out)
+                          dimnames(out) <- keep.dimnames
                       }
                   }
                   if(!stratified){
@@ -134,7 +177,9 @@ setMethod(f = "coef",
                                         dimnames = list(object@level.strata, paste0(object@endpoint,"_",object@threshold))
                                         )
                       }else{
-                          out <- t(apply(out,1,cumsum))
+                          keep.dimnames <- dimnames(out)
+                          out <- .rowCumSum_cpp(out)
+                          dimnames(out) <- keep.dimnames
                       }
                   }
                   if(!stratified){
@@ -144,7 +189,13 @@ setMethod(f = "coef",
               }
               
                  
-
+              if(!is.null(endpoint)){
+                  if(!stratified){
+                      out <- out[endpoint]
+                  }else{
+                      out <- out[,endpoint,drop=FALSE]
+                  }
+              }
               return(out)
 
           })

@@ -8,8 +8,6 @@
 #' @param ... options to be selected or updated
 #' @param reinitialise should all the global parameters be set to their default value
 #'         
-#' @details It only affects the \code{\link{BuyseTest}} function
-#' 
 #' @examples
 #' library(data.table)
 #' 
@@ -51,6 +49,7 @@ BuyseTest.options <- function(..., reinitialise = FALSE){
                    n.resampling = 1000,
                    strata.resampling = as.character(NA),
                    neutral.as.uninf = TRUE,
+                   add.halfNeutral = FALSE,
                    order.Hprojection = 1,
                    precompute = TRUE,
                    print.display = c("endpoint","threshold","delta","Delta"),
@@ -58,7 +57,8 @@ BuyseTest.options <- function(..., reinitialise = FALSE){
                    summary.display = list(c("endpoint","threshold","weight","strata","total","favorable","unfavorable","neutral","uninf","delta","Delta","CI","p.value","significance"),
                                           c("endpoint","threshold","weight","strata","favorable","unfavorable","delta","Delta","Delta(%)","information(%)")),
                    transformation = TRUE,
-                   trace = 2), 
+                   trace = 2,
+                   warning.correction = 0.25), 
                envir = BuyseTest.env)
     
     return(invisible(get(".BuyseTest-options", envir = BuyseTest.env)))

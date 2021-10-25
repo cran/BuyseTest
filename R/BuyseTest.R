@@ -31,6 +31,7 @@
 #' Only used when \code{hierarchical=FALSE}. Disregarded if the argument \code{formula} is defined.
 #' @param neutral.as.uninf [logical vector] should paired classified as neutral be re-analyzed using endpoints of lower priority (as it is done for uninformative pairs).
 #' See Details, section "Handling missing values".
+#' @param add.halfNeutral [logical] should half of the neutral score be added to the favorable and unfavorable scores?
 #' @param keep.pairScore [logical] should the result of each pairwise comparison be kept?
 #' @param seed [integer, >0] the seed to consider when performing resampling.
 #' If \code{NULL} no seed is set.
@@ -39,8 +40,6 @@
 #' See Details, section "Statistical inference".
 #' @param trace [integer] should the execution of the function be traced ? \code{0} remains silent
 #' and \code{1}-\code{3} correspond to a more and more verbose output in the console.
-#' @param keep.comparison Obsolete. Alias for 'keep.pairScore'.
-#' @param method.tte Obsolete. Alias for 'scoring.rule'.
 #' 
 #' @details
 #'
@@ -85,17 +84,16 @@
 #' 
 #' \bold{Handling missing values}
 #' \itemize{
-#'   \item \code{scoring.rule}: indicates how to handle right-censoring in time to event endpoints.
+#'   \item \code{scoring.rule}: indicates how to handle right-censoring in time to event endpoints using information from the survival curves.
 #' The Gehan's scoring rule (argument \code{scoring.rule="Gehan"}) only scores pairs that can be decidedly classified as favorable, unfavorable, or neutral
 #' while the "Peron"'s scoring rule (argument \code{scoring.rule="Peron"}) uses the empirical survival curves of each group to also score the pairs that cannot be decidedly classified.
-#' The Peron's scoring rule is the recommanded scoring rule but only handles right-censoring.
-#'   \item \code{correction.uninf}: indicates how to handle missing values that could not be classified by the scoring rule. \code{0} treat them as uninformative:
-#' if \code{neutral.as.uninf=FALSE}  - this is an equivalent to complete case analysis -
-#' while for \code{neutral.as.uninf=TRUE} uninformative pairs are treated as neutral, i.e., analyzed at the following endpoint (if any).
-#' However both will (in general) lead to biased estimates for the proportion of favorable, unfavorable, or neutral pairs.
-#' Inverse probability of censoring weights (IPCW, \code{correction.uninf=2}) is only recommanded when the analysis is stopped after the first endpoint with uninformative pairs.
-#' Imputing the average score of the informative pairs (\code{correction.uninf=1}) is the recommanded approach.
-#' Note that both corrections will convert the whole proportion of uninformative pairs of a given endpoint into favorable, unfavorable, or neutral pairs. \cr \cr
+#' The Peron's scoring rule is the recommanded scoring rule but only handles right-censoring. 
+#'   \item \code{correction.uninf}: indicates how to handle missing values that could not be classified by the scoring rule.  \describe{
+#'    \item{\code{correction.uninf=0}}{ treat them as uninformative: this is an equivalent to complete case analysis when \code{neutral.as.uninf=FALSE}, while when \code{neutral.as.uninf=TRUE}, uninformative pairs are treated as neutral, i.e., analyzed at the following endpoint (if any). This approach will (generally) lead to biased estimates for the proportion of favorable, unfavorable, or neutral pairs.}
+#'    \item{\code{correction.uninf=1}}{ imputes to the uninformative pairs the average score of the informative pairs, i.e. assumes that uninformative pairs would on average behave like informative pairs. This is therefore the recommanded approach when this assumption is resonnable, typically when the the tail of the survival function estimated by the Kaplan–Meier method is close to 0.}
+#'    \item{\code{correction.uninf=2}}{ uses inverse probability of censoring weights (IPCW), i.e. up-weight informative pairs to represent uninformative pairs. It also assumes that uninformative pairs would on average behave like informative pairs and is only recommanded when the analysis is stopped after the first endpoint with uninformative pairs.}
+#' }
+#' Note that both corrections will convert the whole proportion of uninformative pairs of a given endpoint into favorable, unfavorable, or neutral pairs. See Peron et al (2021) for further details and recommandations \cr \cr
 #' }
 #' 
 #'
@@ -142,13 +140,16 @@
 #' @references 
 #' On the GPC procedure: Marc Buyse (2010). \bold{Generalized pairwise comparisons of prioritized endpoints in the two-sample problem}. \emph{Statistics in Medicine} 29:3245-3257 \cr
 #' On the win ratio: D. Wang, S. Pocock (2016). \bold{A win ratio approach to comparing continuous non-normal outcomes in clinical trials}. \emph{Pharmaceutical Statistics} 15:238-245 \cr
-#' On the Peron's scoring rule: J. Peron, M. Buyse, B. Ozenne, L. Roche and P. Roy (2018). \bold{An extension of generalized pairwise comparisons for prioritized outcomes in the presence of censoring}. \emph{Statistical Methods in Medical Research} 27: 1230-1239  \cr 
+#' On the Peron's scoring rule: J. Peron, M. Buyse, B. Ozenne, L. Roche and P. Roy (2018). \bold{An extension of generalized pairwise comparisons for prioritized outcomes in the presence of censoring}. \emph{Statistical Methods in Medical Research} 27: 1230-1239. \cr
 #' On the Gehan's scoring rule: Gehan EA (1965). \bold{A generalized two-sample Wilcoxon test for doubly censored data}. \emph{Biometrika}  52(3):650-653 \cr
-#' On inference in GPC using the U-statistic theory: I. Bebu, J. M. Lachin (2015). \bold{Large sample inference for a win ratio analysis of a composite outcome based on prioritized components}. \emph{Biostatistics} 17(1):178-187 \cr
+#' On inference in GPC using the U-statistic theory: Ozenne B, Budtz-Jorgensen E, Peron J (2021). \bold{The asymptotic distribution of the Net Benefit estimator in presence of right-censoring}. \emph{Statistical Methods in Medical Research} 2021 doi:10.1177/09622802211037067 \cr
+#' On the how to handle right-censoring: J. Peron, M. Idlhaj, D. Maucort-Boulch, et al. (2021) \bold{Correcting the bias of the net benefit estimator due to right-censored observations}. \emph{Biometrical Journal} 63: 893–906. 
 #'
 #' @seealso 
 #' \code{\link{S4BuyseTest-summary}} for a summary of the results of generalized pairwise comparison. \cr
+#' \code{\link{S4BuyseTest-confint}} for exporting estimates with confidence intervals and p-values. \cr
 #' \code{\link{S4BuyseTest-class}} for a presentation of the \code{S4BuyseTest} object. \cr
+#' \code{\link{S4BuyseTest-sensitivity}} for performing a sensitivity analysis on the choice of the threshold(s). \cr
 #' \code{\link{constStrata}} to create a strata variable from several clinical variables. \cr
 #' @keywords function BuyseTest
 #' @author Brice Ozenne
@@ -252,6 +253,7 @@ BuyseTest <- function(formula,
                       hierarchical = NULL,
                       weight = NULL,
                       neutral.as.uninf = NULL,
+                      add.halfNeutral = NULL,
                       keep.pairScore = NULL,
                       seed = NULL,
                       cpus = NULL,
@@ -263,23 +265,13 @@ BuyseTest <- function(formula,
                       status = NULL,
                       operator = NULL,
                       censoring = NULL,
-                      strata = NULL, 
-                      keep.comparison,
-                      method.tte){
+                      strata = NULL){
 
     mycall <- match.call()
     name.call <- names(mycall)
     option <- BuyseTest.options()
 
     ## ** compatibility with previous version
-    if(!missing(keep.comparison)){
-        stop("Argument \'keep.comparison\' is obsolete. \n",
-             "It has been replaced by the argument \'keep.pairScore\' \n")
-    }
-    if(!missing(method.tte)){
-        stop("Argument \'method.tte\' is obsolete. \n",
-             "It has been replaced by the argument \'scoring.rule\' \n")
-    }
     if(!is.null(method.inference) && (method.inference=="asymptotic")){
         stop("Value \"asymptotic\" for argument \'method.inference\' is obsolete. \n",
              "Use \"u-statistic\" instead \n")
@@ -302,6 +294,7 @@ BuyseTest <- function(formula,
                               strata.resampling = strata.resampling,
                               name.call = name.call,
                               neutral.as.uninf = neutral.as.uninf,
+                              add.halfNeutral = add.halfNeutral,
                               operator = operator,
                               censoring = censoring,
                               option = option,
@@ -317,7 +310,6 @@ BuyseTest <- function(formula,
     if(option$check){
         outTest <- do.call(testArgs, args = outArgs)        
     }
-
     ## ** initialization data
     ## WARNING when updating code: names in the c() must precisely match output of initializeData, in the same order
     out.name <- c("data","M.endpoint","M.status",
@@ -345,14 +337,14 @@ BuyseTest <- function(formula,
                                         iidNuisance = outArgs$iidNuisance)
     
     if(option$check){
-        if(outArgs$iidNuisance && any(outArgs$method.score == 5)){
+        if(outArgs$iidNuisance && any(outArgs$method.score == "CRPeron")){
             warning("Inference via the asymptotic theory  for competing risks when using the Peron's scoring rule has not been validating \n",
                     "Consider setting \'method.inference\' to \"none\", \"bootstrap\", or \"permutation\" \n")
         }
-        ## if(outArgs$precompute && any(outArgs$method.score == 5)){
+        ## if(outArgs$precompute && any(outArgs$method.score == "CRPeron")){
         ##     stop("Option \'precompute\' is not available for the Peron scoring rule in the competing risk case \n")
         ## }
-        if(outArgs$precompute && any(outArgs$method.score == 5)){
+        if(outArgs$precompute && any(outArgs$method.score == "CRPeron")){
             outArgs$precompute <- FALSE
         }
     }
@@ -418,11 +410,7 @@ BuyseTest <- function(formula,
 
     outResampling <- NULL
     if(outArgs$method.inference == "u-statistic"){
-        ## done in the C++ code
-        ## outCovariance <- inferenceUstatistic(tablePairScore = outPoint$tableScore, order = option$order.Hprojection,
-        ##                                      count.favorable = colSums(outPoint$count_favorable), count.unfavorable = colSums(outPoint$count_unfavorable),
-        ##                                      n.pairs = sum(outPoint$n_pairs), n.C = length(envirBT$outArgs$index.C), n.T = length(envirBT$outArgs$index.T),
-        ##                                      level.strata = outArgs$level.strata, n.strata = outArgs$n.strata, endpoint = outArgs$endpoint)
+        ## done in the C++ code        
     }else if(outArgs$method.inference == "u-statistic-bebu"){
         if(outArgs$keep.pairScore == FALSE){
             stop("Argument \'keep.pairScore\' needs to be TRUE when argument \'method.inference\' is \"u-statistic-bebu\" \n")
@@ -432,8 +420,6 @@ BuyseTest <- function(formula,
         outCovariance <- inferenceUstatisticBebu(tablePairScore = outPoint$tableScore,
                                                  order = option$order.Hprojection,
                                                  weight = outArgs$weight,
-                                                 count.favorable = colSums(outPoint$count_favorable),
-                                                 count.unfavorable = colSums(outPoint$count_unfavorable),
                                                  n.pairs = outPoint$n_pairs,
                                                  n.C = length(envirBT$outArgs$index.C),
                                                  n.T = length(envirBT$outArgs$index.T),
@@ -454,7 +440,7 @@ BuyseTest <- function(formula,
     if(outArgs$trace > 1){
         cat("Gather the results in a S4BuyseTest object \n")
     }
-    keep.args <- c("index.T", "index.C", "type","endpoint","level.strata","level.treatment","scoring.rule","hierarchical","neutral.as.uninf",
+    keep.args <- c("index.T", "index.C", "index.strata", "type","endpoint","level.strata","level.treatment","scoring.rule","hierarchical","neutral.as.uninf","add.halfNeutral",
                    "correction.uninf","method.inference","method.score","strata","threshold","weight","n.resampling")
     BuyseTest.object <- do.call("S4BuyseTest", args = c(list(call = setNames(as.list(mycall),names(mycall))),
                                                         outPoint, outArgs[keep.args], outResampling))
@@ -494,7 +480,6 @@ BuyseTest <- function(formula,
                              status.UTTE = envir$outArgs$status.UTTE,
                              D.TTE = envir$outArgs$D.TTE,
                              D.UTTE = envir$outArgs$D.UTTE,
-                             type = envir$outArgs$type,
                              threshold = envir$outArgs$threshold,
                              level.strata = envir$outArgs$level.strata,
                              n.strata = envir$outArgs$n.strata,
@@ -504,6 +489,19 @@ BuyseTest <- function(formula,
                              out = envir$outArgs$skeletonPeron,
                              fitter = envir$outArgs$fitter.model.tte,
                              args = envir$outArgs$args.model.tte)
+
+        
+        index.test <- which(envir$outArgs$method.score == "SurvPeron")
+        if(!grepl("permutation|bootstrap",method.inference) && envir$outArgs$correction.uninf>0 && length(index.test)>0){
+            envir$outArgs$method.score
+            maxLastSurv <- setNames(sapply(outSurv$lastSurv[index.test],max),envir$outArgs$endpoint[index.test])[!duplicated(envir$outArgs$endpoint[index.test])]
+            Wtau <- BuyseTest.options("warning.correction")
+            if(any(maxLastSurv>Wtau)){
+                warning("Some of the survival curves for endpoint(s) \"",paste(names(which(maxLastSurv>Wtau)),collapse = "\", \""),"\" are unknown beyond a survival of ",Wtau,".\n",
+                         "The correction of uninformative pairs assume that uninformative pairs would on average behave like informative pairs. \n",
+                         "This can be a strong assumption and have substantial impact when the tail of the survival curve is unknown. \n")
+            }
+        }
     }
 
     ## ** Perform GPC
@@ -516,7 +514,7 @@ BuyseTest <- function(formula,
                                  posT = outSample$ls.posT,                     
                                  threshold = envir$outArgs$threshold,
                                  weight = envir$outArgs$weight,
-                                 method = envir$outArgs$method.score,
+                                 method = sapply(envir$outArgs$method.score, switch, "continuous" = 1, "gaussian" = 2, "TTEgehan" = 3, "TTEgehan2" = 4, "SurvPeron" = 5, "CRPeron" = 6),
                                  op = envir$outArgs$operator,
                                  D = envir$outArgs$D,
                                  D_UTTE = envir$outArgs$D.UTTE,
@@ -539,6 +537,7 @@ BuyseTest <- function(formula,
                                  hierarchical = envir$outArgs$hierarchical,
                                  hprojection = envir$outArgs$order.Hprojection,
                                  neutralAsUninf = envir$outArgs$neutral.as.uninf,
+                                 addHalfNeutral = envir$outArgs$add.halfNeutral,
                                  keepScore = (pointEstimation && envir$outArgs$keep.pairScore),
                                  precompute = envir$outArgs$precompute,
                                  returnIID = iid + iid*envir$outArgs$iidNuisance,

@@ -34,6 +34,7 @@ setClass(
       scoring.rule = "character",
       hierarchical = "logical",
       neutral.as.uninf = "logical",
+      add.halfNeutral = "logical",
       correction.uninf = "numeric",
       method.inference = "character",
       strata = "vector",
@@ -67,13 +68,16 @@ methods::setMethod(
                                    n_pairs, ## from cpp object
                                    iidAverage_favorable, ## from cpp object
                                    iidAverage_unfavorable, ## from cpp object
+                                   iidAverage_neutral, ## from cpp object
                                    iidNuisance_favorable, ## from cpp object
                                    iidNuisance_unfavorable, ## from cpp object
+                                   iidNuisance_neutral, ## from cpp object
                                    covariance, ## from cpp object
                                    tableScore, ## from cpp object
                                    tableSurvival = NULL, ## added to the cpp object by .BuyseTest when requested by the user
                                    index.C,
                                    index.T,
+                                   index.strata,
                                    type,
                                    endpoint,
                                    level.strata,
@@ -81,6 +85,7 @@ methods::setMethod(
                                    scoring.rule,
                                    hierarchical,
                                    neutral.as.uninf,
+                                   add.halfNeutral,
                                    correction.uninf,
                                    method.inference,
                                    method.score,
@@ -122,12 +127,20 @@ methods::setMethod(
                      colnames(iidAverage_unfavorable) <- name.endpoint
                  }
 
+                 if(!is.null(iidAverage_neutral) && NCOL(iidAverage_neutral)>0){
+                     colnames(iidAverage_neutral) <- name.endpoint
+                 }
+
                  if(!is.null(iidNuisance_favorable) && NCOL(iidNuisance_favorable)>0){
                      colnames(iidNuisance_favorable) <- name.endpoint
                  }
                  
                  if(!is.null(iidNuisance_unfavorable) && NCOL(iidNuisance_unfavorable)>0){
                      colnames(iidNuisance_unfavorable) <- name.endpoint
+                 }
+
+                 if(!is.null(iidNuisance_neutral) && NCOL(iidNuisance_neutral)>0){
+                     colnames(iidNuisance_neutral) <- name.endpoint
                  }
 
                  if(!is.null(covariance) && length(covariance)>0){
@@ -148,14 +161,14 @@ methods::setMethod(
                  ## ** tableSurvival
 
                  ## ** type
-                 type <- stats::setNames(c("Binary","Continuous","TimeToEvent")[type], name.endpoint)
+                 type <- stats::setNames(type, name.endpoint)
 
                  ## ** endpoint
                  names(endpoint) <- name.endpoint
 
                  ## ** level.strata
-                 ## attr(outArgs$level.strata,"index") <- outArgs$index.strata
-                 
+                 attr(level.strata,"index") <- index.strata
+
                  ## ** level.treatment
                  attr(level.treatment,"indexC") <- index.C
                  attr(level.treatment,"indexT") <- index.T
@@ -171,6 +184,8 @@ methods::setMethod(
                  ## ** hierarchical
                  
                  ## ** neutral.as.uninf
+
+                 ## ** add.halfNeutral
                  
                  ## ** correction.uninf
                  
@@ -220,9 +235,11 @@ methods::setMethod(
                  .Object@delta <- delta
                  .Object@Delta <- Delta
                  .Object@iidAverage <- list(favorable = iidAverage_favorable,
-                                            unfavorable = iidAverage_unfavorable)
+                                            unfavorable = iidAverage_unfavorable,
+                                            neutral = iidAverage_neutral)
                  .Object@iidNuisance <- list(favorable = iidNuisance_favorable,
-                                             unfavorable = iidNuisance_unfavorable)
+                                             unfavorable = iidNuisance_unfavorable,
+                                             neutral = iidNuisance_neutral)
 
                  if(!is.null(covariance)){
                      .Object@covariance <- covariance
@@ -238,6 +255,7 @@ methods::setMethod(
                  .Object@scoring.rule <- scoring.rule
                  .Object@hierarchical <- hierarchical
                  .Object@neutral.as.uninf <- neutral.as.uninf
+                 .Object@add.halfNeutral <- add.halfNeutral
                  .Object@correction.uninf <- correction.uninf
                  .Object@method.inference <- method.inference
                  .Object@strata <- strata

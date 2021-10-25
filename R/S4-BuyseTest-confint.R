@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: maj 19 2018 (23:37) 
 ## Version: 
-## Last-Updated: jan  8 2021 (17:41) 
+## Last-Updated: okt 14 2021 (19:46) 
 ##           By: Brice Ozenne
-##     Update #: 750
+##     Update #: 830
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -31,6 +31,8 @@
 #' \code{"favorable"} displays the proportion in favor of the treatment (also called Mann-Whitney parameter), as described in Fay et al. (2018).
 #' \code{"unfavorable"} displays the proportion in favor of the control.
 #' Default value read from \code{BuyseTest.options()}.
+#' @param endpoint [character] for which endpoint(s) the confidence intervals should be output?
+#' If \code{NULL} returns the confidence intervals for all endpoints.
 #' @param null [numeric] right hand side of the null hypothesis (used for the computation of the p-value).
 #' @param conf.level [numeric] confidence level for the confidence intervals.
 #' Default value read from \code{BuyseTest.options()}.
@@ -107,6 +109,7 @@
 setMethod(f = "confint",
           signature = "S4BuyseTest",
           definition = function(object,
+                                endpoint = NULL,
                                 statistic = NULL,
                                 null = NULL,
                                 conf.level = NULL,
@@ -173,34 +176,51 @@ setMethod(f = "confint",
                   warning("Argument \'method.ci.resampling\' is disregarded when not using resampling\n")                  
               }
 
-              if(attr(method.inference,"ustatistic") && (!is.null(order.Hprojection) && order.Hprojection != attr(method.inference,"hprojection") || !is.null(cluster))){
+              if(attr(method.inference,"ustatistic")){
+                  if(!is.null(order.Hprojection) && order.Hprojection != attr(method.inference,"hprojection") || !is.null(cluster)){
 
-                  if(!is.null(order.Hprojection)){
-                      validInteger(order.Hprojection,
-                                   name1 = "order.Hprojection",
-                                   min = 1, max = 2, valid.length = 1,
-                                   method = "confint[S4BuyseTest]")
+                      if(!is.null(order.Hprojection)){
+                          validInteger(order.Hprojection,
+                                       name1 = "order.Hprojection",
+                                       min = 1, max = 2, valid.length = 1,
+                                       method = "confint[S4BuyseTest]")
                   
-                      if(order.Hprojection > attr(method.inference,"hprojection")){
-                          stop("Cannot find the second order of the H-decomposition. \n",
-                               "Consider setting order.Hprojection to 2 in BuyseTest.options before calling BuyseTest. \n")
+                          if(order.Hprojection > attr(method.inference,"hprojection")){
+                              stop("Cannot find the second order of the H-decomposition. \n",
+                                   "Consider setting order.Hprojection to 2 in BuyseTest.options before calling BuyseTest. \n")
+                          }
                       }
+                      if(identical(order.Hprojection,2) && !is.null(cluster)){
+                          warning("Inference will be performed using a first order H projection. \n")
+                      }
+                      ls.iid <- getIid(object, endpoint = 1:D, cluster = cluster, statistic = c("favorable","unfavorable"))
+                      delta.favorable <- coef(object, statistic = "favorable", cumulative = TRUE)
+                      delta.unfavorable <- coef(object, statistic = "unfavorable", cumulative = TRUE)
+                      keep.names <- dimnames(object@covariance)
+
+                      ls.iid <- setNames(lapply(1:D, function(iD){
+                          cbind(ls.iid[[iD]],
+                                "covariance" = ls.iid[[iD]][,"favorable"]*ls.iid[[iD]][,"unfavorable"],
+                                "netBenefit" = ls.iid[[iD]][,"favorable"] - ls.iid[[iD]][,"unfavorable"],
+                                "winRatio" = ls.iid[[iD]][,"favorable"]/delta.unfavorable[iD] - ls.iid[[iD]][,"unfavorable"]*delta.favorable[iD]/delta.unfavorable[iD]^2 
+                                )
+                      }), names(ls.iid))
+                      object@covariance <- do.call(rbind,lapply(ls.iid,function(iIID){
+                          c(colSums(iIID[,c("favorable","unfavorable")]^2),covariance = sum(iIID[,c("covariance")]),colSums(iIID[,c("netBenefit","winRatio")]^2))
+                      }))
+                      dimnames(object@covariance) <- keep.names
+                      ## object@covariance <- do.call(rbind, lapply(1:D, function(iE){ ## iE <- 1
+                      ##     iVar <- crossprod(ls.iid[[iE]])[c(1,4,2)]
+                      ##     return( c(iVar,
+                      ##               iVar[1] + iVar[2] - 2*iVar[3],
+                      ##               iVar[1]/delta.unfavorable[iE]^2 + iVar[2] * delta.favorable[iE]^2/delta.unfavorable[iE]^4 - 2*iVar[3] * delta.favorable[iE]/delta.unfavorable[iE]^3)
+                      ##            )
+                      ## }))
+                      Delta.iid <- lapply(ls.iid, function(iIID){iIID[,statistic,drop=FALSE]})
+                  }else{
+                      Delta.iid <- getIid(object, endpoint = 1:D, cluster = cluster, statistic = statistic)
                   }
-                  if(identical(order.Hprojection,2) && !is.null(cluster)){
-                      warning("Inference will be performed using a first order H projection. \n")
-                  }
-                  ls.iid <- getIid(object, endpoint = 1:D, cluster = cluster)
-                  delta.favorable <- cumsum(colSums(object@count.favorable)*object@weight)/sum(object@n.pairs)
-                  delta.unfavorable <- cumsum(colSums(object@count.unfavorable)*object@weight)/sum(object@n.pairs)
-                  keep.names <- dimnames(object@covariance)
-                  object@covariance <- do.call(rbind, lapply(1:D, function(iE){ ## iE <- 1
-                      iVar <- crossprod(ls.iid[[iE]])[c(1,4,2)]
-                      return( c(iVar,
-                                iVar[1] + iVar[2] - 2*iVar[3],
-                                iVar[1]/delta.unfavorable[iE]^2 + iVar[2] * delta.favorable[iE]^2/delta.unfavorable[iE]^4 - 2*iVar[3] * delta.favorable[iE]/delta.unfavorable[iE]^3)
-                             )
-                  }))
-                  dimnames(object@covariance) <- keep.names
+                  
               }
               
               validNumeric(conf.level,
@@ -221,25 +241,44 @@ setMethod(f = "confint",
                            valid.length = 1,
                            method = "confint[S4BuyseTest]")
               
+              ## endpoint
+              if(!is.null(endpoint)){
+                  valid.endpoint <- paste0(object@endpoint,"_",object@threshold)
+                  n.endpoint <- length(valid.endpoint)
+                  if(is.numeric(endpoint)){
+                      validInteger(endpoint,
+                                   name1 = "endpoint",
+                                   min = 1, max = length(valid.endpoint),
+                                   valid.length = NULL,
+                                   method = "iid[BuyseTest]")
+                      endpoint <- valid.endpoint[endpoint]
+                  }else{
+                      validCharacter(endpoint,
+                                     valid.length = 1:length(valid.endpoint),
+                                     valid.values = valid.endpoint,
+                                     refuse.NULL = FALSE)
+                  }
+              }
+
               ## ** extract information
               if(is.na(conf.level)){
                   method.inference[] <- "none" ## uses [] to not remove the attributees of method.inference
               }
 
-              endpoint <- paste0(object@endpoint,"_",object@threshold)
+              all.endpoint <- paste0(object@endpoint,"_",object@threshold)
               Delta <- slot(object, name = "Delta")[,statistic]
 
               if(attr(method.inference,"permutation") || attr(method.inference,"bootstrap")){
                   Delta.resampling <- slot(object, name = "DeltaResampling")[,,statistic]
                   if(!is.matrix(Delta.resampling)){
-                      Delta.resampling <- matrix(Delta.resampling, ncol = length(endpoint),
-                                                 dimnames = list(NULL, endpoint))
+                      Delta.resampling <- matrix(Delta.resampling, ncol = length(all.endpoint),
+                                                 dimnames = list(NULL, all.endpoint))
                   }
                   if(attr(method.inference,"studentized")){
                       Delta.se.resampling <- sqrt(object@covarianceResampling[,,statistic])
                       if(!is.matrix(Delta.se.resampling)){
-                          Delta.se.resampling <- matrix(Delta.se.resampling, ncol = length(endpoint),
-                                                        dimnames = list(NULL, endpoint))
+                          Delta.se.resampling <- matrix(Delta.se.resampling, ncol = length(all.endpoint),
+                                                        dimnames = list(NULL, all.endpoint))
                       }
                   }else{
                       Delta.se.resampling <- NULL
@@ -276,7 +315,7 @@ setMethod(f = "confint",
                                min = if("statistic"=="netBenefit"){-1}else{0},
                                max = if("statistic"=="winRatio"){Inf}else{1})
               }
-              
+
               ## ** method
               if(method.inference == "none"){
                   method.confint <- confint_none
@@ -300,24 +339,31 @@ setMethod(f = "confint",
               
               ## ** transformation
               if(transformation){
+                  
+                  if(object@hierarchical){
+                      trans.weight <- 1
+                  }else{
+                      trans.weight <- sum(object@weight)
+                  }
+
                   trans.delta <- switch(statistic,
-                                        "netBenefit" = function(x){if(is.null(x)){x}else{atanh(x)}},
+                                        "netBenefit" = function(x){if(is.null(x)){x}else{atanh(x/trans.weight)}},
                                         "winRatio" = function(x){if(is.null(x)){x}else{log(x)}},
-                                        "favorable" = function(x){if(is.null(x)){x}else{atanh(2*(x-1/2))}},
-                                        "unfavorable" = function(x){if(is.null(x)){x}else{atanh(2*(x-1/2))}}
+                                        "favorable" = function(x){if(is.null(x)){x}else{atanh(2*(x/trans.weight-1/2))}},
+                                        "unfavorable" = function(x){if(is.null(x)){x}else{atanh(2*(x/trans.weight-1/2))}}
                                         )
                   itrans.delta <- switch(statistic,                                         
-                                         "netBenefit" = function(x){if(is.null(x)){x}else{tanh(x)}}, 
+                                         "netBenefit" = function(x){if(is.null(x)){x}else{trans.weight*tanh(x)}}, 
                                          "winRatio" = function(x){if(is.null(x)){x}else{exp(x)}},
-                                         "favorable" = function(x){if(is.null(x)){x}else{tanh(x)/2+1/2}},
-                                         "unfavorable" = function(x){if(is.null(x)){x}else{tanh(x)/2+1/2}}
+                                         "favorable" = function(x){if(is.null(x)){x}else{trans.weight*(tanh(x)/2+1/2)}},
+                                         "unfavorable" = function(x){if(is.null(x)){x}else{trans.weight*(tanh(x)/2+1/2)}}
                                          )                  
                   trans.se.delta <- switch(statistic,
                                            "netBenefit" = function(x,se){
                                                if(is.null(se)){
                                                    out <- se
                                                }else{
-                                                   out <- se/(1-x^2)
+                                                   out <- (se/trans.weight)/(1-(x/trans.weight)^2)
                                                    if(any(na.omit(se)==0)){
                                                        out[se==0] <- 0
                                                    }
@@ -339,7 +385,7 @@ setMethod(f = "confint",
                                                if(is.null(se)){
                                                    out <- se
                                                }else{
-                                                   out <- 2*se/(1-(2*(x-1/2))^2)
+                                                   out <- 2*(se/trans.weight)/(1-(2*(x/trans.weight-1/2))^2)
                                                    if(any(na.omit(se)==0)){
                                                        out[se==0] <- 0
                                                    }
@@ -350,7 +396,7 @@ setMethod(f = "confint",
                                                if(is.null(se)){
                                                    out <- se
                                                }else{
-                                                   out <- 2*se/(1-(2*(x-1/2))^2)
+                                                   out <- 2*(se/trans.weight)/(1-(2*(x/trans.weight-1/2))^2)
                                                    if(any(na.omit(se)==0)){
                                                        out[se==0] <- 0
                                                    }
@@ -362,7 +408,7 @@ setMethod(f = "confint",
                                                 if(is.null(se)){
                                                     out <- se
                                                 }else{
-                                                    out <- se*(1-itrans.delta(x)^2)
+                                                    out <- trans.weight*se*(1-itrans.delta(x)^2)
                                                     if(any(na.omit(se)==0)){
                                                         out[se==0] <- 0
                                                     }
@@ -384,7 +430,7 @@ setMethod(f = "confint",
                                                 if(is.null(se)){
                                                     out <- se
                                                 }else{
-                                                    out <- (se/2)*(1-(2*(itrans.delta(x)-1/2))^2)
+                                                    out <- trans.weight*(se/2)*(1-(2*(itrans.delta(x)-1/2))^2)
                                                     if(any(na.omit(se)==0)){
                                                         out[se==0] <- 0
                                                     }
@@ -395,7 +441,7 @@ setMethod(f = "confint",
                                                 if(is.null(se)){
                                                     out <- se
                                                 }else{
-                                                    out <- (se/2)*(1-(2*(itrans.delta(x)-1/2))^2)
+                                                    out <- trans.weight*(se/2)*(1-(2*(itrans.delta(x)-1/2))^2)
                                                     if(any(na.omit(se)==0)){
                                                         out[se==0] <- 0
                                                     }
@@ -418,7 +464,7 @@ setMethod(f = "confint",
                                                 alternative = alternative,
                                                 null = trans.delta(null),
                                                 alpha = alpha,
-                                                endpoint = endpoint,
+                                                endpoint = all.endpoint,
                                                 backtransform.delta = itrans.delta,
                                                 backtransform.se = itrans.se.delta))
 
@@ -427,18 +473,50 @@ setMethod(f = "confint",
               if(length(index.NA)>0){
                   outConfint[index.NA,c("se","lower.ci","upper.ci","p.value")] <- NA
               }
-
+              if(!is.null(endpoint)){
+                  outConfint <- as.data.frame(outConfint[all.endpoint %in% endpoint,,drop=FALSE])
+              }else{
+                  outConfint <- as.data.frame(outConfint)
+              }
+              
               ## ** number of permutations
               if(method.inference != "none" && (attr(method.inference,"permutation") || attr(method.inference,"bootstrap"))){
                   attr(outConfint, "n.resampling")  <- colSums(!is.na(Delta.resampling))
               }else{
-                  attr(outConfint, "n.resampling")  <- stats::setNames(rep(as.numeric(NA), length(endpoint)), endpoint)
+                  attr(outConfint, "n.resampling")  <- stats::setNames(rep(as.numeric(NA), D), all.endpoint)
               }
               attr(outConfint,"method.ci.resampling") <- method.ci.resampling
 
-              
+              ## ** iid
+              if(attr(method.inference,"ustatistic")){
+                  if(!is.null(endpoint)){
+                      attr(outConfint,"iid") <- do.call(cbind,lapply(which(all.endpoint %in% endpoint), function(iD){ ## iD <- 1
+                          if(transformation){
+                              return(trans.se.delta(Delta[iD], se = Delta.iid[[iD]]))
+                          }else{
+                              return(Delta.iid[[iD]])
+                          }
+                      }))
+                      colnames(attr(outConfint,"iid")) <- all.endpoint[all.endpoint %in% endpoint]
+                  }else{
+                      attr(outConfint,"iid") <- do.call(cbind,lapply(1:D, function(iD){ ## iD <- 1
+                          if(transformation){
+                              return(trans.se.delta(Delta[iD], se = Delta.iid[[iD]]))
+                          }else{
+                              return(Delta.iid[[iD]])
+                          }
+                      }))
+                      colnames(attr(outConfint,"iid")) <- all.endpoint
+                  }
+                  attr(outConfint,"transform") <- trans.delta
+                  attr(outConfint,"backtransform") <- itrans.delta
+              }
+                  
               ## ** export
               if(attr(method.inference,"permutation")){
+                  if(is.null(attr(conf.level,"warning.permutation")) || !identical(attr(conf.level,"warning.permutation"),FALSE)){
+                      warning("Confidence intervals are computed under the null hypothesis and therefore may not be valid. \n")
+                  }
                   attr(outConfint,"warning") <- "Confidence intervals are computed under the null hypothesis"
               }
               return(outConfint)
@@ -450,9 +528,10 @@ confint_percentilePermutation <- function(Delta, Delta.resampling,
                                           null, alternative, alpha,
                                           endpoint, backtransform.delta, ...){
 
+    
     n.endpoint <- length(endpoint)
-    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 5,
-                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","p.value")))
+    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 6,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","null","p.value")))
     
     ## ** point estimate
     outTable[,"estimate"] <- backtransform.delta(Delta)
@@ -462,19 +541,20 @@ confint_percentilePermutation <- function(Delta, Delta.resampling,
 
     ## ** confidence interval
     Delta.resamplingH0 <- apply(Delta.resampling, MARGIN = 2, FUN = scale, scale = FALSE, center = TRUE)
-    outTable[,"lower.ci"] <- switch(alternative,
-                                    "two.sided" = Delta + apply(Delta.resamplingH0, MARGIN = 2, FUN = stats::quantile, probs = alpha/2, na.rm = TRUE),
-                                    "less" = -Inf,
-                                    "greater" = Delta + apply(Delta.resamplingH0, MARGIN = 2, FUN = stats::quantile, probs = alpha, na.rm = TRUE)
-                                    )
+    outTable[,"lower.ci"] <- backtransform.delta(switch(alternative,
+                                                        "two.sided" = Delta + apply(Delta.resamplingH0, MARGIN = 2, FUN = stats::quantile, probs = alpha/2, na.rm = TRUE),
+                                                        "less" = -Inf,
+                                                        "greater" = Delta + apply(Delta.resamplingH0, MARGIN = 2, FUN = stats::quantile, probs = alpha, na.rm = TRUE)
+                                                        ))
     
-    outTable[,"upper.ci"] <- switch(alternative,
-                                    "two.sided" = Delta + apply(Delta.resamplingH0, MARGIN = 2, FUN = stats::quantile, probs = 1 - alpha/2, na.rm = TRUE),
-                                    "less" = Delta + apply(Delta.resamplingH0, MARGIN = 2, FUN = stats::quantile, probs = 1 - alpha, na.rm = TRUE),
-                                    "greater" = Inf
-                                    )
+    outTable[,"upper.ci"] <- backtransform.delta(switch(alternative,
+                                                        "two.sided" = Delta + apply(Delta.resamplingH0, MARGIN = 2, FUN = stats::quantile, probs = 1 - alpha/2, na.rm = TRUE),
+                                                        "less" = Delta + apply(Delta.resamplingH0, MARGIN = 2, FUN = stats::quantile, probs = 1 - alpha, na.rm = TRUE),
+                                                        "greater" = Inf
+                                                        ))
 
     ## ** p-value
+    outTable[,"null"] <- backtransform.delta(null)
     outTable[,"p.value"] <- sapply(1:n.endpoint, FUN = function(iE){ ## iE <- 1
         switch(alternative, # test whether each sample is has a cumulative proportions in favor of treatment more extreme than the point estimate
                "two.sided" = mean(abs(Delta[iE] - null) <= abs(Delta.resampling[,iE] - null), na.rm = TRUE),
@@ -490,11 +570,11 @@ confint_percentilePermutation <- function(Delta, Delta.resampling,
 ## * confint_percentileBootstrap (called by confint)
 confint_percentileBootstrap <- function(Delta, Delta.resampling,
                                         null, alternative, alpha,
-                                        endpoint, ...){
+                                        endpoint, backtransform.delta, ...){
 
     n.endpoint <- length(endpoint)
-    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 5,
-                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","p.value")))
+    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 6,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","null","p.value")))
 
     ## ** point estimate
     outTable[,"estimate"] <- Delta
@@ -516,6 +596,7 @@ confint_percentileBootstrap <- function(Delta, Delta.resampling,
                                     )
 
     ## ** p.values
+    outTable[, "null"] <- backtransform.delta(null)
     for(iE in 1:n.endpoint){
         outTable[iE, "p.value"] <- boot2pvalue(na.omit(Delta.resampling[,iE]), null = null, estimate = Delta[iE],
                                                alternative = alternative, FUN.ci = quantileCI)
@@ -536,8 +617,8 @@ confint_gaussian <- function(Delta, Delta.resampling,
                              endpoint, backtransform.delta, ...){
 
     n.endpoint <- length(endpoint)
-    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 5,
-                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","p.value")))
+    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 6,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","null","p.value")))
 
     ## ** point estimate
     outTable[,"estimate"] <- backtransform.delta(Delta)
@@ -559,6 +640,7 @@ confint_gaussian <- function(Delta, Delta.resampling,
                                                         "greater" = Inf
                                                         ))
     ## ** p-value
+    outTable[,"null"] <- backtransform.delta(null)
     outTable[,"p.value"] <- switch(alternative,
                                    "two.sided" = 2*(1-stats::pnorm(abs((Delta-null)/Delta.se))), 
                                    "less" = stats::pnorm((Delta-null)/Delta.se),
@@ -575,8 +657,8 @@ confint_studentPermutation <- function(Delta, Delta.se, Delta.resampling, Delta.
                                        endpoint, backtransform.delta, backtransform.se, ...){
 
     n.endpoint <- length(endpoint)
-    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 5,
-                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","p.value")))
+    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 6,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","null","p.value")))
 
     ## ** point estimate
     outTable[,"estimate"] <- backtransform.delta(Delta)
@@ -603,6 +685,7 @@ confint_studentPermutation <- function(Delta, Delta.se, Delta.resampling, Delta.
     outTable[,"upper.ci"] <- backtransform.delta(Delta + Delta.qSup * Delta.se)
 
     ## ** p.value
+    outTable[,"null"] <- backtransform.delta(null)
     Delta.stat <- (Delta-null)/Delta.se
     Delta.stat.resampling <- (Delta.resampling-null)/Delta.se.resampling
     outTable[,"p.value"] <- sapply(1:n.endpoint, FUN = function(iE){ ## iE <- 1
@@ -634,8 +717,8 @@ confint_studentBootstrap <- function(Delta, Delta.se, Delta.resampling, Delta.se
                                      endpoint, backtransform.delta, backtransform.se, ...){
 
     n.endpoint <- length(endpoint)
-    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 5,
-                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","p.value")))
+    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 6,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","null","p.value")))
 
     ## ** point estimate
     outTable[,"estimate"] <- backtransform.delta(Delta)
@@ -671,9 +754,10 @@ confint_studentBootstrap <- function(Delta, Delta.se, Delta.resampling, Delta.se
         return(Delta[iE] + iQ * Delta.se[iE])
     }
 
+    outTable[, "null"] <- backtransform.delta(null)
     for(iE in 1:n.endpoint){ ## iE <- 1
         ## if(sign(mean(Delta.resampling[,iE]))!=sign(Delta[iE])){
-            ## warning("the estimate and the average bootstrap estimate do not have same sign \n")
+        ## warning("the estimate and the average bootstrap estimate do not have same sign \n")
         ## }
         outTable[iE, "p.value"] <- boot2pvalue(Delta.statH0.resampling[,iE], null = null, estimate = Delta[iE], ## note: estimate is not used to produce the ci, just for knowing the sign
                                                alternative = alternative, FUN.ci = quantileCI2, checkSign = FALSE)
@@ -702,8 +786,8 @@ confint_Ustatistic <- function(Delta, Delta.se, statistic, null,
                                endpoint, backtransform.delta, backtransform.se, ...){
 
     n.endpoint <- length(endpoint)
-    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 5,
-                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","p.value")))
+    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 6,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","null","p.value")))
 
     ## ** point estimate
     outTable[,"estimate"] <- backtransform.delta(Delta)
@@ -725,6 +809,7 @@ confint_Ustatistic <- function(Delta, Delta.se, statistic, null,
                                                         ))
 
     ## ** p-value
+    outTable[,"null"] <- backtransform.delta(null)
     outTable[,"p.value"] <- switch(alternative,
                                    "two.sided" = 2*(1-stats::pnorm(abs((Delta-null)/Delta.se))), 
                                    "less" = stats::pnorm((Delta-null)/Delta.se),
@@ -744,8 +829,8 @@ confint_Ustatistic <- function(Delta, Delta.se, statistic, null,
 confint_none <- function(Delta, endpoint, ...){
 
     n.endpoint <- length(endpoint)
-    outTable <- matrix(NA, nrow = n.endpoint, ncol = 4,
-                       dimnames = list(endpoint, c("estimate","lower.ci","upper.ci","p.value")))
+    outTable <- matrix(NA, nrow = n.endpoint, ncol = 6,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","null","p.value")))
 
     ## ** point estimate
     outTable[,"estimate"] <- Delta
@@ -755,5 +840,6 @@ confint_none <- function(Delta, endpoint, ...){
 
     
 }
+
 ##----------------------------------------------------------------------
 ### S4BuyseTest-confint.R ends here

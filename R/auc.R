@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: dec  2 2019 (16:29) 
 ## Version: 
-## Last-Updated: Apr  9 2021 (10:47) 
+## Last-Updated: okt 14 2021 (19:25) 
 ##           By: Brice Ozenne
-##     Update #: 175
+##     Update #: 428
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -16,7 +16,7 @@
 ### Code:
 
 ## * Documentation - auc
-#' @title Estimation of the Area Under the ROC Curve
+#' @title Estimation of the Area Under the ROC Curve (EXPERIMENTAL)
 #' @name auc
 #' 
 #' @description Estimation of the Area Under the ROC curve, possibly after cross validation,
@@ -31,12 +31,18 @@
 #' @param direction [character] \code{">"} lead to estimate P[Y>X],
 #' \code{"<"} to estimate P[Y<X],
 #' and \code{"auto"} to estimate max(P[Y>X],P[Y<X]).
+#' @param add.halfNeutral [logical] should half of the neutral score be added to the favorable and unfavorable scores?
+#' Useful to match the usual definition of the AUC in presence of ties.
+#' @param pooling [character] method used to compute the global AUC from the fold-specific AUC: either an empirical average \code{"mean"}
+#' or a weighted average with weights proportional to the number of pairs of observations in each fold \code{"pairs"}.
 #' @param null [numeric, 0-1] the value against which the AUC should be compared when computing the p-value.
 #' @param conf.level [numeric, 0-1] the confidence level of the confidence intervals.
 #' @param transformation [logical] should a log-log transformation be used when computing the confidence intervals and the p-value.
+#' @param order.Hprojection [1,2] the order of the H-projection used to linear the statistic when computing the standard error.
+#' 2 is involves more calculations but is more accurate in small samples. Only active when the \code{fold} argument is \code{NULL}.
 #' 
-#' @details Compared to other functions computing the AUC (e.g. the auc fonction of the ROCR package),
-#' the AUC is defined here as P[Y>X] with a strict inequality sign (i.e. not P[Y>=X]).
+#' @details The iid decomposition of the AUC is based on a first order decomposition.
+#' So its squared value will not exactly match the square of the standard error estimated with a second order H-projection.
 #'
 #' @return A \emph{data.frame} containing for each fold the AUC value with its standard error (when computed).
 #' The last line of the data.frame contains the global AUC value with its standard error.
@@ -47,7 +53,7 @@
 #' @rdname auc
 #' @examples
 #' library(data.table)
-#' 
+#'
 #' n <- 200
 #' set.seed(10)
 #' X <- rnorm(n)
@@ -56,151 +62,182 @@
 #'                  fold = unlist(lapply(1:10,function(iL){rep(iL,n/10)})))
 #'
 #' ## compute auc
-#' auc(labels = dt$Y, predictions = dt$X, direction = ">")
+#' BuyseTest::auc(labels = dt$Y, predictions = dt$X, direction = ">")
 #'
 #' ## compute auc after 10-fold cross-validation
-#' auc(labels = dt$Y, prediction = dt$X, fold = dt$fold, observation = 1:NROW(dt))
-#' 
-
-
+#' BuyseTest::auc(labels = dt$Y, prediction = dt$X, fold = dt$fold, observation = 1:NROW(dt))
+#'
 
 ## * Code - auc
 #' @export
-auc <- function(labels, predictions, fold = NULL, observation = NULL, direction = ">",
-                null = 0.5, conf.level = 0.95, transformation = FALSE){
+auc <- function(labels, predictions, fold = NULL, observation = NULL,
+                direction = ">", add.halfNeutral = TRUE,
+                null = 0.5, conf.level = 0.95, transformation = TRUE, order.Hprojection = 2, pooling = "mean"){
 
     ## ** Normalize user imput
     if(length(unique(labels))!=2){
         stop("Argument \'labels\' must have exactly two different values \n")
     }
-    n.obs <- length(labels)
-    if(n.obs!=length(predictions)){
-        stop("Argument \'labels\' and \'predictions\' must have the same length \n")
-    }
+    n.obs <- length(labels)    
     if(!is.null(fold)){
-        if(n.obs!=length(fold)){
-            stop("When not NULL, argument \'fold\' must have the same length as argument  \'labels\' \n")
+        if(length(fold)!=length(predictions)){
+            stop("When not NULL, argument \'fold\' must have the same length as argument \'predictions\' \n")
         }
-        if(!is.null(observation)){
-            if(n.obs!=length(fold)){
-                stop("When not NULL, argument \'observation\' must have the same length as argument  \'labels\' \n")
-            }
-            if(!is.null(observation) && any(observation %in% 1:n.obs == FALSE)){
-                stop("When not NULL, argument \'observation\' must take integer values between 1 and ",n.obs,"\n", sep = "")
-            }
+        if(length(observation)!=length(predictions)){
+            stop("When argument \'fold\' is not NULL, argument \'observation\' must have the same length as argument \'predictions\' \n")
+        }
+        if(!is.null(observation) && any(observation %in% 1:n.obs == FALSE)){
+            stop("When not NULL, argument \'observation\' must take integer values between 1 and ",n.obs,"\n", sep = "")
+        }
+
+        if(any(tapply(observation,fold, function(iObs){any(duplicated(iObs))}))){
+            stop("The same observation cannot appear twice in the same fold. \n")
         }
     }else{
+        if(n.obs!=length(predictions)){
+            stop("Argument \'labels\' and \'predictions\' must have the same length \n")
+        }
         if(!is.null(observation)){
             stop("Argument \'observation\' is only useful when argument \'fold\' is specified \n")
         }
         observation <- 1:n.obs
     }
-    direction <- match.arg(direction, c(">","<","auto","best"))
+    direction <- match.arg(direction, c(">","<","auto"), several.ok = TRUE)
+    pooling <- match.arg(pooling, c("pairs","mean"), several.ok = TRUE)
+    
     if(!is.logical(transformation)){
         stop("Argument \'transformation\' must be TRUE or FALSE \n")
     }
     
-    df <- data.frame(Y = labels,
+    df <- data.frame(Y = labels[observation],
                      X = predictions,
+                     observation = observation,
                      stringsAsFactors = FALSE)
-    formula <- Y ~ cont(X)
+    formula0 <- Y ~ cont(X)
 
     if(!is.null(fold)){
         df$fold <- fold
-        formula <- stats::update(formula,.~.+fold)
+        formula <- stats::update(formula0,.~.+fold)
+        name.fold <- sort(unique(df$fold))
+        n.fold <- length(name.fold)
     }else{
         df$fold <- 1
+        formula <- formula0
+        name.fold <- NULL
+        n.fold <- 0
     }
 
-    ## ** Perform GPC
-    order.save <- BuyseTest.options()$order.Hprojection
-
-    BuyseTest.options(order.Hprojection = 2)
-    e.BT <- BuyseTest(formula, method.inference = "u-statistic", data = df, trace = 0)
-    BuyseTest.options(order.Hprojection = order.save)
-    indexC <- attr(e.BT@level.treatment,"indexC")
-    n.C <- length(indexC)
-    indexT <- attr(e.BT@level.treatment,"indexT")
-    n.T <- length(indexT)
+    if(!identical(direction,"auto") && (length(direction) %in% c(1,max(n.fold,1)) == FALSE)){
+        stop("Argument \'direction\' must have length 1 or the number of folds (here ",n.fold,"). \n")
+    }
     
-    ## ** Extra AUC
+    ## ** Prepare 
+    ## *** Make sure that all prediction are in the increasing means outcome direction
     direction.save <- direction
     if(direction == "auto"){
         if(sum(e.BT@count.favorable)>=sum(e.BT@count.unfavorable)){
-            direction <- ">"
+            direction <- rep(">",max(n.fold,1))
         }else{
-            direction <- "<"
+            direction <- rep("<",max(n.fold,1))
+            df$X <- -df$X
         }
+        Udirection <- as.character(NA)
+    }else if(length(direction)==1){
+        if(direction=="<"){
+            df$X <- -df$X
+        }
+        direction <- rep(direction, max(n.fold,1))
+        Udirection <- direction.save
+    }else{
+        for(iFold in 1:n.fold){
+            if(direction[iFold]=="<"){
+                df[df$fold==name.fold[iFold],"X"] <- -df[df$fold==name.fold[iFold],"X"]
+            }
+        }
+        Udirection <- as.character(NA)
     }
 
-    name.fold <- e.BT@level.strata
-    n.fold <- length(name.fold)
-
-    if(direction==">"){
-        out <- data.frame(fold = c(name.fold,"global"),
-                          direction = ">",
-                          estimate = c(e.BT@count.favorable/e.BT@n.pairs,NA),
-                          se = NA,
-                          stringsAsFactors = FALSE)
-        if(!is.null(observation)){
-            M.iid <- do.call(cbind,tapply(observation, df$fold, function(iVec){
-                iIID <- vector(mode = "numeric", length = n.obs)
-                iIID[iVec] <- scale(getIid(e.BT, normalize = FALSE, statistic = "favorable")[iVec,,drop=FALSE], center = TRUE, scale = FALSE)
-                iIID[intersect(iVec,indexC)] <- iIID[intersect(iVec,indexC)]/n.C
-                iIID[intersect(iVec,indexT)] <- iIID[intersect(iVec,indexT)]/n.T
-                return(iIID)
-            }))
-        }
-        ## colSums(M.iid^2)
-    }else if(direction == "<"){
-        out <- data.frame(fold = c(name.fold,"global"),
-                          direction = "<",
-                          estimate = c(e.BT@count.unfavorable/e.BT@n.pairs, NA),
-                          se = NA,
-                          stringsAsFactors = FALSE)
-        if(!is.null(observation)){
-            M.iid <- do.call(cbind,tapply(observation, df$fold, function(iVec){
-                iIID <- vector(mode = "numeric", length = n.obs)
-                iIID[iVec] <- scale(getIid(e.BT, normalize = FALSE, statistic = "unfavorable")[iVec,,drop=FALSE], center = TRUE, scale = FALSE)
-                iIID[intersect(iVec,indexC)] <- iIID[intersect(iVec,indexC)]/n.C
-                iIID[intersect(iVec,indexT)] <- iIID[intersect(iVec,indexT)]/n.T
-                return(iIID)
-            }))
-        }
-    }else if(direction == "best"){
-        out <- data.frame(fold = c(name.fold,"global"),
-                          direction = "best",
+    if(is.null(fold)){
+        out <- data.frame(fold = "global",
+                          direction = direction,
                           estimate = 0,
                           se = 0,
                           stringsAsFactors = FALSE)
-        if(!is.null(observation)){
-            M.iid <- matrix(0, nrow = n.obs, ncol = n.fold)
-        }
-        for(iFold in 1:n.fold){ ## iFold <- 1
-            iDirection <- c("favorable", "unfavorable")[which.max(c(e.BT@count.favorable[iFold],e.BT@count.unfavorable[iFold]))][1]
-            iCount <- as.double(slot(e.BT, paste0("count.",iDirection))[iFold])
-            iVec <- observation[fold == name.fold[iFold]]
-            
-            out$direction[iFold] <- if(iDirection=="favorable"){">"}else{"<"}
-            out$estimate[iFold] <- iCount/e.BT@n.pairs[iFold]
+    }else{
+        out <- data.frame(fold = c(name.fold,"global"),
+                          direction = c(direction,Udirection),
+                          estimate = 0,
+                          se = 0,
+                          stringsAsFactors = FALSE)
+    }
+    attr(out,"iid") <- matrix(NA, nrow = n.obs, ncol = n.fold+1, dimnames = list(NULL,c(name.fold,"global")))
 
-            if(!is.null(observation)){
-                M.iid[iVec,iFold] <- scale(getIid(e.BT, normalize = FALSE, statistic = iDirection)[iVec,,drop=FALSE], center = TRUE, scale = FALSE)
-                M.iid[intersect(iVec,indexC),iFold] <- M.iid[intersect(iVec,indexC),iFold]/n.C
-                M.iid[intersect(iVec,indexT),iFold] <- M.iid[intersect(iVec,indexT),iFold]/n.T
+    ## ** Global AUC
+    order.save <- BuyseTest.options()$order.Hprojection
+    if(order.save!=order.Hprojection){
+        BuyseTest.options(order.Hprojection = order.Hprojection)
+        on.exit(BuyseTest.options(order.Hprojection = order.save))
+    }
+
+    e.BT <- BuyseTest(formula, method.inference = "u-statistic", data = df, trace = 0, add.halfNeutral = add.halfNeutral)
+
+    ## store
+    if(is.null(fold)){
+        out[out$fold=="global","estimate"] <- as.double(coef(e.BT, statistic = "favorable"))
+        out[out$fold=="global","se"] <- as.double(confint(e.BT, statistic = "favorable")[,"se"])  ## may differ from iid when second order H-decomposition
+        attr(out,"iid")[sort(unique(observation)),out$fold=="global"] <- getIid(e.BT, normalize = TRUE, statistic = "favorable") ## no need for cluster argument when fold=NULL
+    }else if(pooling == "mean"){ ## Here: strata have the same weigth
+        ## WARNING: cannot use the "global" results as if there is not the same number of pairs in all strata
+        ##          it will weight differently the strata-specific AUCs
+        attr(out,"iid")[] <- 0
+    }else if(pooling  == "pairs"){ ## Here: strata are weigthed according to the number of pairs
+        out[out$fold=="global","estimate"] <- as.double(coef(e.BT, statistic = "favorable"))
+        out[out$fold=="global","se"] <- as.double(confint(e.BT, cluster = observation, statistic = "favorable")[,"se"])
+        attr(out,"iid")[sort(unique(observation)),out$fold=="global"] <- getIid(e.BT, cluster = observation, normalize = TRUE, statistic = "favorable") 
+        ## sqrt(as.double(crossprod(attr(out,"iid")[,out$fold=="global"])))        
+    }
+    
+    ## ** Fold-specific AUC
+    if(!is.null(fold)){
+        if(order.Hprojection==1){
+            ePOINT.BT <- coef(e.BT, statistic = "favorable", stratified = TRUE)[,1]
+
+            normWithinStrata <- FALSE
+            attr(normWithinStrata, "skipScaleCenter") <- TRUE
+
+            iIID.BT <- getIid(e.BT, normalize = normWithinStrata, statistic = "favorable")[,1]
+
+            out[match(name.fold,out$fold),"estimate"] <- as.double(ePOINT.BT)
+            out[match(name.fold,out$fold),"se"] <- sqrt(as.double(tapply(iIID.BT, fold, crossprod)))
+
+            ## iE.BT <- BuyseTest(formula0, method.inference = "u-statistic", data = df[df$fold==name.fold[2],,drop=FALSE], trace = 0, add.halfNeutral = add.halfNeutral)
+            ## confint(iE.BT, statistic = "favorable")
+
+            for(iFold in 1:n.fold){
+                attr(out,"iid")[observation[fold==name.fold[iFold]],iFold] <- iIID.BT[fold==name.fold[iFold]]
+            }
+            
+        }else{
+            for(iFold in 1:n.fold){ ## iFold <- 1
+                iData <- df[df$fold==name.fold[iFold],,drop=FALSE]
+                iE.BT <- BuyseTest(formula0, method.inference = "u-statistic", data = iData,
+                                   trace = 0, add.halfNeutral = add.halfNeutral)
+                iConfint <- confint(iE.BT, statistic = "favorable")
+                out[match(name.fold[iFold],out$fold),"estimate"] <- as.double(iConfint$estimate)
+                out[match(name.fold[iFold],out$fold),"se"] <- as.double(iConfint$se)
+                    
+                attr(out,"iid")[iData$observation,iFold] <- getIid(iE.BT, normalize = TRUE, statistic = "favorable")
             }
         }
-    }
-    out$estimate[n.fold+1] <- mean(out$estimate[1:n.fold])
-    
-    if(!is.null(observation)){
-        if(!is.null(fold)){
-            n.obsfold <- tapply(observation,fold,function(vecObs){length(unique(vecObs))})
-        }else{
-            n.obsfold <- n.obs
+
+        if(pooling == "mean"){ ## same weight to each fold
+            attr(out,"iid")[,"global"] <- rowMeans(attr(out,"iid")[,1:n.fold])
+
+            out[out$fold=="global","estimate"] <- mean(out[out$fold!="global","estimate"]) 
+            out[out$fold=="global","se"] <- sqrt(as.double(crossprod(attr(out,"iid")[,"global"]))) ## may not match sum(out[out$fold!="global","se"]^2)/n.fold^2 with non-independent folds
+            ## also does not have 2nd order term
         }
-        out$se[1:n.fold] <- sqrt(colSums(M.iid^2))*(n.obs/n.obsfold)
-        out$se[n.fold+1] <- sqrt(sum(rowSums(M.iid)^2))
+
     }
 
     ## ** P-value and confidence interval
@@ -209,12 +246,20 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL, direction 
     qsup <- stats::qnorm(1-alpha/2)
 
     ## riskRegression:::transformCIBP(estimate = cbind(out$estimate), se = cbind(out$se), null = 1/2, conf.level =  0.95, type = "none",
-                                   ## ci = TRUE, band = FALSE, p.value = TRUE,
-                                   ## min.value = 0, max.value = 1)
+    ## ci = TRUE, band = FALSE, p.value = TRUE,
+    ## min.value = 0, max.value = 1)
     ## riskRegression:::transformCIBP(estimate = cbind(out$estimate), se = cbind(out$se), null = 1/2, conf.level =  0.95, type = "loglog",
-                                   ## ci = TRUE, band = FALSE, p.value = TRUE,
-                                   ## min.value = 0, max.value = 1)
-    if(transformation){
+    ## ci = TRUE, band = FALSE, p.value = TRUE,
+    ## min.value = 0, max.value = 1)
+    if(all(out$estimate==1)){
+        out$lower <- 1
+        out$upper <- 1
+        out$p.value <- as.numeric(null==1)
+    }else if(all(out$estimate==0)){
+        out$lower <- 0
+        out$upper <- 0
+        out$p.value <- as.numeric(null==0)
+    }else if(transformation){
         newse <- out$se / (- out$estimate * log(out$estimate))
         z.stat <- (log(-log(out$estimate)) - log(-log(null)))/newse
         
@@ -228,11 +273,11 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL, direction 
         out$upper <- as.double(out[,"estimate"] + qsup * out[,"se"])
         out$p.value <- 2*(1-stats::pnorm(abs(z.stat)))
     }
+
     ## ** Export
+    attr(out, "n.fold") <- n.fold
     class(out) <- append("BuyseTestAuc",class(out))
     attr(out, "contrast") <- e.BT@level.treatment
-    attr(out, "n.fold") <- n.fold
-    attr(out, "iid") <- M.iid
     return(out)
  
 }
@@ -241,16 +286,16 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL, direction 
 ## ** print.auc
 #' @export
 print.BuyseTestAuc <- function(x, ...){
-    if(NROW(x) < attr(x,"n.fold")){
-        print.data.frame(x)
-    }else{
-        label.upper <- paste0(attr(x,"contrast")[2],">",attr(x,"contrast")[1])
-        label.lower <- paste0(attr(x,"contrast")[1],">",attr(x,"contrast")[2])
-        x$direction <- sapply(x$direction, function(iD){
-            if(iD==">"){return(label.upper)}else if(iD=="<"){return(label.lower)}else{return(iD)}
-        })
-        print.data.frame(x[x$fold == "global",c("direction","estimate","se","lower","upper","p.value")], row.names = FALSE)
-    }
+    ##    if(attr(x,"n.fold")==0){
+        print.data.frame(x, ...)
+    ## }else{
+    ##     label.upper <- paste0(attr(x,"contrast")[2],">",attr(x,"contrast")[1])
+    ##     label.lower <- paste0(attr(x,"contrast")[1],">",attr(x,"contrast")[2])
+    ##     x$direction <- sapply(x$direction, function(iD){
+    ##         if(iD==">"){return(label.upper)}else if(iD=="<"){return(label.lower)}else{return(iD)}
+    ##     })
+    ##     print.data.frame(x[x$fold == "global",c("direction","estimate","se","lower","upper","p.value")], row.names = FALSE)
+    ## }
 }
 
 ## ** coef.auc
@@ -284,7 +329,22 @@ coef.BuyseTestAuc <- function(object,...){
 confint.BuyseTestAuc <- function(object,...){
     out <- object[object$fold=="global",c("estimate","se","lower","upper","p.value")]
     rownames(out) <- NULL
-    return(as.data.frame(out, stringsAsFactors = FALSE))
+    return(out)
+}
+## ** iid.auc
+#' @title Extract the idd Decomposition for the AUC
+#'
+#' @description Extract the iid decompotion relative to AUC estimate.
+#' 
+#' @param object object of class \code{BuyseTestAUC} (output of the \code{auc} function).
+#' @param ... not used. For compatibility with the generic function.
+#'
+#' @return A column vector.
+#' 
+#' @method iid BuyseTestAuc
+#' @export
+iid.BuyseTestAuc <- function(object,...){
+    return(attr(object,"iid")[,"global",drop=FALSE])
 }
 
 

@@ -1,5 +1,17 @@
 # -*- mode: org -*-
 
+* Version 2.3
+
+** User visible changes
+- NEW FEATURE: BuyseMultComp to adjust for multiple comparisons over strata or endpoints.
+- NEW FEATURE: performance function has been added.
+- confint for BuyseTest object now returns a data.frame instead of a matrix
+- fix bug when computing the variance in stratified GPC with method.inference="u-statistics" (>2.3.5)
+  
+** Internal change
+- the auc function has been partially re-written.
+- add warning when using a correction and the survival curve is partially unknown.
+
 * Version 2.2
 
 ** User visible changes
