@@ -10,6 +10,7 @@ performance(
   newdata = NA,
   fold.size = 1/10,
   fold.number = 0,
+  individual.fit = FALSE,
   name.response = NULL,
   null = c(brier = NA, AUC = 0.5),
   conf.level = 0.95,
@@ -30,6 +31,8 @@ performance(
 
 \item{fold.number}{[integer] When strictly positive, the number of fold used in the cross-validation. If 0 then no cross validation is performed.}
 
+\item{individual.fit}{[logical] If \code{TRUE} the predictive model is refit for each individual using only the predictors with non missing values.}
+
 \item{name.response}{[character] The name of the response variable (i.e. the one containing the categories).}
 
 \item{null}{[numeric vector of length 2] the right-hand side of the null hypothesis relative to each metric.}
@@ -49,6 +52,9 @@ or approximating the predicted probability by a normal distribution.}
 \description{
 Assess the performance in term of AUC and brier score of one or several binary classifiers.
 Currently limited to logistic regressions and random forest.
+}
+\details{
+WARNING: this function is still in development. In particular standard errors, confidence intervals, and p-values should not be trusted.
 }
 \examples{
 ## Simulate data

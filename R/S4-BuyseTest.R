@@ -39,6 +39,7 @@ setClass(
       method.inference = "character",
       strata = "vector",
       threshold = "numeric",
+      restriction = "numeric",
       n.resampling = "numeric",
       deltaResampling = "array",
       DeltaResampling = "array",
@@ -91,6 +92,7 @@ methods::setMethod(
                                    method.score,
                                    strata,
                                    threshold,
+                                   restriction,
                                    weight,
                                    n.resampling,
                                    deltaResampling = NULL, ## from inferenceResampling
@@ -98,10 +100,11 @@ methods::setMethod(
                                    covarianceResampling = NULL, ## from inferenceResampling
                                    args){
 
-                 name.endpoint <- paste0(endpoint,"_",threshold)
+                 name.endpoint <- paste0(endpoint,ifelse(!is.na(restriction),paste0("_r",restriction),""),ifelse(threshold>1e-12,paste0("_t",threshold),""))
                  
                  ## ** call
-                 
+                 call <- call[-1]
+
                  ## ** count
                  dimnames(count_favorable) <- list(level.strata, name.endpoint)
                  dimnames(count_unfavorable) <- list(level.strata, name.endpoint)
@@ -151,11 +154,12 @@ methods::setMethod(
                  ## ** tableScore
                  if(!is.null(tableScore) && length(tableScore)>0 && any(sapply(tableScore, data.table::is.data.table)==FALSE)){
                      tableScore <- pairScore2dt(tableScore,
-                                                    level.treatment = level.treatment,
-                                                    level.strata = level.strata,
-                                                    n.strata = length(level.strata),
-                                                    endpoint = endpoint,
-                                                    threshold = threshold)
+                                                level.treatment = level.treatment,
+                                                level.strata = level.strata,
+                                                n.strata = length(level.strata),
+                                                endpoint = endpoint,
+                                                threshold = threshold,
+                                                restriction = restriction)
                  }
                  
                  ## ** tableSurvival
@@ -197,6 +201,9 @@ methods::setMethod(
                  if(is.null(strata)){
                      strata <- as.character(NA)
                  }
+                 ## ** restriction
+                 names(restriction) <- name.endpoint
+
                  ## ** threshold
                  names(threshold) <- name.endpoint
                  
@@ -247,7 +254,7 @@ methods::setMethod(
                  .Object@tablePairScore <- tableScore
 
                  ## *** required additional information
-                 .Object@call <- call[-1]      
+                 .Object@call <- call
                  .Object@type <- type
                  .Object@endpoint <- endpoint
                  .Object@level.strata <- level.strata
@@ -260,6 +267,7 @@ methods::setMethod(
                  .Object@method.inference <- method.inference
                  .Object@strata <- strata
                  .Object@threshold <- threshold
+                 .Object@restriction <- restriction
                  .Object@weight <- weight
                  .Object@n.resampling <- n.resampling
                  

@@ -12,7 +12,7 @@
 #' \item formula: call \code{initializeFormula} to extract arguments.
 #' \item type: convert to numeric.
 #' \item status: only keep status relative to TTE endpoint. Set to \code{NULL} if no TTE endpoint.
-#' \item threshold: set default threshold to 1e-12 expect for binary variable where it is set to 1/2.
+#' \item threshold: set default threshold to 1e-12.
 #' the rational being we consider a pair favorable if X>Y ie X>=Y+1e-12.
 #' When using a threshold e.g. 5 we want X>=Y+5 and not X>Y+5, especially when the measurement is discrete. \cr
 #' \item data: convert to data.table object.
@@ -49,6 +49,7 @@ initializeArgs <- function(status,
                            add.halfNeutral = NULL,
                            operator = NULL,
                            censoring,
+                           restriction,
                            option,
                            seed = NULL,
                            strata,
@@ -56,7 +57,8 @@ initializeArgs <- function(status,
                            trace = NULL,
                            treatment,
                            type,
-                           weight){
+                           weight,
+                           envir){
 
     ## ** apply default options
     if(is.null(cpus)){ cpus <- option$cpus }
@@ -82,6 +84,7 @@ initializeArgs <- function(status,
                        endpoint = !missing(endpoint) && !is.null(endpoint),
                        operator = !missing(operator) && !is.null(operator),
                        censoring = !missing(censoring) && !is.null(censoring),
+                       restriction = !missing(restriction) && !is.null(restriction),
                        strata = !missing(strata) && !is.null(strata),
                        threshold = !missing(threshold) && !is.null(threshold),
                        treatment = !missing(treatment) && !is.null(treatment),
@@ -93,7 +96,7 @@ initializeArgs <- function(status,
             warning("Argument",if(sum(test.null)>1){"s"}," \'",paste(txt, collpase="\' \'"),if(sum(test.null)>1){" are "}else{" is "}," ignored when argument \'formula\' has been specified\n")
         }
         
-        resFormula <- initializeFormula(formula)
+        resFormula <- initializeFormula(formula, hierarchical = hierarchical, envir = envir)
 
         treatment <- resFormula$treatment
         type <- resFormula$type
@@ -103,6 +106,7 @@ initializeArgs <- function(status,
         weight <- resFormula$weight
         operator <- resFormula$operator
         censoring <- resFormula$censoring
+        restriction <- resFormula$restriction
         strata <- resFormula$strata
     }else{
         formula <- NULL
@@ -131,14 +135,25 @@ initializeArgs <- function(status,
     Uendpoint <- unique(endpoint) 
     Uendpoint.TTE <- unique(endpoint.TTE) 
     
-    ## ** default values 
+    ## ** default values
     if(is.null(formula)){
+
+        if(is.null(threshold)){
+            threshold <- rep(10^{-12},D)  # if no treshold is proposed all threshold are by default set to 10^{-12}
+        }
+        if(is.null(restriction)){
+            restriction <- rep(as.numeric(NA),D)  
+        }
 
         if(is.null(operator)){
             operator <- rep(">0",D)
         }
         if(is.null(weight)){
-            weight <- rep(1,D)
+            if(hierarchical){
+                weight <- rep(1,D)
+            }else{
+                weight <- rep(1/D,D)
+            }
         }
         if(is.null(status)){
             status <- rep("..NA..",D)
@@ -201,21 +216,11 @@ initializeArgs <- function(status,
     }
 
     ## ** threshold
-    if(is.null(threshold)){
-        threshold <- rep(10^{-12},D)  # if no treshold is proposed all threshold are by default set to 10^{-12}
-        if(any(type == "bin")){threshold[type=="bin"] <- 1/2} # except for threshold corresponding to binary endpoints that are set to NA.
-    }else{
-        if(any(is.na(threshold[type=="bin"]))){
-            index.tempo <- intersect(which(is.na(threshold)),which(type=="bin"))
-            threshold[index.tempo] <- 1/2
-        }
-        if(any(is.na(threshold[type!="bin"]))){
-            index.tempo <- intersect(which(is.na(threshold)),which(type!="bin"))
-            threshold[index.tempo] <- 10^{-12}
-        }
-        if(any(abs(stats::na.omit(threshold))<10^{-12})){
-            threshold[which(abs(threshold)<10^{-12})] <- 10^{-12}
-        }
+    if(any(is.na(threshold))){
+        threshold[which(is.na(threshold))] <- 10^{-12}
+    }
+    if(any(abs(threshold)<10^{-12})){
+        threshold[which(abs(threshold)<10^{-12})] <- 10^{-12}
     }
 
     ## ** method.inference
@@ -313,6 +318,7 @@ initializeArgs <- function(status,
         add.halfNeutral = add.halfNeutral,
         operator = operator,
         censoring = censoring,
+        restriction = restriction,
         order.Hprojection = option$order.Hprojection,
         precompute = precompute,
         seed = seed,
@@ -518,7 +524,7 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
 
 ## * initializeFormula
 #' @rdname internal-initialization
-initializeFormula <- function(x){
+initializeFormula <- function(x, hierarchical, envir){
 
     validClass(x, valid.class = "formula")
     
@@ -574,12 +580,13 @@ initializeFormula <- function(x){
     endpoint <- NULL
     operator <- NULL
     censoring <- NULL
+    restriction <- NULL
     weight <- NULL
     type <- NULL
     validArgs <- c("endpoint","mean",
                    "status", "std",
                    "iid",
-                   "threshold","operator","weight","censoring")
+                   "threshold","operator","weight","censoring","restriction")
 
     ## split around parentheses
     ls.x.endpoint <- strsplit(vec.x.endpoint, split = "(", fixed = TRUE)
@@ -590,7 +597,7 @@ initializeFormula <- function(x){
         candidate <- tolower(ls.x.endpoint[[iE]][1])
         if(candidate %in% c("b","bin","binary")){
             type <- c(type, candidate)
-            iValidArgs <- setdiff(validArgs,c("status","threshold","mean","std","iid"))
+            iValidArgs <- setdiff(validArgs,c("status","threshold","mean","std","iid","restriction"))
             default.censoring <- "right"
         }else if(candidate %in% c("c","cont","continuous")){
             type <- c(type, candidate)
@@ -602,7 +609,7 @@ initializeFormula <- function(x){
             default.censoring <- "right"
         }else if(candidate %in% c("g","gaus","gaussian")){
             type <- c(type, candidate)
-            iValidArgs <- setdiff(validArgs, c("endpoint","status","censoring"))
+            iValidArgs <- setdiff(validArgs, c("endpoint","status","censoring","restriction"))
             default.censoring <- as.character(NA)
         }else if(candidate %in% c("s","strat","strata")){
             strata <- c(strata, gsub(")", replacement = "",ls.x.endpoint[[iE]][2]))
@@ -670,8 +677,12 @@ initializeFormula <- function(x){
         if("threshold" %in% iName){
             thresholdTempo <- try(eval(expr = parse(text = iArg[iName=="threshold"])), silent = TRUE)
             if(inherits(thresholdTempo,"try-error")){
-                stop(iArg[iName=="threshold"]," does not refer to a valid threshold \n",
-                     "Should be numeric or the name of a variable in the global workspace \n")
+                thresholdTempo <- try(eval(expr = parse(text = iArg[iName=="threshold"]), envir = envir), silent = TRUE)
+
+                if(inherits(thresholdTempo,"try-error")){
+                    stop(iArg[iName=="threshold"]," does not refer to a valid threshold \n",
+                         "Should be numeric or the name of a variable in the global workspace \n")
+                }
             }
                 
             if(inherits(thresholdTempo, "function")){
@@ -701,17 +712,51 @@ initializeFormula <- function(x){
         }
         if("weight" %in% iName){
             weight <- c(weight, as.numeric(eval(expr = parse(text = iArg[iName=="weight"]))))
-        }else{
+        }else if(hierarchical){
             weight <- c(weight, 1)
+        }else{
+            weight <- c(weight, as.numeric(NA))
         }
         if("censoring" %in% iName){
             censoring <- c(censoring, gsub("\"","",iArg[iName=="censoring"]))
         }else{
             censoring <- c(censoring, default.censoring)
         }
+        if("restriction" %in% iName){
+            restrictionTempo <- try(eval(expr = parse(text = iArg[iName=="restriction"])), silent = TRUE)
+            if(inherits(restrictionTempo,"try-error")){
+                restrictionTempo <- try(eval(expr = parse(text = iArg[iName=="restriction"]), envir = envir), silent = TRUE)
+
+                if(inherits(restrictionTempo,"try-error")){
+                    stop(iArg[iName=="restriction"]," does not refer to a valid restriction \n",
+                         "Should be numeric or the name of a variable in the global workspace \n")
+                }
+            }
+                
+            if(inherits(restrictionTempo, "function")){
+                packageTempo <- environmentName(environment(restrictionTempo))
+                if(nchar(packageTempo)>0){
+                    txt <- paste0("(package ",packageTempo,")")
+                }else{
+                    txt <- ""
+                }
+                stop(iArg[iName=="restriction"]," is already defined as a function ",txt,"\n",
+                     "cannot be used to specify the restriction \n")
+            }
+            
+            restriction <- c(restriction, as.numeric(restrictionTempo))
+        }else{
+            restriction <- c(restriction, as.numeric(NA))
+        }
     }
 
     ## ** export
+    if(all(is.na(weight))){
+        weight <- rep(1/length(weight), length(weight))
+    }else if(sum(weight, na.rm = TRUE)<1){
+        weight[!is.na(weight)] <- (1-sum(weight, na.rm = TRUE))/sum(is.na(weight))
+    }
+
     out <- list(treatment = treatment,
                 type = type,
                 endpoint = endpoint,
@@ -720,6 +765,7 @@ initializeFormula <- function(x){
                 operator = operator,
                 weight = weight,
                 censoring = censoring,
+                restriction = restriction,
                 strata = strata)
     return(out)
 }

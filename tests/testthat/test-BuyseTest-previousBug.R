@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 17 2018 (16:46) 
 ## Version: 
-## Last-Updated: okt 14 2021 (19:00) 
+## Last-Updated: Dec 21 2021 (17:49) 
 ##           By: Brice Ozenne
-##     Update #: 195
+##     Update #: 203
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -357,12 +357,26 @@ test_that("BuysePower - error in print", {
 
 ## * brice ozenne: 11/13/19 4:11 hierachical in BuyseTest
 test_that("BuyseTest - hierarchical", {
-    BT.nH <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno, threshold = 0),
+    BuyseTest.options(order.Hprojection = 1)
+    BT.nH1 <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status", weight = 1) + cont(karno, threshold = 0, weight = 1),
                        hierarchical = FALSE, data = veteran, 
-                       method.inference = "none", trace = 0)
-    expect_equal(coef(BT.nH),
-                 c("time_20" = -0.08765836, "karno_1e-12" = -0.11898828),
+                       method.inference = "u-statistic", trace = 0)
+    BT.nH.5 <- BuyseTest(trt ~ tte(time, threshold = 20, status = "status") + cont(karno, threshold = 0),
+                       hierarchical = FALSE, data = veteran, 
+                       method.inference = "u-statistic", trace = 0)
+
+    expect_equal(unname(coef(BT.nH.5)),
+                 c(-0.04382918, -0.05949414),
                  tol = 1e-6)
+    expect_equal(coef(BT.nH.5)*2, coef(BT.nH1), tol = 1e-6)
+    
+    expect_equal(BT.nH1@covariance[,"netBenefit"],4*BT.nH.5@covariance[,"netBenefit"], tol = 1e-6)
+    expect_equal(as.double(confint(BT.nH.5)$se),
+                 c(0.04880450,0.08700807),
+                 tol = 1e-6)
+    expect_equal(confint(BT.nH.5)$se*2, confint(BT.nH1)$se, tol = 1e-6)
+    
+    
 
 })
 
@@ -520,3 +534,30 @@ test_that("U-stat with stratification",{
                           GPC.stratified@covariance[,"netBenefit"], tol = 1e-6)
     }
 })
+
+## * SamSalvaggio (issue #9 on Github): 21 december 2021 permutation
+test_that("p-value with permutation",{
+    set.seed(1)
+    dt <- simBuyseTest(50, argsCont = list(mu.T = 100, mu.C = 1)) ## extremely large difference so always in favor of treatment
+    GPC.perm <- BuyseTest(treatment~cont(score),
+                          data=dt, trace = FALSE,
+                          method.inference = "permutation")
+    BuyseTest.options(add.1.pperm = FALSE)
+    expect_equal(suppressWarnings(confint(GPC.perm)$p.value), 0)
+    BuyseTest.options(add.1.pperm = TRUE)
+    expect_equal(suppressWarnings(confint(GPC.perm)$p.value), 1/1001)
+})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
