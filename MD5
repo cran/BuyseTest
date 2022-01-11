@@ -1,4 +1,4 @@
-6bfeec1e93a686153188856b2552df9f *DESCRIPTION
+2ee0dd974fa4232e37633f8b13548a25 *DESCRIPTION
 4a29bf551d64b22b86dd672bdc72c116 *NAMESPACE
 f93553a050afafff34c5e74155a1a1c2 *NEWS
 b1c85558a78a536ce1074e8083f69c65 *R/0-onLoad.R
@@ -49,7 +49,7 @@ d41d8cd98f00b204e9800998ecf8427e *inst/doc-Wilcoxon/wilcoxonTest.loc
 2e2144dd3dbcfa9f86b66e771e2aadbb *inst/doc-Wilcoxon/wilcoxonTest.org
 6e4612810835a6e16cfcffdb902ba4f7 *inst/doc-Wilcoxon/wilcoxonTest.pdf
 22b8f5f22b0df354bb685a28ebd93bfe *inst/doc-Wilcoxon/wilcoxonTest.tex
-c23e6002d4b6fab3586e1e55200c94cc *inst/doc/overview.pdf
+f5f0385f2eae94a66c46dae4d5110e35 *inst/doc/overview.pdf
 14a2d4c0b8a4546ecb387c35bcc146f6 *inst/doc/overview.pdf.asis
 e99fd6cb6456fabe0d2f3eb3e48e14d8 *inst/doc/wilcoxonTest.pdf
 e891f612233042416d0f96569eca284f *inst/doc/wilcoxonTest.pdf.asis
@@ -119,7 +119,7 @@ fe18981a63890e51f3d0a702aeb15850 *man/simCompetingRisks.Rd
 9f234fcf1474f9f45372cce3909fa722 *man/validFCTs.Rd
 e3a78565f4aa1acbaa90fef23cae3e3d *src/FCT_buyseTest.cpp
 a469ca5b0600f5cde5af4909a53a6fdf *src/FCT_calcAllPairs.h
-1cd1b0d9941d66d6b621bebf916fa0b2 *src/FCT_calcOnePair.h
+514ec30895deda7ed8ee89cd36e2b250 *src/FCT_calcOnePair.h
 354f22ab935227a3533393dd6a7232ab *src/FCT_calcStatistic.h
 6fc2c6fe12a19fb2de91f34f5782ad1f *src/FCT_precompute.cpp
 b3f86c20b81b51f5162874977d38784d *src/Makevars
