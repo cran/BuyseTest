@@ -13,11 +13,12 @@ performance(
   individual.fit = FALSE,
   name.response = NULL,
   null = c(brier = NA, AUC = 0.5),
-  conf.level = 0.95,
+  conf.level = NA,
   transformation = TRUE,
   auc.type = "classical",
   simplify = TRUE,
-  trace = TRUE
+  trace = TRUE,
+  seed = NULL
 )
 }
 \arguments{
@@ -29,7 +30,7 @@ performance(
 
 \item{fold.size}{[double, >0] Either the size of the test dataset (when >1) or the fraction of the dataset (when <1) to be used for testing when using cross-validation.}
 
-\item{fold.number}{[integer] When strictly positive, the number of fold used in the cross-validation. If 0 then no cross validation is performed.}
+\item{fold.number}{[integer] When strictly positive, the number of folds used in the cross-validation. If 0 then no cross validation is performed.}
 
 \item{individual.fit}{[logical] If \code{TRUE} the predictive model is refit for each individual using only the predictors with non missing values.}
 
@@ -48,6 +49,8 @@ or approximating the predicted probability by a normal distribution.}
 \item{simplify}{[logical] Should the number of fold and the size of the fold used for the cross validation be removed from the output?}
 
 \item{trace}{[logical] Should the execution of the function be traced.}
+
+\item{seed}{[integer, >0] seed used to ensure reproducibility.}
 }
 \description{
 Assess the performance in term of AUC and brier score of one or several binary classifiers.
@@ -69,15 +72,15 @@ e.logit <- glm(Y~X1+X2, data = df.train, family = binomial(link="logit"))
 
 ## assess performance on the training set (biased)
 ## and external dataset
-BuyseTest::performance(e.logit, newdata = df.test)
-BuyseTest::performance(list(null = e.null, prop = e.logit), newdata = df.test)
+performance(e.logit, newdata = df.test)
+performance(list(null = e.null, prop = e.logit), newdata = df.test)
 
 ## assess performance using cross validation
-set.seed(10)
-BuyseTest::performance(e.logit, fold.number = 10)
-set.seed(10)
 \dontrun{
-BuyseTest::performance(list(null = e.null, prop = e.logit), fold.number = 10)
-BuyseTest::performance(e.logit, fold.number = c(50,20,10))
+set.seed(10)
+performance(e.logit, fold.number = 10, conf.level = NA)
+set.seed(10)
+performance(list(null = e.null, prop = e.logit), fold.number = 10)
+performance(e.logit, fold.number = c(50,20,10))
 }
 }

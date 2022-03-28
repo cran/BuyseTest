@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: dec  9 2021 (10:04) 
 ## Version: 
-## Last-Updated: Dec 14 2021 (17:23) 
+## Last-Updated: mar  4 2022 (10:15) 
 ##           By: Brice Ozenne
-##     Update #: 46
+##     Update #: 50
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -16,6 +16,7 @@
 ### Code:
 
 
+## * as.data.table.performance
 ##' @title Convert Performance Objet to data.table
 ##' @description Extract the AUC/brier score values or the prediction into a data.table format.
 ##'
@@ -113,6 +114,14 @@ as.data.table.performance <- function(x, type = "metric", format = NULL, keep.ro
         }
         return(out)
     }
+}
+
+## * as.data.table.performanceResample
+##' @export
+as.data.table.performanceResample <- function(x, ...){
+
+    return(as.data.table(attr(x,"original"), ...))
+
 }
 
 ##----------------------------------------------------------------------
