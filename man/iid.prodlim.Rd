@@ -4,10 +4,10 @@
 \alias{iid.prodlim}
 \title{Extract i.i.d. decomposition from a prodlim model}
 \usage{
-\method{iid}{prodlim}(object, add0 = FALSE, ...)
+\method{iid}{prodlim}(x, add0 = FALSE, ...)
 }
 \arguments{
-\item{object}{A prodlim object.}
+\item{x}{A prodlim object.}
 
 \item{add0}{[logical] add the 0 to vector of relevant times.}
 

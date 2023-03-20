@@ -14,8 +14,10 @@ GPC_cpp(
   posT,
   threshold,
   restriction,
-  weight,
+  weightEndpoint,
+  weightObs,
   method,
+  pool,
   op,
   D,
   D_UTTE,
@@ -54,8 +56,10 @@ GPC2_cpp(
   posT,
   threshold,
   restriction,
-  weight,
+  weightEndpoint,
+  weightObs,
   method,
+  pool,
   op,
   D,
   D_UTTE,
@@ -102,9 +106,13 @@ GPC2_cpp(
 
 \item{restriction}{Store the restriction time associated to each endpoint. Must have length D.}
 
-\item{weight}{Store the weight associated to each endpoint. Must have length D.}
+\item{weightEndpoint}{Store the weight associated to each endpoint. Must have length D.}
+
+\item{weightObs}{A vector containing the weight associated to each observation.}
 
 \item{method}{The index of the method used to score the pairs. Must have length D. 1 for binary/continuous, 2 for Gaussian, 3/4 for Gehan (left or right-censoring), and 5/6 for Peron (right-censoring survival or competing risks).}
+
+\item{pool}{The index of the method used to pool results across strata. Can be 0 (weight inversely proportional to the sample size), 1 (Mantel Haenszel weights), 2 (equal weights), 3 (precision weights)}
 
 \item{op}{The index of the operator used to score the pairs. Must have length D. 1 for larger is beter, -1 for smaller is better.}
 
@@ -156,7 +164,7 @@ GPC2_cpp(
 
 \item{precompute}{Have the integrals relative to the survival be already computed and stored in list_survTimeC/list_survTimeT and list_survJumpC/list_survJumpT (derivatives)}
 
-\item{returnIID}{Should the iid be computed?}
+\item{returnIID}{Should the iid be computed? Second element: is there any nuisance parameter?}
 
 \item{debug}{Print messages tracing the execution of the function to help debugging. The amount of messages increase with the value of debug (0-5).}
 }

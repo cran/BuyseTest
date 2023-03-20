@@ -4,10 +4,10 @@
 \alias{iid.BuyseTestAuc}
 \title{Extract the idd Decomposition for the AUC}
 \usage{
-\method{iid}{BuyseTestAuc}(object, ...)
+\method{iid}{BuyseTestAuc}(x, ...)
 }
 \arguments{
-\item{object}{object of class \code{BuyseTestAUC} (output of the \code{auc} function).}
+\item{x}{object of class \code{BuyseTestAUC} (output of the \code{auc} function).}
 
 \item{...}{not used. For compatibility with the generic function.}
 }

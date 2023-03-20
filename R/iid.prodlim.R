@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr  1 2019 (23:06) 
 ## Version: 
-## Last-Updated: nov 18 2020 (16:41) 
+## Last-Updated: mar 14 2023 (13:44) 
 ##           By: Brice Ozenne
-##     Update #: 124
+##     Update #: 126
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -20,7 +20,7 @@
 #' @description Compute the influence function for each observation used to estimate the model
 #' @name iid.prodlim
 #' 
-#' @param object A prodlim object.
+#' @param x A prodlim object.
 #' @param add0 [logical] add the 0 to vector of relevant times.
 #' @param ... not used. For compatibility with the generic method.
 #' 
@@ -50,8 +50,9 @@
 
 ## * iid.prodlim - code
 #' @export
-iid.prodlim <- function(object, add0 = FALSE, ...){
-
+iid.prodlim <- function(x, add0 = FALSE, ...){
+    object <- x
+    
     if(object$type!="surv"){
         stop("Influence function only available for survival models \n")
     }
