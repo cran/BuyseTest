@@ -61,7 +61,11 @@ or approximating the predicted probability by a normal distribution.}
 
 \item{trace}{[logical] Should the execution of the function be traced.}
 
-\item{seed}{[integer, >0] seed used to ensure reproducibility.}
+\item{seed}{[integer, >0] Random number generator (RNG) state used when starting data spliting.
+If \code{NULL} no state is set.}
+}
+\value{
+An S3 object of class \code{performance}.
 }
 \description{
 Assess the performance in term of AUC and brier score of one or several binary classifiers.
@@ -99,3 +103,4 @@ performance(e.logit1, fold.repetition = c(50,20,10))
 \references{
 LeDell E, Petersen M, van der Laan M. Computationally efficient confidence intervals for cross-validated area under the ROC curve estimates. Electron J Stat. 2015;9(1):1583-1607. doi:10.1214/15-EJS1035
 }
+\keyword{model}

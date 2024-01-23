@@ -1,5 +1,4 @@
 ## * inferenceResampling
-## author Brice Ozenne
 inferenceResampling <- function(envir){
 
     cpus <- envir$outArgs$cpus
@@ -12,6 +11,19 @@ inferenceResampling <- function(envir){
     n.resampling <- envir$outArgs$n.resampling
     n.strata <- envir$outArgs$n.strata
     seed <- envir$outArgs$seed
+
+    if (!is.null(seed)) {
+        if(!is.null(get0(".Random.seed"))){ ## avoid error when .Random.seed do not exists, e.g. fresh R session with no call to RNG
+            old <- .Random.seed # to save the current seed
+            on.exit(.Random.seed <<- old) # restore the current seed (before the call to the function)
+        }else{
+            on.exit(rm(.Random.seed, envir=.GlobalEnv))
+        }
+        tol.seed <- attr(seed,"max")
+        set.seed(seed)
+        seqSeed <- sample.int(tol.seed, n.resampling,  replace = FALSE)        
+    }
+
     trace <- envir$outArgs$trace
 
     ## re-order dataset according to the strata used when resampling
@@ -29,15 +41,6 @@ inferenceResampling <- function(envir){
     
     ## ** computation
     if (cpus == 1) { ## *** sequential resampling test
-        if(!is.null(seed)){
-            if(!is.null(get0(".Random.seed"))){ ## avoid error when .Random.seed do not exists, e.g. fresh R session with no call to RNG
-                old <- .Random.seed # to save the current seed
-                on.exit(.Random.seed <<- old) # restore the current seed (before the call to the function)
-            }else{
-                on.exit(rm(.Random.seed, envir=.GlobalEnv))
-            }
-            set.seed(seed)
-        }
 
         if (trace > 0) {
             requireNamespace("pbapply")
@@ -46,26 +49,39 @@ inferenceResampling <- function(envir){
             method.loop <- lapply
         }
         ls.resampling <- do.call(method.loop,
-                                  args = list(X = 1:n.resampling,
-                                              FUN = function(iB){
-                                                  .BuyseTest(envir = envir,
-                                                             iid = iid,
-                                                             method.inference = method.inference,
-                                                             pointEstimation = FALSE
-                                                             )
-                                              })
+                                 args = list(X = 1:n.resampling,
+                                             FUN = function(iB){
+                                                 if(!is.null(seed)){set.seed(seqSeed[iB])}
+                                                 iOut <- .BuyseTest(envir = envir,
+                                                                    iid = iid,
+                                                                    method.inference = method.inference,
+                                                                    pointEstimation = FALSE
+                                                                    )
+                                                 if(!is.null(seed)){
+                                                     return(c(iOut,list(seed = seqSeed[iB])))
+                                                 }else{
+                                                     return(iOut)
+                                                 }
+                                             })
                                  )
     }else { ## *** parallel resampling test
 
         ## define cluster
+        cl <- parallel::makeCluster(cpus)
         if(trace>0){
-            cl <- suppressMessages(parallel::makeCluster(cpus, outfile = ""))
             pb <- utils::txtProgressBar(max = n.resampling, style = 3)          
+            progress <- function(n){utils::setTxtProgressBar(pb, n)}
+            opts <- list(progress = progress)
         }else{
-            cl <- parallel::makeCluster(cpus)
+            opts <- list()
         }
         ## link to foreach
-        doParallel::registerDoParallel(cl)
+        doSNOW::registerDoSNOW(cl)
+
+        ## seed
+        if (!is.null(seed)) {
+            parallel::clusterExport(cl, varlist = "seqSeed", envir = environment())
+        }         
 
         ## export package
         parallel::clusterCall(cl, fun = function(x){
@@ -77,15 +93,19 @@ inferenceResampling <- function(envir){
         ls.resampling <- foreach::`%dopar%`(
                                       foreach::foreach(iB=1:n.resampling,
                                                        .export = toExport,
-                                                       .packages = "data.table"),                                            
-                                      {                                           
-                                          if(trace>0){utils::setTxtProgressBar(pb, iB)}
-
-                                           return(.BuyseTest(envir = envir,
+                                                       .packages = "data.table",
+                                                       .options.snow = opts),                                            
+                                      {
+                                          if(!is.null(seed)){set.seed(seqSeed[iB])}
+                                          iOut <- .BuyseTest(envir = envir,
                                                              iid = iid,
                                                              method.inference = method.inference,
-                                                             pointEstimation = FALSE))
-                      
+                                                             pointEstimation = FALSE)
+                                          if(!is.null(seed)){
+                                              return(c(iOut,list(seed = seqSeed[iB])))
+                                          }else{
+                                              return(iOut)
+                                          }                      
                                        })
 
         parallel::stopCluster(cl)
@@ -106,6 +126,9 @@ inferenceResampling <- function(envir){
                 weightStrataResampling = matrix(NA, nrow = n.resampling, ncol = n.strata,
                                                 dimnames = list(NULL, level.strata))
                 )
+    if(!is.null(seed)){
+        out$seed <- rep(NA, n.resampling)
+    }
     if(iid){
         out$covarianceResampling = array(NA, dim = c(n.resampling, D, 5),
                                          dimnames = list(as.character(1:n.resampling), endpoint, c("favorable", "unfavorable", "covariance", "netBenefit", "winRatio")))
@@ -117,7 +140,9 @@ inferenceResampling <- function(envir){
         out$deltaResampling[iR,,,] <- ls.resampling[[iR]]$delta
         out$DeltaResampling[iR,,] <- ls.resampling[[iR]]$Delta
         out$weightStrataResampling[iR,] <- ls.resampling[[iR]]$weightStrata
-        
+        if(!is.null(seed)){
+            out$seed[iR] <- seqSeed[iR]
+        }
         if(iid){
             out$covarianceResampling[iR,,] <- ls.resampling[[iR]]$covariance
         }
@@ -130,12 +155,12 @@ inferenceResampling <- function(envir){
 
 
 ## * inference U-statistic (Bebu et al 2015)
-## Implement the computation of the asymptotic variance as described in
-## Large sample inference for a win ratio analysis of a composite outcome based on prioritized components
-## Biostatistics (2015), pp. 1–10 doi:10.1093/biostatistics/kxv032
-## Give results equivalent to inferenceUstatistic
-## NOTE: arguments subset.C and subset.T were used for BuysePower to re-compute statistics on a subset of the data
-##       but this happens to be slower than just re-running the test so is not used
+##' @description Implement the computation of the asymptotic variance as described in Bebu et al (2015)
+##' Should give results equivalent to inferenceUstatistic
+##' NOTE: arguments subset.C and subset.T were used for BuysePower to re-compute statistics on a subset of the data
+##'       but this happens to be slower than just re-running the test so is not used
+##' @noRd
+##' @references Large sample inference for a win ratio analysis of a composite outcome based on prioritized components Biostatistics (2015), pp. 1–10 doi:10.1093/biostatistics/kxv032
 inferenceUstatisticBebu <- function(tablePairScore, subset.C = NULL, subset.T = NULL,
                                     order, weightEndpoint, 
                                     n.pairs, n.C, n.T, level.strata, n.strata, n.endpoint, endpoint){
@@ -295,7 +320,8 @@ inferenceUstatisticBebu <- function(tablePairScore, subset.C = NULL, subset.T = 
 }
 
 ## * wsumPairScore
-## cumulate over endpoint the scores
+##' @description cumulate over endpoint the scores
+##' @noRd
 wsumPairScore <- function(pairScore, weightEndpoint, subset.C, subset.T){
 
     keep.col <- c("strata","index.C","index.T","index.pair","indexWithinStrata.C", "indexWithinStrata.T","favorableC","unfavorableC","neutralC","uninfC")

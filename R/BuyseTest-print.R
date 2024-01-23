@@ -2,12 +2,11 @@
 #' @name internal-print
 #' @title internal functions for BuyseTest - display
 #' @description Functions called by \code{\link{BuyseTest}} to display the settings.
+#' @noRd
 #' 
-#' @keywords internal
 #' @author Brice Ozenne
 
 ## * Function printGeneral
-#' @rdname internal-print
 printGeneral <- function(status,
                          D,
                          D.TTE,
@@ -18,6 +17,7 @@ printGeneral <- function(status,
                          level.treatment,
                          scoring.rule,
                          M.status,
+                         method.score, paired,
                          neutral.as.uninf,
                          correction.uninf,
                          operator,
@@ -30,7 +30,7 @@ printGeneral <- function(status,
                          weightEndpoint,
                          Wscheme,
                          ...){
-
+    
     if(!is.null(strata)){
         n.strata <- length(level.strata)
     }else{
@@ -95,8 +95,12 @@ printGeneral <- function(status,
     cat("   - 2 groups  ",if(D>1){" "},": Control = ",level.treatment[1]," and Treatment = ",level.treatment[2],"\n", sep = "")
     cat("   - ",D," endpoint",if(D>1){"s"},": \n", sep = "")
     print(df.endpoint, row.names = FALSE, quote = FALSE, right = FALSE)
-
-    if(n.strata>1){
+    if(paired){
+        txt.variable <- switch(as.character(length(strata)),
+                               "1" = "variable",
+                               "variables")        
+        cat("   - ", n.strata, " pairs (",txt.variable,": ",paste(strata, collapse = " "),") \n", sep = "")
+    }else if(n.strata>1){
         txt.variable <- switch(as.character(length(strata)),
                                "1" = "variable",
                                "variables")        
@@ -141,7 +145,6 @@ printGeneral <- function(status,
 }
 
 ## * Function printInference
-#' @rdname internal-print
 printInference <- function(method.inference, n.resampling, cpus, seed, ...){
 
     if(method.inference != "none"){
@@ -164,7 +167,7 @@ printInference <- function(method.inference, n.resampling, cpus, seed, ...){
         if(!attr(method.inference,"ustatistic")){
             cat("   - cpus  : ",cpus,"\n", sep = "")
             if (!is.null(seed)) {
-                cat("   - seeds : ",paste(seq(seed,seed + cpus - 1), collapse = " "),"\n", sep = "")       
+                cat("   - seeds : ",seed, sep = "")       
             }
         }
     }

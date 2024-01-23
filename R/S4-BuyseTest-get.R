@@ -62,11 +62,15 @@ setMethod(f = "getCount",
 #' @param statistic [character] statistic relative to which the H-decomposition should be output.
 #' @param cumulative [logical] should the H-decomposition be cumulated over endpoints?
 #' Otherwise display the contribution of each endpoint.
-#' @param stratified [logical] should the H-decomposition relative to the strata-specific statistics be output?
-#' Otherwise display the influence function of the global statistic (i.e. over all strata).
+#' @param strata [character vector] the strata relative to which the H-decomposition of the statistic should be output.
+#' Can also be \code{"global"} or \code{FALSE} to output the H-decompositon of the pooled statistic.
+#' or \code{TRUE} to output the H-decompositon of each strata-specific statistic.
+#' @param simplify [logical] should the result be coerced to the lowest possible dimension?
 #' 
 #' @details WARNING: argument \code{scale} and \code{center} should be used with care as when set to \code{FALSE} they may not lead to a meaningful decomposition.
 #'  
+#' @return A list of matrices, each element of the list correspond to a statistic (global or strata-specific) and each matrix has as many columns as endpoints and rows as observations.
+#' 
 #' @seealso 
 #' \code{\link{BuyseTest}} for performing a generalized pairwise comparison. \cr
 #' \code{\link{S4BuyseTest-summary}} for a more detailed presentation of the \code{S4BuyseTest} object.
@@ -81,12 +85,13 @@ setMethod(f = "getIid",
           definition = function(object,
                                 endpoint = NULL,
                                 statistic = NULL,
-                                stratified = FALSE,
+                                strata = FALSE,
                                 cumulative = TRUE,
                                 center = TRUE,
                                 scale = TRUE,
                                 type = "all",
-                                cluster = NULL){
+                                cluster = NULL,
+                                simplify = TRUE){
 
               ## ** normalize user input
               option <- BuyseTest.options()
@@ -98,11 +103,42 @@ setMethod(f = "getIid",
                        "Set the argument \'method.inference\' to \"u-statistic\" when calling BuyseTest \n")
               }
 
+              ## strata
+              level.strata <- object@level.strata
+              n.strata <- length(level.strata)
+              weightStrata <- object@weightStrata
+              indexStrata <- attr(level.strata,"index")
+              attr(level.strata,"index") <- NULL
+              if(is.null(strata)){
+                  if(length(level.strata)==1){
+                      strata <- "global"                      
+                  }else{
+                      strata <- c("global", level.strata)
+                  }
+              }else if(identical(strata,FALSE)){
+                  strata <- "global"
+              }else if(identical(strata,TRUE)){
+                  strata <- level.strata
+              }else if(is.numeric(strata)){
+                  validInteger(strata,
+                               name1 = "strata",
+                               valid.length = NULL,
+                               min = 1,
+                               max = length(level.strata),
+                               refuse.NULL = TRUE,
+                               refuse.duplicates = TRUE,
+                               method = "autoplot[S4BuyseTest]")
+              }else{
+                  validCharacter(strata,
+                                 name1 = "strata",
+                                 valid.length = NULL,
+                                 valid.values = c("global",level.strata),
+                                 refuse.NULL = FALSE,
+                                 method = "coef[S4BuyseTest]")
+              }
+
               ## cluster
               if(!is.null(cluster)){
-                  if(stratified==TRUE){
-                      stop("Argument \'stratified\' must be FALSE when asking for strata-specific H-decomposition. \n")
-                  }
                   if(length(cluster) != n.obs){
                       stop("Incorrect length for argument \'cluster\'. Should have length ",n.obs ,".\n")
                   }
@@ -124,27 +160,19 @@ setMethod(f = "getIid",
                                valid.length = NULL,
                                method = "iid[BuyseTest]")
                   endpoint <- valid.endpoint[endpoint]
-                  simplify <- FALSE
               }else if(is.null(endpoint)){
-                  endpoint <- utils::tail(valid.endpoint,1)
-                  simplify <- TRUE
+                  endpoint <- valid.endpoint
               }else{
-                  simplify <- FALSE
               }
               validCharacter(endpoint,
                              valid.length = 1:length(valid.endpoint),
                              valid.values = valid.endpoint)
               
-              ## strata
-              name.strata <- object@level.strata
-              n.strata <- length(name.strata)
-              weightStrata <- object@weightStrata
-              indexStrata <- attr(name.strata,"index")
-              attr(name.strata,"index") <- NULL
-
+              ## pairs
               n.pairs <- object@n.pairs
               ntot.pair <- sum(n.pairs)
 
+              ## index group
               indexC <- attr(object@level.treatment,"indexC")
               indexT <- attr(object@level.treatment,"indexT")
               
@@ -170,13 +198,13 @@ setMethod(f = "getIid",
                   validCharacter(statistic,
                                  name1 = "statistic",
                                  valid.values = c("netBenefit","winRatio","favorable","unfavorable"),
-                                 valid.length = NULL,
+                                 valid.length = 1,
                                  refuse.duplicates = TRUE,
                                  method = "getIid[S4BuyseTest]")
               }
-              if(length(statistic)>1 && (stratified==TRUE)){
-                  stop("Argument \'statistic\' must be of length one when asking for strata-specific H-decomposition. \n")
-              }
+              ## if(length(statistic)>1 && any(strata %in% level.strata)){
+              ##     stop("Argument \'statistic\' must be of length one when asking for strata-specific H-decomposition. \n")
+              ## }
 
               ## ** extract H-decomposition
               if(type %in% c("all","u-statistic")){
@@ -188,6 +216,7 @@ setMethod(f = "getIid",
                                                           dimnames = list(NULL, valid.endpoint))
                                      )
               }
+
               if(type %in% c("all","nuisance") && (object@scoring.rule=="Peron")){
                   if(length(object@iidNuisance$favorable)>0){
                       object.iid$favorable <- object.iid$favorable + object@iidNuisance$favorable
@@ -201,8 +230,8 @@ setMethod(f = "getIid",
               if((center==FALSE) || (scale==FALSE)){
 
                   if(center==FALSE){
-                      delta.favorable <- coef(object, statistic = "favorable", cumulative = FALSE, stratified = TRUE)
-                      delta.unfavorable <- coef(object, statistic = "unfavorable", cumulative = FALSE, stratified = TRUE)
+                      delta.favorable <- coef(object, endpoint = valid.endpoint, cumulative = FALSE, statistic = "favorable", strata = level.strata, resampling = FALSE, simplify = FALSE)
+                      delta.unfavorable <- coef(object, endpoint = valid.endpoint, cumulative = FALSE, statistic = "unfavorable", strata = level.strata, resampling = FALSE, simplify = FALSE)
                   }
                   
                   for(iter_strata in 1:n.strata){  ## iter_strata <- 1
@@ -247,87 +276,73 @@ setMethod(f = "getIid",
 
               }
 
-              ## ** pool across strata
-              if((stratified == FALSE) && n.strata>1){
-                  for(iter_strata in 1:n.strata){  ## iter_strata <- 1
-                      iStrataC <- intersect(indexC,indexStrata[[iter_strata]])
-                      iStrataT <- intersect(indexT,indexStrata[[iter_strata]])
-                  
-                      object.iid$favorable[c(iStrataC,iStrataT),] <- object.iid$favorable[c(iStrataC,iStrataT),,drop=FALSE] * weightStrata[iter_strata];
-                      object.iid$unfavorable[c(iStrataC,iStrataT),] <- object.iid$unfavorable[c(iStrataC,iStrataT),,drop=FALSE] * weightStrata[iter_strata];
-                  }
-              }else if((stratified == TRUE) && (n.strata >1)){
-                  keep.iid.favorable <- object.iid$favorable
-                  object.iid$favorable <- stats::setNames(lapply(1:n.strata, function(iStrata){ ## iStrata <- 1
-                      iM <- keep.iid.favorable
-                      iM[-indexStrata[[iStrata]],] <- 0
-                      return(iM)
-                  }), name.strata)
+              ## ** add strata weights
+              MweightStrata <- matrix(NA, nrow = n.obs, ncol = n.endpoint, dimnames = list(NULL,valid.endpoint))
+              MweightStrata[unlist(indexStrata),] <- do.call(rbind,lapply(1:n.strata, function(iS){
+                  matrix(weightStrata[iS], nrow = length(indexStrata[[iS]]), ncol = n.endpoint)
+              }))
 
-                  keep.iid.unfavorable <- object.iid$unfavorable
-                  object.iid$unfavorable <- stats::setNames(lapply(1:n.strata, function(iStrata){
-                      iM <- keep.iid.unfavorable
-                      iM[-indexStrata[[iStrata]],] <- 0
-                      return(iM)
-                  }), name.strata)
-              }                     
+              ls.iid.favorable <- c(list(global = object.iid$favorable*MweightStrata),
+                                    stats::setNames(lapply(1:n.strata, function(iStrata){ ## iStrata <- 1
+                                        iM <- object.iid$favorable
+                                        iM[-indexStrata[[iStrata]],] <- 0
+                                        return(iM)
+                                    }), level.strata))
+
+              ls.iid.unfavorable <- c(list(global = object.iid$unfavorable*MweightStrata),
+                                      stats::setNames(lapply(1:n.strata, function(iStrata){ ## iStrata <- 1
+                                          iM <- object.iid$unfavorable
+                                          iM[-indexStrata[[iStrata]],] <- 0
+                                          return(iM)
+                                      }), level.strata))
+
+              ## ** aggregate at a cluster level
+              if(!is.null(cluster)){
+                  ls.iid.favorable <- lapply(ls.iid.favorable, function(iIID){ ## iIID <- ls.iid.favorable[[1]]
+                      do.call(rbind,by(iIID,cluster,colSums, simplify = FALSE))
+                  })
+                  ls.iid.unfavorable <- lapply(ls.iid.unfavorable, function(iIID){
+                      do.call(rbind,by(iIID,cluster,colSums, simplify = FALSE))
+                  })
+              }
 
               ## ** iid decomposition of the chosen statistic for each endpoint
               if("winRatio" %in% statistic){
-                  Delta.favorable <- coef(object, statistic = "favorable", cumulative = cumulative, stratified = stratified, endpoint = endpoint)
-                  Delta.unfavorable <- coef(object, statistic = "unfavorable", cumulative = cumulative, stratified = stratified, endpoint = endpoint)
+                  Delta.favorable <- coef(object, endpoint = endpoint, cumulative = cumulative, statistic = "favorable", strata = strata, resampling = FALSE, simplify = FALSE)
+                  Delta.unfavorable <- coef(object, endpoint = endpoint, cumulative = cumulative, statistic = "unfavorable", strata = strata, resampling = FALSE, simplify = FALSE)
               }
               
-              out <- lapply(endpoint, function(iE){ ## iE <- endpoint[1]
-                      if(!is.null(cluster)){
-                          iIID.favorable <- tapply(object.iid$favorable[,iE], cluster, sum)
-                          iIID.unfavorable <- tapply(object.iid$unfavorable[,iE], cluster, sum)
-                      }else{
-                          if(stratified){
-                              iIID.favorable <- do.call(cbind,lapply(object.iid$favorable, function(iM){iM[,iE]}))
-                              iIID.unfavorable <- do.call(cbind,lapply(object.iid$unfavorable, function(iM){iM[,iE]}))
-                          }else{
-                              iIID.favorable <- object.iid$favorable[,iE]
-                              iIID.unfavorable <- object.iid$unfavorable[,iE]
-                          }
-                      }
+              out <- stats::setNames(lapply(strata, function(iS){ ## iS <- strata[1]
 
-                  if(stratified){
-                      if(statistic == "favorable"){
-                          iOut <- iIID.favorable
-                      }else if(statistic == "unfavorable"){
-                          iOut <- iIID.unfavorable
-                      }else if(statistic == "netBenefit"){
-                          iOut <- iIID.favorable - iIID.unfavorable
-                      }else if(statistic == "winRatio"){
-                          iOut <- .rowScale_cpp(iIID.favorable,Delta.unfavorable[,iE]) - .rowMultiply_cpp(iIID.unfavorable, Delta.favorable[,iE]/Delta.unfavorable[,iE]^2)                      
-                      }                      
-                  }else{
-                      iOut <- matrix(NA, nrow = NROW(iIID.unfavorable), ncol = length(statistic), dimnames = list(NULL, statistic))
-                      
-                      if("favorable" %in% statistic){
-                          iOut[,"favorable"] <- iIID.favorable
-                      }
-                      if("unfavorable" %in% statistic){
-                          iOut[,"unfavorable"] <- iIID.unfavorable
-                      }
-                      if("netBenefit" %in% statistic){
-                          iOut[,"netBenefit"] <- iIID.favorable - iIID.unfavorable
-                      }
-                      if("winRatio" %in% statistic){
-                          iOut[,"winRatio"] <- iIID.favorable/Delta.unfavorable[iE] - iIID.unfavorable*Delta.favorable[iE]/Delta.unfavorable[iE]^2                      
-                      }
-                  }
+                  iIID.fav <- ls.iid.favorable[[iS]][,endpoint,drop=FALSE]
+                  iIID.unfav <- ls.iid.unfavorable[[iS]][,endpoint,drop=FALSE]
+
+                  if(statistic == "favorable"){
+                      iOut <- iIID.fav
+                  }else if(statistic == "unfavorable"){
+                      iOut <- iIID.unfav
+                  }else if(statistic == "netBenefit"){
+                      iOut <- iIID.fav - iIID.unfav
+                  }else if(statistic == "winRatio"){
+                      iOut <- .rowScale_cpp(iIID.fav,Delta.unfavorable[iS,]) - .rowMultiply_cpp(iIID.unfav, Delta.favorable[iS,]/Delta.unfavorable[iS,]^2)
+                      colnames(iOut) <- colnames(iIID.fav)
+                  }                                        
                   return(iOut)
-              })
-              names(out) <- endpoint
+              }), strata)
 
               ## ** output H-decomposition
-              if(simplify){
-                  return(out[[1]])
-              }else{
-                  return(out)
+              if(simplify && length(strata)==1){
+                  out <- out[[1]]
               }
+              if(simplify && length(endpoint)==1){
+                  if(length(strata)==1){
+                      out <- out[,1]
+                  }else{
+                      out <- do.call(cbind,out)
+                      colnames(out) <- strata
+                  }
+              }
+              return(out)
               
           })
 
@@ -341,7 +356,7 @@ setMethod(f = "getIid",
 #'
 #' @param object an \R object of class \code{\linkS4class{S4BuyseTest}}, i.e., output of \code{\link{BuyseTest}}
 #' @param endpoint [integer/character vector] the endpoint for which the scores should be output.
-#' @param strata [integer/character vector] the strata for which the scores should be output.
+#' @param strata [character vector] the strata relative to which the score should be output.
 #' @param rm.withinStrata [logical] should the columns indicating the position of each member of the pair
 #' within each treatment group be removed?
 #' @param rm.strata [logical] should the column containing the level of the strata variable be removed from the output?
@@ -554,7 +569,7 @@ setMethod(f = "getPairScore",
 #' \code{\link{BuyseTest}} for performing a generalized pairwise comparison. \cr
 #' \code{\link{S4BuyseTest-summary}} for a more detailed presentation of the \code{S4BuyseTest} object.
 #' 
-#' @keywords S4BuyseTest-method
+#' @keywords method
 #' @author Brice Ozenne
 
 ## * getPseudovalue (examples)
@@ -626,7 +641,6 @@ setMethod(f = "getPseudovalue",
               if(is.null(statistic)){
                   statistic <- option$statistic
               }else{
-
                   statistic <- switch(gsub("[[:blank:]]", "", tolower(statistic)),
                                       "netbenefit" = "netBenefit",
                                       "winratio" = "winRatio",
@@ -645,14 +659,15 @@ setMethod(f = "getPseudovalue",
               object.delta <- coef(object, statistic = statistic)[endpoint]
               count.favorable <- coef(object, statistic = "favorable")[endpoint]
               count.unfavorable <- coef(object, statistic = "unfavorable")[endpoint]
-              object.iid <- getIid(object, endpoint = endpoint, statistic = c("favorable","unfavorable"))[[1]]
+              object.iid <- data.frame(favorable = unname(getIid(object, endpoint = endpoint, statistic = "favorable", strata = "global", simplify = FALSE)[["global"]]),
+                                       unfavorable = unname(getIid(object, endpoint = endpoint, statistic = "unfavorable", strata = "global", simplify = FALSE)[["global"]]))
               n.obs <- NROW(object.iid)
 
               out <- switch(statistic,
-                            "favorable" = n.obs * object.iid[,"favorable"] + object.delta,
-                            "unfavorable" = n.obs * object.iid[,"unfavorable"] + object.delta,
-                            "netBenefit" = n.obs * (object.iid[,"favorable"] - object.iid[,"unfavorable"]) + object.delta,
-                            "winRatio" = n.obs * (object.iid[,"favorable"] / count.unfavorable - object.iid[,"unfavorable"] * (count.favorable/count.unfavorable^2)) + object.delta,
+                            "favorable" = n.obs * object.iid$favorable + object.delta,
+                            "unfavorable" = n.obs * object.iid$unfavorable + object.delta,
+                            "netBenefit" = n.obs * (object.iid$favorable - object.iid$unfavorable) + object.delta,
+                            "winRatio" = n.obs * (object.iid$favorable / count.unfavorable - object.iid$unfavorable * (count.favorable/count.unfavorable^2)) + object.delta,
                             )
 
               ## ** export
@@ -670,7 +685,7 @@ setMethod(f = "getPseudovalue",
 #' @param object an \R object of class \code{\linkS4class{S4BuyseTest}}, i.e., output of \code{\link{BuyseTest}}
 #' @param type [character vector] the type of survival to be output. See details.
 #' @param endpoint [integer/character vector] the endpoint for which the survival should be output.
-#' @param strata [integer/character vector] the strata for which the survival should be output.
+#' @param strata [integer/character vector] the strata relative to which the survival should be output.
 #' @param unlist [logical] should the structure of the output be simplified when possible.
 #' @param trace [logical] should a message be printed to explain what happened
 #' when the function returned \code{NULL}.

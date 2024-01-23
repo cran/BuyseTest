@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: dec  2 2019 (16:29) 
 ## Version: 
-## Last-Updated: mar 14 2023 (13:43) 
+## Last-Updated: okt 25 2023 (11:23) 
 ##           By: Brice Ozenne
-##     Update #: 459
+##     Update #: 470
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -15,7 +15,7 @@
 ## 
 ### Code:
 
-## * Documentation - auc
+## * auc (documentation)
 #' @title Estimation of the Area Under the ROC Curve (EXPERIMENTAL)
 #' @name auc
 #' 
@@ -44,12 +44,14 @@
 #' @details The iid decomposition of the AUC is based on a first order decomposition.
 #' So its squared value will not exactly match the square of the standard error estimated with a second order H-projection.
 #'
-#' @return A \emph{data.frame} containing for each fold the AUC value with its standard error (when computed).
-#' The last line of the data.frame contains the global AUC value with its standard error.
+#' @return An S3 object of class \code{BuyseTestAUC} that inherits from data.frame.
+#' The last line of the object contains the global AUC value with its standard error.
 #'
 #' @references Erin LeDell, Maya Petersen, and Mark van der Laan (2015). \bold{Computationally efficient confidence intervals for cross-validated area under the ROC curve estimates}. \emph{Electron J Stat.} 9(1):1583–1607. \cr
+#'
+#' @keywords models
 
-## * Example - auc
+## * auc (example)
 #' @rdname auc
 #' @examples
 #' library(data.table)
@@ -68,7 +70,7 @@
 #' auc(labels = dt$Y, prediction = dt$X, fold = dt$fold, observation = 1:NROW(dt))
 #'
 
-## * Code - auc
+## * auc (code)
 #' @export
 auc <- function(labels, predictions, fold = NULL, observation = NULL,
                 direction = ">", add.halfNeutral = TRUE,
@@ -156,7 +158,8 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL,
     ## *** Make sure that all prediction are in the increasing means outcome direction
     direction.save <- direction
     if(direction == "auto"){
-        if(sum(e.BT@count.favorable)>=sum(e.BT@count.unfavorable)){
+        e0.BT <- BuyseTest(formula, method.inference = "none", data = df, trace = 0, add.halfNeutral = add.halfNeutral)
+        if(sum(e0.BT@count.favorable)>=sum(e0.BT@count.unfavorable)){
             direction <- rep(">",max(n.fold,1))
         }else{
             direction <- rep("<",max(n.fold,1))
@@ -230,7 +233,7 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL,
     ## ** Fold-specific AUC
     if(!is.null(fold)){
         if(order.Hprojection==1){
-            ePOINT.BT <- coef(e.BT, statistic = "favorable", stratified = TRUE)[,1]
+            ePOINT.BT <- coef(e.BT, statistic = "favorable", strata = TRUE)[,1]
 
             normWithinStrata <- FALSE
             attr(normWithinStrata, "skipScaleCenter") <- TRUE
@@ -324,7 +327,7 @@ auc <- function(labels, predictions, fold = NULL, observation = NULL,
 
 ## * Utilitites
 ## ** print.auc
-#' @export
+#' @exportMethod print
 print.BuyseTestAuc <- function(x, ...){
     ##    if(attr(x,"n.fold")==0){
         print.data.frame(x, ...)

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 27 2018 (23:32) 
 ## Version: 
-## Last-Updated: Mar 19 2023 (16:53) 
+## Last-Updated: jul 18 2023 (09:34) 
 ##           By: Brice Ozenne
-##     Update #: 330
+##     Update #: 344
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,8 +18,8 @@
 ## * testArgs
 ##' @title Check Arguments Passed to BuyseTest
 ##' @description Check the validity of the argument passed the BuyseTest function by the user.
-##'
-##' @keywords internal
+##' @noRd
+##' 
 ##' @author Brice Ozenne
 testArgs <- function(name.call,
                      status,
@@ -151,8 +151,8 @@ testArgs <- function(name.call,
     }else{
         strata.tempo <- data[[strata]]
         if(is.factor(strata.tempo)){strata.tempo <- droplevels(strata.tempo)} ## otherwise the next tapply statement generates NA when there are empty levels which leads to an error
-        
-        if(any(sapply(Ustatus.TTE, function(iS){tapply(data[[iS]], strata.tempo, function(iVec){sum(iVec!=0)})})==0)){
+        ## if non-paired data (i.e. more than 2 obs per strata)
+        if(any(table(strata.tempo)>2) && any(sapply(Ustatus.TTE, function(iS){tapply(data[[iS]], strata.tempo, function(iVec){sum(iVec!=0)})})==0)){
             warning("BuyseTest: time to event variables with only censored events in at least one strata \n")
         }
     }
@@ -383,6 +383,12 @@ testArgs <- function(name.call,
                      valid.length = 1,
                      min = 1,
                      method = "BuyseTest")
+        if(!is.null(seed)){
+            tol.seed <- attr(seed,"max")
+            if(n.resampling>tol.seed){
+                stop("Cannot set a seed per sample when considering more than ",tol.seed," samples. \n")
+            }
+        }                     
     }
     
    ## ** hierarchical

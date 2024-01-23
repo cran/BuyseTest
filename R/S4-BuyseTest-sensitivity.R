@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar 31 2021 (14:07) 
 ## Version: 
-## Last-Updated: Mar 20 2023 (12:08) 
+## Last-Updated: okt  3 2023 (19:06) 
 ##           By: Brice Ozenne
-##     Update #: 316
+##     Update #: 346
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -15,14 +15,15 @@
 ## 
 ### Code:
 
-## * Documentation - sensitivity
+## * sensitivity (documentation)
 #' @docType methods
 #' @name S4BuyseTest-sensitivity
 #' @title  Sensitivity Analysis for the Choice of the Thresholds
 #' @aliases sensitivity,S4BuyseTest-method
 #' @include S4-BuyseTest.R
 #' 
-#' @description Evaluate the statistic of interest along various thresholds of clinical relevance.
+#' @description Evaluate a summary statistic (net benefit, win ratio, ...) using GPC along various thresholds of clinical relevance.
+#' 
 #' @param object an \R object of class \code{\linkS4class{S4BuyseTest}}, i.e., output of \code{\link{BuyseTest}}
 #' @param threshold [list] a list containing for each endpoint the thresholds to be considered.
 #' @param statistic [character] the statistic summarizing the pairwise comparison:
@@ -46,7 +47,12 @@
 #' @param ... argument passsed to the function \code{transformCIBP} of the riskRegression package.
 #'
 #' @details Simulateneous confidence intervals and adjusted p-values are computed using a single-step max-test approach via the function \code{transformCIBP} of the riskRegression package.
+#'
+#' @return An S3 object of class \code{S3sensitivity}.
+#' @keywords htest
+#' 
 
+## * sensitivity (example)
 #' @examples
 #' 
 #' \dontrun{
@@ -60,20 +66,21 @@
 #' ff1 <- treatment ~ TTE(eventtime, status = status, threshold = 0.1)
 #' BT1 <- BuyseTest(ff1, data= df.data)
 #' se.BT1 <- sensitivity(BT1, threshold = seq(0,2,0.25), band = TRUE)
-#' autoplot(se.BT1)
+#' plot(se.BT1)
 #'
 #' ## with two endpoints
 #' ff2 <- update(ff1, .~. + cont(score, threshold = 1))
 #' BT2 <- BuyseTest(ff2, data= df.data)
 #' se.BT2 <- sensitivity(BT2, threshold = list(eventtime = seq(0,2,0.25), score = 0:2),
 #'                       band = TRUE)
-#' autoplot(se.BT2)
-#' autoplot(se.BT2, col = NA)
+#' plot(se.BT2)
+#' plot(se.BT2, col = NA)
 #' }
 
 
-## * Method - sensitivity
+## * sensitivity (method)
 #' @rdname S4BuyseTest-sensitivity
+#' @exportMethod sensitivity
 setMethod(f = "sensitivity",
           signature = "S4BuyseTest",
           definition = function(object, threshold,
@@ -92,9 +99,6 @@ setMethod(f = "sensitivity",
               option <- BuyseTest.options()
               if(is.null(statistic)){
                   statistic <- option$statistic
-              }
-              if(is.null(transformation)){
-                  transformation <- option$transformation
               }
               if(is.null(conf.level)){
                   conf.level <- option$conf.level
@@ -223,7 +227,7 @@ setMethod(f = "sensitivity",
                       iConfint <- confint(iBT, statistic = statistic, null = null, conf.level = conf.level, alternative = alternative, transformation = transformation)[n.endpoint,]
                       ls.confint[[iSe]] <- data.frame(c(gridRed.threshold[iSe,,drop=FALSE], iConfint))
                       if(iBT@method.inference=="u-statistic"){
-                          ls.iid[[iSe]] <- getIid(iBT, statistic = statistic)
+                          ls.iid[[iSe]] <- getIid(iBT, statistic = statistic,simplify=FALSE)$global[,n.endpoint]
                       }
                   }
 
@@ -254,7 +258,7 @@ setMethod(f = "sensitivity",
                                                      iConfint <- confint(iBT, statistic = statistic, null = null, conf.level = conf.level, alternative = alternative, transformation = transformation)[n.endpoint,]
                                                      iOut <- list(confint = data.frame(c(gridRed.threshold[i,,drop=FALSE], iConfint)))
                                                      if(iBT@method.inference=="u-statistic"){
-                                                         iOut[["iid"]] <- getIid(iBT, statistic = statistic)
+                                                         iOut[["iid"]] <- getIid(iBT, statistic = statistic)[,n.endpoint]
                                                      }
                                                      return(iOut)
                                                  })
@@ -274,7 +278,7 @@ setMethod(f = "sensitivity",
               }
               
               ## ** compute confidence bands
-              if(band){
+              if(band || adj.p.value){
                   requireNamespace("riskRegression")
                   A.iid <- array(NA, dim = c(NROW(attr(df.confint, "iid")), NCOL(attr(df.confint, "iid")),1))
                   A.iid[,,1] <- attr(df.confint, "iid")
@@ -291,22 +295,27 @@ setMethod(f = "sensitivity",
                                       "unfavorable" = 1)
 
                   ## temporary fix: the next few lines should be remove when riskRegression will be updated
-                  if(statistic %in% c("none","netBenefit","winRatio") || !inherits(try(riskRegression::transformCIBP(estimate = 1, se = 1, type = "atanh2", seed = NA, band = FALSE, alternative = "two.sided"),silent=TRUE),"try-error")){
-                      type <- switch(statistic,
-                                     "netBenefit" = "atanh",
-                                     "winRatio" = "log",
-                                     "favorable" = "cloglog",## note: not the same transformation as confint
-                                     "unfavorable" = "cloglog", ## note: not the same transformation as confint
-                                     "none" = "none") 
+                  if(is.null(transformation) || identical(transformation,TRUE)){
+                      if(statistic %in% c("none","netBenefit","winRatio") || !inherits(try(riskRegression::transformCIBP(estimate = 1, se = 1, type = "atanh2", seed = NA, band = FALSE, alternative = "two.sided"),silent=TRUE),"try-error")){
+                          type <- switch(statistic,
+                                         "netBenefit" = "atanh",
+                                         "winRatio" = "log",
+                                         "favorable" = "cloglog",## note: not the same transformation as confint
+                                         "unfavorable" = "cloglog", ## note: not the same transformation as confint
+                                         "none" = "none") 
+                      }else{
+                          type <- switch(statistic,
+                                         "netBenefit" = "atanh",
+                                         "winRatio" = "log",
+                                         "favorable" = "atanh2",
+                                         "unfavorable" = "atanh2",
+                                         "none" = "none") 
+                      }
+                  }else if(identical(transformation,FALSE)){
+                      type <- "none"
                   }else{
-                      type <- switch(statistic,
-                                     "netBenefit" = "atanh",
-                                     "winRatio" = "log",
-                                     "favorable" = "atanh2",
-                                     "unfavorable" = "atanh2",
-                                     "none" = "none") 
+                      type <- transformation                      
                   }
-                  
                   dots <- list(...)
                   if("seed" %in% names(dots) == FALSE){
                       dots$seed <- NA
@@ -314,7 +323,9 @@ setMethod(f = "sensitivity",
                   if("method.band" %in% names(dots) == FALSE){
                       dots$method.band <- "maxT-integration"
                   }
-
+                  if("n.sim" %in% names(dots) == FALSE){
+                      dots$n.sim <- 10^4
+                  }
                   iBand <- do.call(riskRegression::transformCIBP,
                                    args = c(list(estimate = rbind(df.confint$estimate[df.confint$se>0]),
                                                  se = rbind(df.confint$se[df.confint$se>0]),
@@ -325,40 +336,26 @@ setMethod(f = "sensitivity",
                                                  ci = TRUE, type = type, min.value = min.value, max.value = max.value,
                                                  band = TRUE, p.value = adj.p.value),
                                             dots))
-                  attr(df.confint,"quantileBand") <- iBand$quantile
-                  df.confint$lower.band <- rep(0,length(df.confint$se))
-                  df.confint$lower.band[df.confint$se>0] <- iBand$lowerBand[1,]
-                  df.confint$upper.band <- rep(0,length(df.confint$se))
-                  df.confint$upper.band[df.confint$se>0] <- iBand$upperBand[1,]
+                  if(band){
+                      attr(df.confint,"quantileBand") <- iBand$quantile
+                      df.confint$lower.band <- rep(0,length(df.confint$se))
+                      df.confint$lower.band[df.confint$se>0] <- iBand$lowerBand[1,]
+                      df.confint$upper.band <- rep(0,length(df.confint$se))
+                      df.confint$upper.band[df.confint$se>0] <- iBand$upperBand[1,]
+                  }
                   if(adj.p.value==TRUE){
                       df.confint$adj.p.value <- rep(1,length(df.confint$se))
                       df.confint$adj.p.value[df.confint$se>0] <- iBand$adj.p.value[1,]
                   }
          
-                  ## iBand <- do.call(riskRegression::transformCIBP,
-                  ##                  args = c(list(estimate = rbind(df.confint$estimate),
-                  ##                                se = rbind(df.confint$se),
-                  ##                                iid = A.iid,
-                  ##                                null = null,
-                  ##                                conf.level = conf.level,
-                  ##                                alternative = alternative,
-                  ##                                ci = TRUE, type = type, min.value = min.value, max.value = max.value,
-                  ##                                band = TRUE, p.value = adj.p.value),
-                  ##                           dots))
 
-                  ## attr(df.confint,"quantileBand") <- iBand$quantile
-                  ## df.confint$lower.band <- iBand$lowerBand[1,]
-                  ## df.confint$upper.band <- iBand$upperBand[1,]
-                  ## if(adj.p.value==TRUE){
-                  ##     df.confint$adj.p.value <- iBand$adj.p.value[1,]
-                  ## }
               }
 
               ## ** export
               attr(df.confint,"statistic") <- statistic
               attr(df.confint,"grid") <- grid.threshold
               attr(df.confint,"gridRed") <- gridRed.threshold
-              class(df.confint) <- append("sensitivity",class(df.confint))
+              class(df.confint) <- append("S3sensitivity",class(df.confint))
               return(df.confint)
 
           })

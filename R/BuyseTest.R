@@ -1,8 +1,9 @@
 ## * Documentation - BuyseTest
 #' @name BuyseTest
-#' @title Generalized Pairwise Comparisons (GPC)
+#' @title Two-group GPC
 #' 
-#' @description Performs Generalized Pairwise Comparisons for binary, continuous and time-to-event endpoints.
+#' @description Performs Generalized Pairwise Comparisons (GPC) between two groups.
+#' Can handle one or several binary, continuous and time-to-event endpoints.
 #' 
 #' @param formula [formula] a symbolic description of the GPC model,
 #' typically \code{treatment ~ type1(endpoint1) + type2(endpoint2, threshold2) + strata}.
@@ -14,8 +15,8 @@
 #' Can be \code{"Gehan"} or \code{"Peron"}.
 #' See Details, section "Handling missing values".
 #' @param pool.strata [character] weights used to combine estimates across strata. Can be
-#' \code{"Buyse"} to weight proportionnally to the number of pairs in the strata,
-#' \code{"CMH"} to weight proportionnally to the ratio between the number of pairs in the strata and the number of observations in the strata.
+#' \code{"Buyse"} to weight proportionally to the number of pairs in the strata,
+#' \code{"CMH"} to weight proportionally to the ratio between the number of pairs in the strata and the number of observations in the strata.
 #' \code{"equal"} to weight equally each strata,
 #' or \code{"var-netBenefit"} to weight each strata proportionally to the precision of its estimated net benefit (similar syntax for the win ratio: \code{"var-winRatio"})
 #' @param correction.uninf [integer] should a correction be applied to remove the bias due to the presence of uninformative pairs?
@@ -40,8 +41,8 @@
 #' See Details, section "Handling missing values".
 #' @param add.halfNeutral [logical] should half of the neutral score be added to the favorable and unfavorable scores?
 #' @param keep.pairScore [logical] should the result of each pairwise comparison be kept?
-#' @param seed [integer, >0] the seed to consider when performing resampling.
-#' If \code{NULL} no seed is set.
+#' @param seed [integer, >0] Random number generator (RNG) state used when starting resampling.
+#' If \code{NULL} no state is set.
 #' @param cpus [integer, >0] the number of CPU to use.
 #' Only the permutation test can use parallel computation.
 #' See Details, section "Statistical inference".
@@ -50,7 +51,7 @@
 #' 
 #' @details
 #'
-#' \bold{Specification of the GPC model}: \cr
+#' \bold{Specification of the GPC model} \cr
 #' There are two way to specify the GPC model in \code{BuyseTest}.
 #' A \emph{Formula interface} via the argument \code{formula} where the response variable should be a binary variable defining the treatment arms. 
 #' The rest of the formula should indicate the endpoints by order of priority and the strata variables (if any).
@@ -87,7 +88,7 @@
 #' With complete data, pairs can be decidely classified as favorable/unfavorable/neutral.
 #' In presence of missing values, the GPC procedure uses the scoring rule (argument \code{scoring.rule}) and the correction for uninformative pairs (argument \code{correction.uninf}) to classify the pairs.
 #' The classification may not be 0,1, e.g. the probability that the pair is favorable/unfavorable/neutral with the Peron's scoring rule.
-#' To export the classification of each pair set the argument code{keep.pairScore} to \code{TRUE} and call the function \code{getPairScore} on the result of the \code{BuyseTest} function. \cr \cr \cr
+#' To export the classification of each pair set the argument \code{keep.pairScore} to \code{TRUE} and call the function \code{getPairScore} on the result of the \code{BuyseTest} function. \cr \cr \cr
 #' 
 #' 
 #' \bold{Handling missing values}
@@ -126,14 +127,17 @@
 #' Otherwise, the permutation/non-parametric boostrap will be performed separately for each level that the variable defined in \code{strata.resampling} take.
 #'    \item \code{n.resampling} set the number of permutations/samples used.
 #' A large number of permutations (e.g. \code{n.resampling=10000}) are needed to obtain accurate CI and p.value. See (Buyse et al., 2010) for more details.
+#'    \item \code{seed}: the seed is used to generate one seed per sample. These seeds are the same whether one or several CPUs are used.
 #'    \item \code{cpus} indicates whether the resampling procedure can be splitted on several cpus to save time. Can be set to \code{"all"} to use all available cpus.
 #' The detection of the number of cpus relies on the \code{detectCores} function from the \emph{parallel} package. \cr \cr
 #' }
 #'
-#' \bold{Pooling results across strata} the relative contribution of each strata to the global estimator is decided by \cr
+#' \bold{Pooling results across strata} \cr Consider \eqn{K} strata and denote by \eqn{m_k} and \eqn{n_k} the sample size in the control and active arm (respectively) for strata \eqn{k}. Let \eqn{\sigma_k} be the standard error of the strata-specific summary statistic (e.g. net benefit). The strata specific weights, \eqn{w_k}, are given by:
 #' \itemize{
-#' \item \code{"CMH"} weights: Cochran-Mantel-Haenszel type weights which are optimal if the odds ratios are constant across strata.
-#' \item \code{"Buyse"} weights: optimal if the risk difference is constant across strata. \cr \cr
+#' \item \code{"CMH"}: \eqn{w_k=\frac{\frac{m_k \times n_k}{m_k + n_k}}{\sum_{l=1}^K \frac{m_l \times n_l}{m_l + n_l}}}. Optimal if the if the odds ratios are constant across strata.
+#' \item \code{"equal"}:  \eqn{w_k=\frac{1}{K}}
+#' \item \code{"Buyse"}:  \eqn{w_k=\frac{m_k \times n_k}{\sum_{l=1}^K m_l \times n_l}}. Optimal if the risk difference is constant across strata
+#' \item \code{"var-*"} (e.g. \code{"var-netBenefit"}): . \eqn{w_k=\frac{1/\sigma^2_k}{\sum_{l=1}^K 1/\sigma^2_k}}\cr \cr
 #' }
 #' 
 #' \bold{Default values} \cr
@@ -161,10 +165,12 @@
 #' @seealso 
 #' \code{\link{S4BuyseTest-summary}} for a summary of the results of generalized pairwise comparison. \cr
 #' \code{\link{S4BuyseTest-confint}} for exporting estimates with confidence intervals and p-values. \cr
-#' \code{\link{S4BuyseTest-class}} for a presentation of the \code{S4BuyseTest} object. \cr
+#' \code{\link{S4BuyseTest-model.tables}} for exporting the number or percentage of favorable/unfavorable/neutral/uninformative pairs. \cr
 #' \code{\link{S4BuyseTest-sensitivity}} for performing a sensitivity analysis on the choice of the threshold(s). \cr
-#' \code{\link{constStrata}} to create a strata variable from several clinical variables. \cr
-#' @keywords function BuyseTest
+#' \code{\link{S4BuyseTest-plot}} for graphical display of the pairs across endpoints. \cr
+#' \code{\link{S4BuyseTest-getIid}} for exporting the first order H-decomposition. \cr
+#' \code{\link{S4BuyseTest-getPairScore}} for exporting the scoring of each pair. 
+#' @keywords models
 #' @author Brice Ozenne
 
 ## * BuyseTest (example)
@@ -185,27 +191,28 @@
 #' #### one time to event endpoint ####
 #' BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data= df.data)
 #'
-#' summary(BT) # net benefit
+#' summary(BT) ## net benefit
+#' model.tables(BT) ## export the table at the end of summary
 #' summary(BT, percentage = FALSE)  
-#' summary(BT, statistic = "winRatio") # win Ratio
+#' summary(BT, statistic = "winRatio") ## win Ratio
 #' 
 #' ## permutation instead of asymptotics to compute the p-value
 #' \dontrun{
-#'     BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
+#'     BTperm <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
 #'                     method.inference = "permutation", n.resampling = 1e3)
 #' }
 #' \dontshow{
-#'     BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
+#'     BTperm <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
 #'                     method.inference = "permutation", n.resampling = 1e1, trace = 0)
 #' }
-#' summary(BT, statistic = "netBenefit") ## default
-#' summary(BT, statistic = "winRatio") 
+#' summary(BTperm)
+#' summary(BTperm, statistic = "winRatio") 
 #' 
-#' ## parallel permutation
+#' ## same with parallel calculations
 #' \dontrun{
-#'     BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
-#'                     method.inference = "permutation", n.resampling = 1e3, cpus = 2)
-#'     summary(BT)
+#'     BTperm <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
+#'                     method.inference = "permutation", n.resampling = 1e3, cpus = 8)
+#'     summary(BTperm)
 #' }
 #' 
 #' ## method Gehan is much faster but does not optimally handle censored observations
@@ -218,16 +225,17 @@
 #' summary(BT)
 #' 
 #' #### one time to event endpoint with a strata variable
-#' BT <- BuyseTest(treatment ~ strata + TTE(eventtime, status = status), data=df.data)
-#' summary(BT)
+#' BTS <- BuyseTest(treatment ~ strata + TTE(eventtime, status = status), data=df.data)
+#' summary(BTS)
 #' 
 #' #### several endpoints with a strata variable
-#' f <- treatment ~ strata + T(eventtime, status, 1) + B(toxicity) 
-#' f <- update(f, 
+#' ff <- treatment ~ strata + T(eventtime, status, 1) + B(toxicity) 
+#' ff <- update(ff, 
 #'             ~. + T(eventtime, status, 0.5) + C(score, 1) + T(eventtime, status, 0.25))
 #' 
-#' BT <- BuyseTest(f, data=df.data)
-#' summary(BT)
+#' BTM <- BuyseTest(ff, data=df.data)
+#' summary(BTM)
+#' plot(BTM)
 #' 
 #' #### real example : veteran dataset of the survival package ####
 #' ## Only one endpoint. Type = Time-to-event. Thresold = 0. Stratfication by histological subtype
@@ -235,7 +243,7 @@
 #' 
 #' if(require(survival)){
 #' \dontrun{
-#'   library(survival) ## import veteran
+#'   data(cancer, package = "survival") ## import veteran
 #'  
 #'   ## scoring.rule = "Gehan"
 #'   BT_Gehan <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,status=status), 
@@ -248,7 +256,6 @@
 #'   BT_Peron <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,status=status), 
 #'                         data=veteran, scoring.rule="Peron")
 #' 
-#'   class(BT_Peron)
 #'   summary(BT_Peron)
 #' }
 #' }
@@ -334,7 +341,7 @@ BuyseTest <- function(formula,
     ## WARNING when updating code: names in the c() must precisely match output of initializeData, in the same order
     out.name <- c("data","M.endpoint","M.status",
                   "index.C","index.T","weightObs","index.strata",
-                  "level.treatment","level.strata", "method.score",
+                  "level.treatment","level.strata", "pool.strata", "method.score", "paired",
                   "n.strata","n.obs","n.obsStrata","n.obsStrataResampling","cumn.obsStrataResampling","skeletonPeron",
                   "scoring.rule", "iidNuisance", "nUTTE.analyzedPeron_M1", "endpoint.UTTE", "status.UTTE", "D.UTTE","index.UTTE","keep.pairScore")
 
@@ -349,6 +356,7 @@ BuyseTest <- function(formula,
                                         method.inference = outArgs$method.inference,
                                         censoring = outArgs$censoring,
                                         strata = outArgs$strata,
+                                        pool.strata = outArgs$pool.strata,
                                         treatment = outArgs$treatment,
                                         hierarchical = outArgs$hierarchical,
                                         copy = TRUE,
@@ -465,7 +473,7 @@ BuyseTest <- function(formula,
         cat("Gather the results in a S4BuyseTest object \n")
     }
     keep.args <- c("index.T", "index.C", "index.strata", "type","endpoint","level.strata","level.treatment","scoring.rule","hierarchical","neutral.as.uninf","add.halfNeutral",
-                   "correction.uninf","method.inference","method.score","strata","threshold","restriction","weightObs","weightEndpoint","pool.strata","n.resampling")
+                   "correction.uninf","method.inference","method.score","strata","threshold","restriction","weightObs","weightEndpoint","pool.strata","n.resampling","paired")
     mycall2 <- setNames(as.list(mycall),names(mycall))
     if(!missing(formula)){
         mycall2$formula <- formula ## change name of the variable into actual value
@@ -499,6 +507,7 @@ BuyseTest <- function(formula,
         outSurv <- calcPeron(data = outSample$data,
                              model.tte = envir$outArgs$model.tte,                             
                              method.score = envir$outArgs$method.score,
+                             paired = envir$outArgs$paired,
                              treatment = envir$outArgs$treatment,
                              level.treatment = envir$outArgs$level.treatment,
                              endpoint = envir$outArgs$endpoint,
@@ -539,15 +548,16 @@ BuyseTest <- function(formula,
                                    which(duplicated(envir$outArgs$index.endpoint))) ## not already visitied
         for(iE in index.rendpoint){ ## iE <- 1
             iRestriction <- envir$outArgs$restriction[iE]
+            iStatus <- envir$outArgs$index.status[iE]+1
 
             if(envir$outArgs$operator[iE]==1){ ## ">0"
                 if(envir$outArgs$method.score[iE] %in% c("TTEgehan","SurvPeron","CRPeron")){ ## right censoring
-                    envir$outArgs$M.status[envir$outArgs$M.endpoint[,iE]>iRestriction,iE] <- 1/2
+                    envir$outArgs$M.status[envir$outArgs$M.endpoint[,iE]>iRestriction,iStatus] <- 1/2
                 }
                 envir$outArgs$M.endpoint[envir$outArgs$M.endpoint[,iE]>iRestriction,iE] <- iRestriction
             }else if(envir$outArgs$operator[iE]==-1){ ## "<0"
                 if(envir$outArgs$method.score[iE] %in% c("TTEgehan2")){ ## left censoring
-                    envir$outArgs$M.status[envir$outArgs$M.endpoint[,iE]<iRestriction,iE] <- 1/2
+                    envir$outArgs$M.status[envir$outArgs$M.endpoint[,iE]<iRestriction,iStatus] <- 1/2
                 }
                 envir$outArgs$M.endpoint[envir$outArgs$M.endpoint[,iE]<iRestriction,iE] <- iRestriction
             }
@@ -593,10 +603,12 @@ BuyseTest <- function(formula,
                                  addHalfNeutral = envir$outArgs$add.halfNeutral,
                                  keepScore = (pointEstimation && envir$outArgs$keep.pairScore),
                                  precompute = envir$outArgs$precompute,
+                                 paired = envir$outArgs$paired,
                                  returnIID = c(iid,envir$outArgs$iidNuisance),
                                  debug = envir$outArgs$debug
                                  ))
 
+    
     ## ** export
     if(pointEstimation){
         if(envir$outArgs$keep.survival){ ## useful to test initSurvival 
@@ -615,7 +627,6 @@ BuyseTest <- function(formula,
 }
 
 ## * calcSample
-#' @rdname internal-initialization
 calcSample <- function(envir, method.inference){
 
     ## ** initialization
@@ -654,11 +665,11 @@ calcSample <- function(envir, method.inference){
         ## ** stratified resampling
         n.strataResampling <- length(envir$outArgs$n.obsStrataResampling)
         index.resampling <- NULL
-        for (iSR in 1:n.strataResampling) {
+        for (iSR in 1:n.strataResampling) { ## iSR <- 1
             index.resampling <- c(index.resampling,
-                                  envir$outArgs$cumn.obsStrataResampling[iSR] + sample.int(envir$outArgs$n.obsStrataResampling[iSR], replace = grepl("bootstrap",method.inference)))
+                                  envir$outArgs$cumn.obsStrataResampling[iSR] + sample.int(envir$outArgs$n.obsStrataResampling[iSR], replace = attr(method.inference, "bootstrap")))
         }
-
+        
         ## ** reconstruct groups
         ## index: index of the new observations in the old dataset by treatment group
         ## pos: unique identifier for each observation
@@ -688,7 +699,7 @@ calcSample <- function(envir, method.inference){
             }
             
             for(iStrata in 1:envir$outArgs$n.strata){ ## iStrata <- 1  
-                ## index of the new observation in the old dataset by treatment group
+                ## index of the new observations in the old dataset by treatment group
                 if(grepl("permutation",method.inference)){
                     out$ls.indexC[[iStrata]] <- intersect(index.C, envir$outArgs$index.strata[[iStrata]]) - 1
                     out$ls.indexT[[iStrata]] <- intersect(index.T, envir$outArgs$index.strata[[iStrata]]) - 1

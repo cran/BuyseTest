@@ -4,44 +4,46 @@
 \name{S4BuyseTest-coef}
 \alias{S4BuyseTest-coef}
 \alias{coef,S4BuyseTest-method}
-\title{Coef Method for Class "S4BuyseTest"}
+\title{Extract Summary Statistics from GPC}
 \usage{
 \S4method{coef}{S4BuyseTest}(
   object,
   endpoint = NULL,
   statistic = NULL,
-  stratified = FALSE,
+  strata = FALSE,
   cumulative = NULL,
   resampling = FALSE,
+  simplify = TRUE,
   ...
 )
 }
 \arguments{
-\item{object}{output of \code{\link{BuyseTest}}}
+\item{object}{a \code{S4BuyseTest} object, output of \code{\link{BuyseTest}}.}
 
 \item{endpoint}{[character] for which endpoint(s) the summary statistic should be output?
 If \code{NULL} returns the summary statistic for all endpoints.}
 
 \item{statistic}{[character] the type of summary statistic. See the detail section.}
 
-\item{stratified}{[logical] should the summary statistic be strata-specific?
-Otherwise a summary statistic over all strata is returned.}
+\item{strata}{[character vector] the strata relative to which the statistic should be output.
+Can also be \code{"global"} or \code{FALSE} to output the statistic pooled over all strata,
+or \code{TRUE} to output each strata-specific statistic.}
 
 \item{cumulative}{[logical] should the summary statistic be cumulated over endpoints?
 Otherwise display the contribution of each endpoint.}
 
 \item{resampling}{[logical] should the summary statistic obtained by resampling be output?}
 
+\item{simplify}{[logical] should the result be coerced to the lowest possible dimension?}
+
 \item{...}{ignored.}
 }
 \value{
-When \code{resampling=FALSE} and \code{stratified=FALSE}, return a numeric vector.
-When \code{resampling=FALSE} and \code{stratified=TRUE}, return a matrix.
-When \code{resampling=TRUE} and \code{stratified=FALSE}, return a matrix.
-When \code{resampling=TRUE} and \code{stratified=TRUE}, return an 3-dimensional array.
+When \code{resampling=FALSE} and \code{simplify=FALSE}, a matrix (strata, endpoint).
+When \code{resampling=FALSE} and \code{simplify=FALSE}, an array (sample, strata, endpoint).
 }
 \description{
-Extract summary statistics from the result of a \code{\link{BuyseTest}} function.
+Extract summary statistics (net benefit, win ratio, ...) from GPC.
 }
 \details{
 One of the following statistic can be specified:
@@ -61,5 +63,4 @@ One of the following statistic can be specified:
 \author{
 Brice Ozenne
 }
-\keyword{S4BuyseTest-method}
-\keyword{coef}
+\keyword{method}

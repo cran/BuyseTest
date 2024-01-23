@@ -12,11 +12,7 @@
   percentage = TRUE,
   statistic = NULL,
   conf.level = NULL,
-  strata = if (length(object@level.strata) == 1) {
-     "global"
- } else {
-     NULL
- },
+  strata = NULL,
   type.display = 1,
   digit = c(2, 4, 5),
   ...
@@ -25,7 +21,7 @@
 \arguments{
 \item{object}{output of \code{\link{BuyseTest}}}
 
-\item{print}{[logical] Should the table be displayed?.}
+\item{print}{[logical] Should the results be displayed in the console?}
 
 \item{percentage}{[logical] Should the percentage of pairs of each type be displayed ? Otherwise the number of pairs is displayed.}
 
@@ -39,7 +35,8 @@ Default value read from \code{BuyseTest.options()}.}
 \item{conf.level}{[numeric] confidence level for the confidence intervals.
 Default value read from \code{BuyseTest.options()}.}
 
-\item{strata}{[character vector] the name of the strata to be displayed. Can also be \code{"global"} to display the average over all strata.}
+\item{strata}{[logical] should the strata-specific results be displayed or the results pooled across strata?
+Can also be \code{NULL} to display both.}
 
 \item{type.display}{[numeric or character] the results/summary statistics to be displayed.
 Either an integer indicating refering to a type of display in \code{BuyseTest.options()}
@@ -61,29 +58,24 @@ More precisely, the column:
   \item \code{threshold} lists the threshold associated to each endpoint.
   \item \bold{weight:} lists the weight of each priority.
   \item \bold{strata:} list the strata relative to which the results of the priority are displayed. If \code{"global"}, then the results are over all strata at a given priority.
-  \item \code{total} lists the number of pairs to be analyzed at the current priority (or strata).
-  \item \code{total(\%)} lists the percentage of pairs to be analyzed at the current priority (or strata).
-  \item \code{favorable} lists the number of pairs classified in favor of the treatment group at the current priority (or strata).
-  \item \code{favorable(\%)} lists the number of pairs classified in favor of the treatment group at the current priority (or strata).
-  \item \code{unfavorable} lists the number of pairs classified in favor of the control group at the current priority (or strata).
-  \item \code{unfavorable(\%)} lists the percentage of pairs classified in favor of the control group at the current priority (or strata).
-  \item \code{neutral} lists the number of pairs classified as neither in favor of the treatment group nor in favor of the control group at the current priority (or strata).
-  \item \code{neutral(\%)} lists the percentage of pairs classified as neither in favor of the treatment group nor in favor of the control group at the current priority (or strata).
-  \item \code{uninf} lists the number of pairs that could not be classified at the current priority (or strata) due to missing values/censoring.
-  \item \code{uninf(\%)} lists the percentage of pairs that could not be classified at the current priority (or strata) due to missing values/censoring.
+  \item \code{total} (or \code{total(\%)}) lists the number (or percentage) of pairs to be analyzed at the current priority (or strata).
+  \item \code{favorable} (or \code{favorable(\%)}) lists the number (or percentage) of pairs classified in favor of the treatment group at the current priority (or strata).
+  \item \code{unfavorable} (or \code{unfavorable(\%)}) lists the number (or percentage) of pairs classified in favor of the control group at the current priority (or strata).
+  \item \code{neutral} (or \code{neutral(\%)}) lists the number (or percentage) of pairs classified as neither in favor of the treatment group nor in favor of the control group at the current priority (or strata).
+  \item \code{uninf} (or \code{uninf(\%)}) lists the number (or percentage) of pairs that could not be classified at the current priority (or strata) due to missing values/censoring.
   \item \code{delta} lists the value of the priority-specific statistic (e.g. net benefit or win ratio), i.e. computed on the pairs analyzed at the current priority only.
   \item \code{Delta} lists the value of the cumulative statistic (e.g. net benefit or win ratio), i.e. computed on all the pairs analyzed up to the current priority.
   \item \code{Delta(\%)} lists the relative statistic (i.e. statistic up to the current priority divided by the final statistic).
   \item \code{information(\%)} lists the information fraction (i.e. number of favorable and unfavorable pairs up to the current priority divided by the final number of favorable and unfavorable pairs).
   \item \code{CI} lists the confidence intervals for \code{Delta} (not adjusted for multiple comparison).
   \item \code{null} lists the null hypothesis (\code{Delta=null}).
-  \item \code{p.value} p-value relative to the null hypothesis (no adjustment for multiple comparison).
+  \item \code{p.value} p-value relative to the null hypothesis (not adjusted for multiple comparison).
   \item \code{resampling} number of samples used to compute the confidence intervals or p-values from permutations or bootstrap samples.
 Only displayed if some bootstrap samples have been discarded, for example, they did not lead to sample any case or control.
 }
 Note: when using the Peron scoring rule or a correction for uninformative pairs, the columns \code{total}, \code{favorable}, \code{unfavorable}, \code{neutral}, and \code{uninf} are computing by summing the contribution of the pairs. This may lead to a decimal value.
 
-\bold{statistic}: when considering a single endpoint and denoting
+\bold{Statistic}: when considering a single endpoint and denoting
 \eqn{Y} the endpoint in the treatment group,
 \eqn{X} the endpoint in the control group,
 and \eqn{\tau} the threshold of clinical relevance,
@@ -135,15 +127,16 @@ dt <- simBuyseTest(1e2, n.strata = 3)
 \references{
 On the GPC procedure: Marc Buyse (2010). \bold{Generalized pairwise comparisons of prioritized endpoints in the two-sample problem}. \emph{Statistics in Medicine} 29:3245-3257 \cr
 On the win ratio: D. Wang, S. Pocock (2016). \bold{A win ratio approach to comparing continuous non-normal outcomes in clinical trials}. \emph{Pharmaceutical Statistics} 15:238-245 \cr
-On the Mann-Whitney parameter: Fay, Michael P. et al (2018). \bold{Causal estimands and confidence intervals asscoaited with Wilcoxon-Mann-Whitney tests in randomized experiments}. \emph{Statistics in Medicine} 37:2923-2937 \
+On the Mann-Whitney parameter: Fay, Michael P. et al (2018). \bold{Causal estimands and confidence intervals asscoaited with Wilcoxon-Mann-Whitney tests in randomized experiments}. \emph{Statistics in Medicine} 37:2923-2937.
 }
 \seealso{
 \code{\link{BuyseTest}} for performing a generalized pairwise comparison. \cr
-  \code{\link{S4BuyseTest-class}} for a presentation of the \code{S4BuyseTest} object. \cr
-  \code{\link{S4BuyseTest-confint}} to output confidence interval and p-values in a matrix format.
+  \code{\link{S4BuyseTest-model.tables}} to obtain the table displayed at the end of the summary method in a \code{data.frame} format.
+  \code{\link{S4BuyseTest-confint}} to output estimate, standard errors, confidence interval and p-values.
+  \code{\link{S4BuyseTest-plot}} for a graphical display of the scoring of the pairs.
+  \code{\link{BuyseMultComp}} for efficient adjustment for multiple comparisons.
 }
 \author{
 Brice Ozenne
 }
-\keyword{S4BuyseTest-method}
-\keyword{summary}
+\keyword{print}

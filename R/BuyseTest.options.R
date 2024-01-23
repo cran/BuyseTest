@@ -7,7 +7,9 @@
 #'
 #' @param ... options to be selected or updated
 #' @param reinitialise should all the global parameters be set to their default value
-#'         
+#'
+#' @keywords utilities
+#' 
 #' @examples
 #' library(data.table)
 #' 
@@ -33,7 +35,8 @@ BuyseTest.options <- function(..., reinitialise = FALSE){
         assign(".BuyseTest-options", 
                new("BuyseTest.options",
                    add.halfNeutral = FALSE, ## default value of argument add.halfNeutral in BuyseTest()
-                   add.1.pperm = TRUE, ## if TRUE p-value are computed as (#more extreme+1)/(#perm + 1) otherwise #more exterme/#perm
+                   add.1.presample = TRUE, ## if TRUE p-value when using permutation is computed as (#more extreme+1)/(#sample+1) otherwise #more exterme/#sample.
+                                           ## Another correction is used for the bootstrap to ensure strictly positive p-values
                    alternative = "two.sided", ## type of alternative hypothesis when doing hypothesis testing: less, greater, two.sided
                    args.model.tte = list(), ## additional argument passed to prodlim when fitting the survival model in BuyseTest() --> calcPeron
                    check = TRUE, ## should arguments be checked when running BuyseTest()
@@ -50,7 +53,7 @@ BuyseTest.options <- function(..., reinitialise = FALSE){
                    n.resampling = 1000, ## default value of argument n.resampling in BuyseTest()
                    neutral.as.uninf = TRUE, ## default value of argument neutral.as.uninf in BuyseTest()
                    order.Hprojection = 1, ## hidden argument in BuyseTest() to control the type of H-projection when using method.inference="u-statistic". Can be 1 or 2
-                   pool.strata = "Buyse", ## default weighting scheme to pool estimates across strata in BuyseTest(). Can be "Buyse" (weighted average proportional to number of pairs per strata),
+                   pool.strata = "CMH", ## default weighting scheme to pool estimates across strata in BuyseTest(). Can be "Buyse" (weighted average proportional to number of pairs per strata),
                                                                                                                           ## "CMH" (Cochran-Mantel-Haenszel weights)
                                                                                                                           ## "equal" (equal weights for all strata)
                    precompute = TRUE, ## hidden argument in BuyseTest() to pre-compute integrals over time before the C++ routine

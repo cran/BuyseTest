@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 17 2018 (16:46) 
 ## Version: 
-## Last-Updated: Mar 13 2023 (10:20) 
+## Last-Updated: sep 28 2023 (14:52) 
 ##           By: Brice Ozenne
-##     Update #: 207
+##     Update #: 231
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -20,6 +20,7 @@ if(FALSE){
     library(BuyseTest)
     library(data.table)
     library(survival)
+    library(prodlim)
 }
 
 context("Check that bugs that have been reported are fixed \n")
@@ -29,6 +30,8 @@ context("Check that bugs that have been reported are fixed \n")
 BuyseTest.options(check = TRUE,
                   keep.pairScore = TRUE,
                   method.inference = "none",
+                  pool.strata = "Buyse",
+                  add.1.presample = FALSE,
                   trace = 0)
 
 ## * Joris: jeudi 5 avril 2018 à 14:57
@@ -45,11 +48,11 @@ test_that("number of pairs - argument neutral.as.uninf", {
         BT.T <- BuyseTest(ttt~TTE(timeOS,threshold=0,status=eventOS) + cont(Mgrade.tox,threshold=0),
                           data = dt.sim,
                           neutral.as.uninf = TRUE, scoring.rule = "Gehan", correction.uninf = iCorrection)
-        BTS.T <- as.data.table(summary(BT.T, print = FALSE, percentage = FALSE)$table)
+        BTS.T <- as.data.table(model.tables(BT.T, percentage = FALSE))
         BT.F <- BuyseTest(ttt~TTE(timeOS,threshold=0,status=eventOS) + cont(Mgrade.tox,threshold=0),
                           data = dt.sim,
                           neutral.as.uninf = FALSE, scoring.rule = "Gehan", correction.uninf = iCorrection)
-        BTS.F <- as.data.table(summary(BT.F, print = FALSE, percentage = FALSE)$table)
+        BTS.F <- as.data.table(model.tables(BT.F, percentage = FALSE))
 
         ## neutral.as.uninf does not impact the results for first endpoint
         expect_equal(BTS.T[1,c("favorable","unfavorable","neutral","uninf","delta","Delta")],
@@ -58,36 +61,33 @@ test_that("number of pairs - argument neutral.as.uninf", {
         ## check consistency of the number of pairs
         ## neutral.as.uninf = TRUE
         ## summary(BT.T)
-        expect_equal(BTS.T[endpoint == "Mgrade.tox" & strata == "global", favorable+unfavorable+neutral+uninf],
-                     BTS.T[endpoint == "Mgrade.tox" & strata == "global", total])
-        expect_equal(BTS.T[endpoint == "timeOS" & strata == "global", neutral+uninf],
-                     BTS.T[endpoint == "Mgrade.tox" & strata == "global", total])
-        expect_equal(BTS.T[endpoint == "Mgrade.tox" & strata == "global", total],
-                     BTS.T[endpoint == "Mgrade.tox" & strata == "global", favorable+unfavorable+neutral+uninf])
+        expect_equal(BTS.T[endpoint == "Mgrade.tox", favorable+unfavorable+neutral+uninf],
+                     BTS.T[endpoint == "Mgrade.tox", total])
+        expect_equal(BTS.T[endpoint == "timeOS", neutral+uninf],
+                     BTS.T[endpoint == "Mgrade.tox", total])
+        expect_equal(BTS.T[endpoint == "Mgrade.tox", total],
+                     BTS.T[endpoint == "Mgrade.tox", favorable+unfavorable+neutral+uninf])
 
         ## neutral.as.uninf = FALSE
-        expect_equal(BTS.F[endpoint == "Mgrade.tox" & strata == "global", favorable+unfavorable+neutral+uninf],
-                     BTS.F[endpoint == "Mgrade.tox" & strata == "global", total])
-        expect_equal(BTS.F[endpoint == "timeOS" & strata == "global", uninf],
-                     BTS.F[endpoint == "Mgrade.tox" & strata == "global", total])
-        expect_equal(BTS.F[endpoint == "Mgrade.tox" & strata == "global", total],
-                     BTS.F[endpoint == "Mgrade.tox" & strata == "global", favorable+unfavorable+neutral+uninf])
+        expect_equal(BTS.F[endpoint == "Mgrade.tox", favorable+unfavorable+neutral+uninf],
+                     BTS.F[endpoint == "Mgrade.tox", total])
+        expect_equal(BTS.F[endpoint == "timeOS", uninf],
+                     BTS.F[endpoint == "Mgrade.tox", total])
+        expect_equal(BTS.F[endpoint == "Mgrade.tox", total],
+                     BTS.F[endpoint == "Mgrade.tox", favorable+unfavorable+neutral+uninf])
 
         ## compared to known value
         if(iCorrection == FALSE){
-            keep.col <- c("endpoint","threshold","strata","weight","total","favorable","unfavorable","neutral","uninf","delta","Delta")
-            test <- as.data.table(summary(BT.T, print = FALSE)$table[,keep.col])
-            GS <- data.table("endpoint" = c("timeOS", "timeOS", "Mgrade.tox", "Mgrade.tox"), 
-                             "threshold" = c(1e-12, 1e-12, 1e-12, 1e-12), 
-                             "strata" = c("global", "1", "global", "1"),
-                             "weight" = c(1, 1, 1, 1), 
-                             "total" = c(100.00000, 100.00000,  44.44444,  44.44444), 
-                             "favorable" = c(44.44444, 44.44444, 22.22222, 22.22222), 
-                             "unfavorable" = c(11.11111, 11.11111, 11.11111, 11.11111), 
-                             "neutral" = c(11.11111, 11.11111, 11.11111, 11.11111), 
-                             "uninf" = c(33.33333, 33.33333,  0.00000,  0.00000), 
-                             "delta" = c(0.3333333, 0.3333333, 0.1111111, 0.1111111), 
-                             "Delta" = c(0.3333333, NA, 0.4444444, NA))
+            keep.col <- c("endpoint","total","favorable","unfavorable","neutral","uninf","delta","Delta")
+            test <- as.data.table(model.tables(BT.T, percentage = TRUE)[,keep.col])
+            GS <- data.table("endpoint" = c("timeOS", "Mgrade.tox"), 
+                             "total" = c(100.00000,  44.44444), 
+                             "favorable" = c(44.44444, 22.22222), 
+                             "unfavorable" = c(11.11111, 11.11111), 
+                             "neutral" = c(11.11111, 11.11111), 
+                             "uninf" = c(33.33333,  0.00000), 
+                             "delta" = c(0.3333333, 0.1111111), 
+                             "Delta" = c(0.3333333, 0.4444444))
             ##    butils::object2script(test)
 
             attr(test,"index") <- NULL
@@ -122,6 +122,7 @@ BT_tau0 <- BuyseTest(data=data,
 ## when computing the integral for peron with double censoring
 ## the ordering of the data modified the ouput
 ## this has been correct with version 1.4
+data(cancer, package = "survival")
 
 test_that("ordering of tied event does not affect BuyseTest", {
     ## veteran2[veteran2$time==100,]
@@ -206,11 +207,11 @@ test_that("Multiple thresholds",{
                              correction.uninf=F,
                              method.inference="none")
 
-    resS <- as.data.table(summary(BuyseresPer, print = FALSE)$table)
+    resS <- as.data.table(model.tables(BuyseresPer))
 
     ## pairs are correctly transfered from one endpoint to another
-    expect_equal(resS[strata == "global" & threshold > tail(threshold,1), neutral + uninf],
-                 resS[strata == "global" & threshold < threshold[1], total], tol = 1e-2)
+    expect_equal(resS[threshold > tail(threshold,1), neutral + uninf],
+                 resS[threshold < threshold[1], total], tol = 1e-2)
 
     ## butils::object2script(as.double(BuyseresPer@count.favorable), digit = 2)
     GS <- c(260.64, 35.93, 37.33, 147.32, 272.14, 263.6, 235.7, 213.21, 390.29, 408.73, 514.7, 514.34, 744.78, 865.21, 1095.26)
@@ -328,7 +329,7 @@ test_that("BuysePower - error in print", {
 
     ## the error was when setting trace to 4
     tempo <- capture.output({
-        xx <- powerBuyseTest(sim = simFCT, sample.sizeC = c(100), sample.sizeT = c(100), n.rep = 2,
+        xx <- powerBuyseTest(sim = simFCT, sample.size = 100, n.rep = 2,
                              formula = T ~ cont(Y), method.inference = "u-statistic", trace = 4,
                              seed = 10)
     })
@@ -338,7 +339,7 @@ test_that("BuysePower - error in print", {
                           T=c(rep(1,n.C),rep(0,n.T))
                           )
         return(out)
-    }, sample.sizeC = c(100), sample.sizeT = c(100), n.rep = 2,
+    }, sample.size = 100, n.rep = 2,
     formula = T ~ cont(Y), method.inference = "u-statistic", trace = 0,
     seed = 10)
 
@@ -406,17 +407,17 @@ simFCT <- function(n.C, n.T) {
 }
 
 test_that("powerBuyseTest - status vs. censoring", {
-    valid <- powerBuyseTest(sim = simFCT, sample.size = c(100), n.rep = 2,
+    valid <- powerBuyseTest(sim = simFCT, sample.size = 100, n.rep = 2,
                             formula = treatment ~ tte(eventtime1, status = status1),
                             method.inference = "u-statistic",
                             scoring.rule = "Gehan", trace = 0)
 
-    expect_error(powerBuyseTest(sim = simFCT, sample.size = c(100), n.rep = 2,
+    expect_error(powerBuyseTest(sim = simFCT, sample.size = 100, n.rep = 2,
                                 formula = treatment ~ tte(eventtime1, censoring = status1),
                                 method.inference = "u-statistic",
                                 scoring.rule = "Gehan"))
 
-    valid <- capture.output(powerBuyseTest(sim = simFCT, sample.size = c(100), n.rep = 2,
+    valid <- capture.output(powerBuyseTest(sim = simFCT, sample.size = 100, n.rep = 2,
                                            formula = treatment ~ tte(eventtime1, status = status1),
                                            method.inference = "u-statistic",
                                            scoring.rule = "Gehan", trace = 4))
@@ -511,7 +512,7 @@ test_that("backtransformation after permutation",{
     gpc_ex1 <- BuyseTest(trt~cont(time),
                          data=veteran, seed = 10, n.resampling = 100,
                          method.inference = "permutation") 
-    test <- suppressWarnings(confint(gpc_ex1, statistic='winratio') )
+    test <- suppressWarnings(confint(gpc_ex1, statistic='winratio', conf.level = 0.95) )
     expect_true(test$estimate < test$upper.ci)
     expect_true(test$estimate > test$lower.ci)
 })
@@ -528,7 +529,7 @@ test_that("U-stat with stratification",{
         })
 
         weights.strata <- GPC.stratified@n.pairs/sum(GPC.stratified@n.pairs)
-        expect_equivalent(sum(weights.strata*coef(GPC.stratified,statistic="netBenefit",stratified = TRUE)),
+        expect_equivalent(sum(weights.strata*coef(GPC.stratified,statistic="netBenefit",strata = TRUE)),
                           coef(GPC.stratified,statistic="netBenefit"), tol = 1e-6)
         expect_equivalent(sum(weights.strata^2*sapply(ls.GPC,function(iGPC){iGPC@covariance[,"netBenefit"]})),
                           GPC.stratified@covariance[,"netBenefit"], tol = 1e-6)
@@ -542,17 +543,99 @@ test_that("p-value with permutation",{
     GPC.perm <- BuyseTest(treatment~cont(score),
                           data=dt, trace = FALSE,
                           method.inference = "permutation")
-    BuyseTest.options(add.1.pperm = FALSE)
+    BuyseTest.options(add.1.presample = FALSE)
     expect_equal(suppressWarnings(confint(GPC.perm)$p.value), 0)
-    BuyseTest.options(add.1.pperm = TRUE)
+    BuyseTest.options(add.1.presample = TRUE)
     expect_equal(suppressWarnings(confint(GPC.perm)$p.value), 1/1001)
+})
+
+## * SamSalvaggio (issue #10 on Github): 6 june 2023 restricted
+test_that("restriction via formula interface",{
+
+    set.seed(1)
+    dt <- simBuyseTest(n.T = 50, n.C = 50,
+                       names.strata = "strat_column", n.strata = 6,
+                       argsTTE = list(name = c("tte1","tte2","tte3", "tte4", "tte5", "tte6", "tte7", "tte8", "tte9"), 
+                                      name.censoring = c("cnsr1","cnsr2","cnsr3", "cnsr4", "cnsr5", "cnsr6", "cnsr7", "cnsr8", "cnsr9"),
+                                      scale.T = c(200,100,250,300,150,200,350,400,450), scale.censoring.T = c(10^5,10^5,10^5,10^5,10^5,10^5,10^5,10^5,10^5),
+                                      scale.C = c(200,100,250,300,150,200,350,400,450), scale.censoring.C = c(10^5,10^5,10^5,10^5,10^5,10^5,10^5,10^5,10^5)),
+                       argsBin = list(name = "bin_var"))
+
+    formula1 <- treatment ~ strata(strat_column) + 
+        tte(tte1, status = cnsr1, threshold = 10, restriction = 365) + 
+        tte(tte2, status = cnsr2, threshold = 10, restriction = 365) + 
+        tte(tte3, status = cnsr3, threshold = 10, restriction = 365) +
+        tte(tte4, status = cnsr4, threshold = 10, restriction = 365) +
+        bin(bin_var, operator = "<0") + 
+        tte(tte5, status = cnsr5, threshold = 10, restriction = 365) + 
+        tte(tte6, status = cnsr6, threshold = 10, restriction = 365) + 
+        tte(tte7, status = cnsr7, threshold = 10, restriction = 365) +
+        tte(tte8, status = cnsr8, threshold = 10, restriction = 365) +
+        tte(tte9, status = cnsr9, threshold = 10, restriction = 365)
+
+    GPC.v1 <- BuyseTest(formula1,
+                        data = dt,
+                        trace = FALSE)
+
+    GPC.v2 <- BuyseTest(treatment = "treatment",
+                        strata = "strat_column",
+                        endpoint = c("tte1","tte2","tte3","tte4","bin_var","tte5","tte6","tte7","tte8","tte9"),
+                        status = c("cnsr1","cnsr2","cnsr3","cnsr4","cnsr5","cnsr6","cnsr7","cnsr8","cnsr9"),
+                        type = c("tte","tte","tte","tte","bin","tte","tte","tte","tte","tte"),
+                        operator = c(">0",">0",">0",">0","<0",">0",">0",">0",">0",">0"),
+                        threshold = c(10,10,10,10,NA,10,10,10,10,10),
+                        restriction = c(365,365,365,365,NA,365,365,365,365,365),
+                        data = dt,
+                        trace = FALSE)
 })
 
 
 
+## * Brice: mandag 23-07-03 at 15:54 add.halfNeutral in summary
+test_that("number of pairs with add.halfNeutral",{
 
+    set.seed(1)
+    dt <- simBuyseTest(n.T = 50, n.C = 50)
+    BT <- BuyseTest(treatment ~ bin(toxicity), add.halfNeutral = TRUE, data = dt,
+                    trace = FALSE)
+    expect_equal(100,model.tables(BT)$total, tol = 0.0001)
+})
 
+## * SamSalvaggio: (issue #2 on Github): 27 september 2023 restriction with multiple endpoint
+test_that("restriction with multiple endpoints",{
 
+    set.seed(1)
+    dt <- simBuyseTest(n.T = 50, n.C = 50,
+                       names.strata = "strat_column", n.strata = 2,
+                       argsTTE = list(name = c("tte1"), 
+                                      name.censoring = c("cnsr1"),
+                                      scale.T = c(200), scale.censoring.T = c(10^5),
+                                      scale.C = c(200), scale.censoring.C = c(10^5)),
+                       argsBin = list(p.T = list(c(0.4,0.6))),
+                       argsCont = list(mu.T = c(0.3), sigma.T = 1)
+                       )
+
+    formula1 <- treatment ~ strat_column +
+        bin(toxicity, operator = "<0") +
+        cont(score, threshold = 0.5) +
+        tte(tte1, status = cnsr1, threshold = 10, restriction = 365)
+
+    GPC <- BuyseTest(formula1,
+                     data = dt,
+                     trace = FALSE,
+                     method.inference = "u-statistic")
+
+    test <- confint(GPC)
+    rownames(test) <- NULL
+    GS <- data.frame("estimate" = c(-0.04265403, -0.00552923, -0.00592417), 
+                     "se" = c(0.09983531, 0.1159374, 0.11753888), 
+                     "lower.ci" = c(-0.2342771, -0.22865458, -0.23200199), 
+                     "upper.ci" = c(0.15215946, 0.21814805, 0.22076088), 
+                     "null" = c(0, 0, 0), 
+                     "p.value" = c(0.66957926, 0.9619629, 0.95980315))
+
+    expect_equivalent(test,GS,tol = 1e-6)
+})
 
 
 

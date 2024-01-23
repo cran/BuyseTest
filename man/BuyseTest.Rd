@@ -2,7 +2,7 @@
 % Please edit documentation in R/BuyseTest.R
 \name{BuyseTest}
 \alias{BuyseTest}
-\title{Generalized Pairwise Comparisons (GPC)}
+\title{Two-group GPC}
 \usage{
 BuyseTest(
   formula,
@@ -46,8 +46,8 @@ Can be \code{"Gehan"} or \code{"Peron"}.
 See Details, section "Handling missing values".}
 
 \item{pool.strata}{[character] weights used to combine estimates across strata. Can be
-\code{"Buyse"} to weight proportionnally to the number of pairs in the strata,
-\code{"CMH"} to weight proportionnally to the ratio between the number of pairs in the strata and the number of observations in the strata.
+\code{"Buyse"} to weight proportionally to the number of pairs in the strata,
+\code{"CMH"} to weight proportionally to the ratio between the number of pairs in the strata and the number of observations in the strata.
 \code{"equal"} to weight equally each strata,
 or \code{"var-netBenefit"} to weight each strata proportionally to the precision of its estimated net benefit (similar syntax for the win ratio: \code{"var-winRatio"})}
 
@@ -84,8 +84,8 @@ See Details, section "Handling missing values".}
 
 \item{keep.pairScore}{[logical] should the result of each pairwise comparison be kept?}
 
-\item{seed}{[integer, >0] the seed to consider when performing resampling.
-If \code{NULL} no seed is set.}
+\item{seed}{[integer, >0] Random number generator (RNG) state used when starting resampling.
+If \code{NULL} no state is set.}
 
 \item{cpus}{[integer, >0] the number of CPU to use.
 Only the permutation test can use parallel computation.
@@ -101,10 +101,11 @@ See Details, section "Specification of the GPC model".}
 An \R object of class \code{\linkS4class{S4BuyseTest}}.
 }
 \description{
-Performs Generalized Pairwise Comparisons for binary, continuous and time-to-event endpoints.
+Performs Generalized Pairwise Comparisons (GPC) between two groups.
+Can handle one or several binary, continuous and time-to-event endpoints.
 }
 \details{
-\bold{Specification of the GPC model}: \cr
+\bold{Specification of the GPC model} \cr
 There are two way to specify the GPC model in \code{BuyseTest}.
 A \emph{Formula interface} via the argument \code{formula} where the response variable should be a binary variable defining the treatment arms. 
 The rest of the formula should indicate the endpoints by order of priority and the strata variables (if any).
@@ -141,7 +142,7 @@ The GPC procedure form all pairs of observations, one belonging to the experimen
 With complete data, pairs can be decidely classified as favorable/unfavorable/neutral.
 In presence of missing values, the GPC procedure uses the scoring rule (argument \code{scoring.rule}) and the correction for uninformative pairs (argument \code{correction.uninf}) to classify the pairs.
 The classification may not be 0,1, e.g. the probability that the pair is favorable/unfavorable/neutral with the Peron's scoring rule.
-To export the classification of each pair set the argument code{keep.pairScore} to \code{TRUE} and call the function \code{getPairScore} on the result of the \code{BuyseTest} function. \cr \cr \cr
+To export the classification of each pair set the argument \code{keep.pairScore} to \code{TRUE} and call the function \code{getPairScore} on the result of the \code{BuyseTest} function. \cr \cr \cr
 
 
 \bold{Handling missing values}
@@ -180,14 +181,17 @@ Additional arguments for permutation and bootstrap resampling:
 Otherwise, the permutation/non-parametric boostrap will be performed separately for each level that the variable defined in \code{strata.resampling} take.
    \item \code{n.resampling} set the number of permutations/samples used.
 A large number of permutations (e.g. \code{n.resampling=10000}) are needed to obtain accurate CI and p.value. See (Buyse et al., 2010) for more details.
+   \item \code{seed}: the seed is used to generate one seed per sample. These seeds are the same whether one or several CPUs are used.
    \item \code{cpus} indicates whether the resampling procedure can be splitted on several cpus to save time. Can be set to \code{"all"} to use all available cpus.
 The detection of the number of cpus relies on the \code{detectCores} function from the \emph{parallel} package. \cr \cr
 }
 
-\bold{Pooling results across strata} the relative contribution of each strata to the global estimator is decided by \cr
+\bold{Pooling results across strata} \cr Consider \eqn{K} strata and denote by \eqn{m_k} and \eqn{n_k} the sample size in the control and active arm (respectively) for strata \eqn{k}. Let \eqn{\sigma_k} be the standard error of the strata-specific summary statistic (e.g. net benefit). The strata specific weights, \eqn{w_k}, are given by:
 \itemize{
-\item \code{"CMH"} weights: Cochran-Mantel-Haenszel type weights which are optimal if the odds ratios are constant across strata.
-\item \code{"Buyse"} weights: optimal if the risk difference is constant across strata. \cr \cr
+\item \code{"CMH"}: \eqn{w_k=\frac{\frac{m_k \times n_k}{m_k + n_k}}{\sum_{l=1}^K \frac{m_l \times n_l}{m_l + n_l}}}. Optimal if the if the odds ratios are constant across strata.
+\item \code{"equal"}:  \eqn{w_k=\frac{1}{K}}
+\item \code{"Buyse"}:  \eqn{w_k=\frac{m_k \times n_k}{\sum_{l=1}^K m_l \times n_l}}. Optimal if the risk difference is constant across strata
+\item \code{"var-*"} (e.g. \code{"var-netBenefit"}): . \eqn{w_k=\frac{1/\sigma^2_k}{\sum_{l=1}^K 1/\sigma^2_k}}\cr \cr
 }
 
 \bold{Default values} \cr
@@ -218,27 +222,28 @@ if(require(prodlim)){
 #### one time to event endpoint ####
 BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data= df.data)
 
-summary(BT) # net benefit
+summary(BT) ## net benefit
+model.tables(BT) ## export the table at the end of summary
 summary(BT, percentage = FALSE)  
-summary(BT, statistic = "winRatio") # win Ratio
+summary(BT, statistic = "winRatio") ## win Ratio
 
 ## permutation instead of asymptotics to compute the p-value
 \dontrun{
-    BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
+    BTperm <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
                     method.inference = "permutation", n.resampling = 1e3)
 }
 \dontshow{
-    BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
+    BTperm <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
                     method.inference = "permutation", n.resampling = 1e1, trace = 0)
 }
-summary(BT, statistic = "netBenefit") ## default
-summary(BT, statistic = "winRatio") 
+summary(BTperm)
+summary(BTperm, statistic = "winRatio") 
 
-## parallel permutation
+## same with parallel calculations
 \dontrun{
-    BT <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
-                    method.inference = "permutation", n.resampling = 1e3, cpus = 2)
-    summary(BT)
+    BTperm <- BuyseTest(treatment ~ TTE(eventtime, status = status), data=df.data,
+                    method.inference = "permutation", n.resampling = 1e3, cpus = 8)
+    summary(BTperm)
 }
 
 ## method Gehan is much faster but does not optimally handle censored observations
@@ -251,16 +256,17 @@ BT <- BuyseTest(treatment ~ TTE(eventtime, threshold = 1, status = status), data
 summary(BT)
 
 #### one time to event endpoint with a strata variable
-BT <- BuyseTest(treatment ~ strata + TTE(eventtime, status = status), data=df.data)
-summary(BT)
+BTS <- BuyseTest(treatment ~ strata + TTE(eventtime, status = status), data=df.data)
+summary(BTS)
 
 #### several endpoints with a strata variable
-f <- treatment ~ strata + T(eventtime, status, 1) + B(toxicity) 
-f <- update(f, 
+ff <- treatment ~ strata + T(eventtime, status, 1) + B(toxicity) 
+ff <- update(ff, 
             ~. + T(eventtime, status, 0.5) + C(score, 1) + T(eventtime, status, 0.25))
 
-BT <- BuyseTest(f, data=df.data)
-summary(BT)
+BTM <- BuyseTest(ff, data=df.data)
+summary(BTM)
+plot(BTM)
 
 #### real example : veteran dataset of the survival package ####
 ## Only one endpoint. Type = Time-to-event. Thresold = 0. Stratfication by histological subtype
@@ -268,7 +274,7 @@ summary(BT)
 
 if(require(survival)){
 \dontrun{
-  library(survival) ## import veteran
+  data(cancer, package = "survival") ## import veteran
  
   ## scoring.rule = "Gehan"
   BT_Gehan <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,status=status), 
@@ -281,7 +287,6 @@ if(require(survival)){
   BT_Peron <- BuyseTest(trt ~ celltype + TTE(time,threshold=0,status=status), 
                         data=veteran, scoring.rule="Peron")
 
-  class(BT_Peron)
   summary(BT_Peron)
 }
 }
@@ -297,12 +302,13 @@ On how to handle right-censoring: J. Peron, M. Idlhaj, D. Maucort-Boulch, et al.
 \seealso{
 \code{\link{S4BuyseTest-summary}} for a summary of the results of generalized pairwise comparison. \cr
 \code{\link{S4BuyseTest-confint}} for exporting estimates with confidence intervals and p-values. \cr
-\code{\link{S4BuyseTest-class}} for a presentation of the \code{S4BuyseTest} object. \cr
+\code{\link{S4BuyseTest-model.tables}} for exporting the number or percentage of favorable/unfavorable/neutral/uninformative pairs. \cr
 \code{\link{S4BuyseTest-sensitivity}} for performing a sensitivity analysis on the choice of the threshold(s). \cr
-\code{\link{constStrata}} to create a strata variable from several clinical variables. \cr
+\code{\link{S4BuyseTest-plot}} for graphical display of the pairs across endpoints. \cr
+\code{\link{S4BuyseTest-getIid}} for exporting the first order H-decomposition. \cr
+\code{\link{S4BuyseTest-getPairScore}} for exporting the scoring of each pair.
 }
 \author{
 Brice Ozenne
 }
-\keyword{BuyseTest}
-\keyword{function}
+\keyword{models}

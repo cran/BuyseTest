@@ -12,6 +12,7 @@ n.patients <- c(90,100)
 BuyseTest.options(check = TRUE,
                   keep.pairScore = TRUE,
                   method.inference = "none",
+                  pool.strata = "Buyse",
                   trace = 0)
 
 ## * Simulated data
@@ -67,11 +68,10 @@ test_that("BuyseTest - binary (no strata)", {
     expect_equal(BT.bin,BT2)
     
     ## *** count pairs
-    tableS <- summary(BT.bin, print = FALSE, percentage = FALSE)$table
-    dt.tableS <- as.data.table(tableS)[strata == "global"]
-    expect_equal(dt.tableS[,total],
-                 unname(dt.tableS[,favorable + unfavorable + neutral + uninf])
-                 )
+    tableS <- model.tables(BT.bin, percentage = FALSE)
+    expect_equal(tableS$total,
+                 tableS$favorable + tableS$unfavorable + tableS$neutral + tableS$uninf)
+
 })
 
 ## ** Strata
@@ -80,7 +80,7 @@ test_that("BuyseTest - binary (strata)", {
     BT.bin <- BuyseTest(treatment ~ bin(toxicity1) + strata,
                         data = dtS.sim)
 
-    tableS <- summary(BT.bin, print = FALSE, percentage = FALSE)$table
+    tableS <- model.tables(BT.bin, percentage = FALSE)
     dt.tableS <- as.data.table(tableS)
     
     ## *** count pairs
@@ -138,11 +138,9 @@ test_that("BuyseTest - continuous (no strata)", {
     expect_equal(BT.cont,BT2)
 
     ## *** count pairs
-    tableS <- summary(BT.cont, print = FALSE, percentage = FALSE)$table
-    dt.tableS <- as.data.table(tableS)[strata == "global"]
-    expect_equal(dt.tableS[,total],
-                 unname(dt.tableS[, favorable + unfavorable + neutral + uninf]
-                 ))
+    tableS <- model.tables(BT.cont, percentage = FALSE)
+    expect_equal(tableS$total,
+                 tableS$favorable + tableS$unfavorable + tableS$neutral + tableS$uninf)
 })
 
 ## ** Strata
@@ -151,7 +149,7 @@ test_that("BuyseTest - continuous (strata)", {
     BT.cont <- BuyseTest(treatment ~ cont(score1, 1) + cont(score2, 0) + strata,
                          data = dtS.sim)
 
-    tableS <- summary(BT.cont, print = FALSE, percentage = FALSE)$table
+    tableS <- model.tables(BT.cont, percentage = FALSE)
     dt.tableS <- as.data.table(tableS)
 
         ## *** count pairs
@@ -205,13 +203,13 @@ for(method in c("Gehan","Peron")){ ## method <- "Gehan" ## method <- "Peron"
                      as.double(coef(BT.1tte, statistic = "count.favorable", cumulative = FALSE)))
         expect_equal(sum(coef(BT.tte, statistic = "count.unfavorable", cumulative = FALSE)),
                      as.double(coef(BT.1tte, statistic = "count.unfavorable", cumulative = FALSE)))
-        expect_equal(coef(BT.tte, statistic = "count.neutral", cumulative = FALSE)[3],
+        expect_equal(unname(coef(BT.tte, statistic = "count.neutral", cumulative = FALSE)[3]),
                      coef(BT.1tte, statistic = "count.neutral", cumulative = FALSE))
-        expect_equal(coef(BT.tte, statistic = "count.uninf", cumulative = FALSE)[3],
+        expect_equal(unname(coef(BT.tte, statistic = "count.uninf", cumulative = FALSE)[3]),
                      coef(BT.1tte, statistic = "count.uninf", cumulative = FALSE))
-        expect_equal(coef(BT.tte, statistic = "netBenefit", cumulative = TRUE)[3],
+        expect_equal(unname(coef(BT.tte, statistic = "netBenefit", cumulative = TRUE)[3]),
                      coef(BT.1tte, statistic = "netBenefit", cumulative = TRUE))
-        expect_equal(coef(BT.tte, statistic = "winRatio", cumulative = TRUE)[3],
+        expect_equal(unname(coef(BT.tte, statistic = "winRatio", cumulative = TRUE)[3]),
                      coef(BT.1tte, statistic = "winRatio", cumulative = TRUE))
 
         ## *** test against fixed value
@@ -250,10 +248,9 @@ for(method in c("Gehan","Peron")){ ## method <- "Gehan" ## method <- "Peron"
         expect_equal(test, GS, tolerance = 1e-6, scale = 1)
 
         ## *** count pairs
-        tableS <- summary(BT.tte, print = FALSE, percentage = FALSE)$table
-        dt.tableS <- as.data.table(tableS)[strata == "global"]
-        expect_equal(dt.tableS[,total],
-                     unname(dt.tableS[,favorable + unfavorable + neutral + uninf]),
+        tableS <- model.tables(BT.tte, percentage = FALSE)
+        expect_equal(tableS$total,
+                     tableS$favorable + tableS$unfavorable + tableS$neutral + tableS$uninf,
                      tolerance = 1e-1, scale = 1) ## inexact for Peron
                      
     })
@@ -316,10 +313,9 @@ for(method in c("Gehan","Peron")){ ## method <- "Gehan" ## method <- "Peron"
         }
 
         ## *** count pairs
-        tableS <- summary(BT.tte, print = FALSE, percentage = FALSE)$table
-        dt.tableS <- as.data.table(tableS)[strata == "global"]
-        expect_equal(dt.tableS[,total],
-                     unname(dt.tableS[,favorable + unfavorable + neutral + uninf]),
+        tableS <- model.tables(BT.tte, percentage = FALSE)
+        expect_equal(tableS$total,
+                     tableS$favorable + tableS$unfavorable + tableS$neutral + tableS$uninf,
                      tolerance = 1e-1, scale = 1) ## inexact for Peron
     })
 }
@@ -332,14 +328,14 @@ for(method in c("Gehan","Peron")){ ## method <- "Peron"  ## method <- "Gehan"
                             data = dtS.sim, scoring.rule = method)
 
         ## *** test against fixed value
-        test <- list(favorable = as.double(coef(BT.tte, statistic = "count.favorable", stratified = TRUE, cumulative = FALSE)),
-                     unfavorable = as.double(coef(BT.tte, statistic = "count.unfavorable", stratified = TRUE, cumulative = FALSE)),
-                     neutral = as.double(coef(BT.tte, statistic = "count.neutral", stratified = TRUE, cumulative = FALSE)),
-                     uninf = as.double(coef(BT.tte, statistic = "count.uninf", stratified = TRUE, cumulative = FALSE)),
-                     favorable = as.double(coef(BT.tte, statistic = "favorable", stratified = FALSE, cumulative = TRUE)),
-                     unfavorable = as.double(coef(BT.tte, statistic = "unfavorable", stratified = FALSE, cumulative = TRUE)),
-                     netChange = as.double(coef(BT.tte, statistic = "netBenefit", stratified = FALSE, cumulative = TRUE)),
-                     winRatio = as.double(coef(BT.tte, statistic = "winRatio", stratified = FALSE, cumulative = TRUE))
+        test <- list(favorable = as.double(coef(BT.tte, statistic = "count.favorable", strata = TRUE, cumulative = FALSE)),
+                     unfavorable = as.double(coef(BT.tte, statistic = "count.unfavorable", strata = TRUE, cumulative = FALSE)),
+                     neutral = as.double(coef(BT.tte, statistic = "count.neutral", strata = TRUE, cumulative = FALSE)),
+                     uninf = as.double(coef(BT.tte, statistic = "count.uninf", strata = TRUE, cumulative = FALSE)),
+                     favorable = as.double(coef(BT.tte, statistic = "favorable", strata = FALSE, cumulative = TRUE)),
+                     unfavorable = as.double(coef(BT.tte, statistic = "unfavorable", strata = FALSE, cumulative = TRUE)),
+                     netChange = as.double(coef(BT.tte, statistic = "netBenefit", strata = FALSE, cumulative = TRUE)),
+                     winRatio = as.double(coef(BT.tte, statistic = "winRatio", strata = FALSE, cumulative = TRUE))
                      )
 
         
@@ -367,7 +363,7 @@ for(method in c("Gehan","Peron")){ ## method <- "Peron"  ## method <- "Gehan"
         expect_equal(GS, test, tol = 1e-4, scale = 1)
         
         ## *** same result for each pair
-        tableS <- summary(BT.tte, print = FALSE, percentage = FALSE)$table
+        tableS <- model.tables(BT.tte, percentage = FALSE)
         expect_equal(tableS[tableS$strata=="1","Delta"],tableS[tableS$strata=="2","Delta"])
         expect_equal(tableS[tableS$strata=="1","Delta"],tableS[tableS$strata=="3","Delta"])
         expect_equal(tableS[tableS$strata=="1","Delta"],tableS[tableS$strata=="3","Delta"])
@@ -436,11 +432,9 @@ for(method in c("Gehan","Peron")){ ## method <- "Peron" ## method <- "Gehan"
         expect_equal(test, GS, tolerance = 1e-6, scale = 1)
 
         ## *** count pairs
-        tableS <- summary(BT.mixed, print = FALSE, percentage = FALSE)$table
-        dt.tableS <- as.data.table(tableS)[strata == "global"]
-        expect_equal(dt.tableS[,total],
-                     unname(dt.tableS[,favorable + unfavorable + neutral + uninf])
-                     )
+        tableS <- model.tables(BT.mixed, percentage = FALSE)
+        expect_equal(tableS$total,
+                     tableS$favorable + tableS$unfavorable + tableS$neutral + tableS$uninf)
 
     })
 }

@@ -28,7 +28,7 @@ performanceResample(
 
 \item{type.resampling}{[character] Should non-parametric bootstrap (\code{"bootstrap"}) or permutation of the outcome (\code{"permutation"}) be used.}
 
-\item{n.resampling}{[integer,>0] Nnumber of bootstrap samples or permutations.}
+\item{n.resampling}{[integer,>0] Number of bootstrap samples or permutations.}
 
 \item{fold.repetition}{[integer,>0] Nnumber of folds used in the cross-validation. Should be strictly positive.}
 
@@ -36,7 +36,8 @@ performanceResample(
 
 \item{cpus}{[integer, >0] the number of CPU to use. If strictly greater than 1, resampling is perform in parallel.}
 
-\item{seed}{[integer, >0] seed used to ensure reproducibility.}
+\item{seed}{[integer, >0] Random number generator (RNG) state used when starting resampling.
+If \code{NULL} no state is set.}
 
 \item{trace}{[logical] Should the execution of the function be traced.}
 
@@ -44,9 +45,13 @@ performanceResample(
 
 \item{...}{arguments passed to \code{\link{performance}}.}
 }
+\value{
+An S3 object of class \code{performance}.
+}
 \description{
 Use resampling to quantify uncertainties about the performance of one or several binary classifiers evaluated via cross-validation.
 }
 \details{
 WARNING: using bootstrap after cross-validation may not provide valid variance/CI/p-value estimates.
 }
+\keyword{htest}

@@ -43,6 +43,7 @@ GPC_cpp(
   addHalfNeutral,
   keepScore,
   precompute,
+  paired,
   returnIID,
   debug
 )
@@ -85,6 +86,7 @@ GPC2_cpp(
   addHalfNeutral,
   keepScore,
   precompute,
+  paired,
   returnIID,
   debug
 )
@@ -164,6 +166,8 @@ GPC2_cpp(
 
 \item{precompute}{Have the integrals relative to the survival be already computed and stored in list_survTimeC/list_survTimeT and list_survJumpC/list_survJumpT (derivatives)}
 
+\item{paired}{In case of paired data, the variance of the summary statistic across strata will be added to the variance of the pooled statistic.}
+
 \item{returnIID}{Should the iid be computed? Second element: is there any nuisance parameter?}
 
 \item{debug}{Print messages tracing the execution of the function to help debugging. The amount of messages increase with the value of debug (0-5).}
@@ -179,6 +183,4 @@ GPC2_cpp implements GPC looping first over pairs and then over endpoints. It has
 \author{
 Brice Ozenne
 }
-\keyword{BuyseTest}
-\keyword{Cpp}
-\keyword{function}
+\keyword{internal}

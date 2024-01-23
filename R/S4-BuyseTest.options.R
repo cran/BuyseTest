@@ -8,7 +8,7 @@
 #' @seealso 
 #' \code{\link{BuyseTest.options}} to select or update global settings.
 #' 
-#' @keywords classes options BuyseTest.options-class
+#' @keywords classes
 #' @author Brice Ozenne
 
 ## * Class BuyseTest.options
@@ -35,7 +35,7 @@ setClass(
       strata.resampling = "character",
       neutral.as.uninf = "logical",
       add.halfNeutral = "logical",
-      add.1.pperm = "logical",
+      add.1.presample = "logical",
       order.Hprojection = "numeric",
       pool.strata = "character",
       precompute = "logical",

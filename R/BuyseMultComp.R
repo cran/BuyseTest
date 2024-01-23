@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt  4 2021 (16:17) 
 ## Version: 
-## Last-Updated: Mar 20 2023 (12:35) 
+## Last-Updated: jul 17 2023 (17:29) 
 ##           By: Brice Ozenne
-##     Update #: 239
+##     Update #: 294
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -48,7 +48,11 @@
 #'
 #' @details Simulateneous confidence intervals and adjusted p-values are computed using a single-step max-test approach via the function \code{transformCIBP} of the riskRegression package.
 #' This corresponds to the single-step Dunnett described in Dmitrienko et al (2013) in table 2 and section 7.
-#'  
+#'
+#' @return An S3 object of class \code{BuyseMultComp}.
+#' 
+#' @keywords htest
+#' 
 #' @references Dmitrienko, A. and D'Agostino, R., Sr (2013), Traditional multiplicity adjustment methods in clinical trials. Statist. Med., 32: 5172-5218. https://doi.org/10.1002/sim.5990
 #' 
 #' @examples
@@ -65,7 +69,9 @@
 #' confint(BT2, cumulative = FALSE) ## not adjusted
 #' confintAdj <- BuyseMultComp(BT2, cumulative = FALSE, endpoint = 1:2) ## adjusted
 #' confintAdj
-#' cor(confintAdj$iid) ## correlation between test-statistic
+#' if(require(lava)){
+#' cor(lava::iid(confintAdj)) ## correlation between test-statistic
+#' }
 #' 
 #' #### 2- adjustment for multi-arm trial ####
 #' ## case where we have more than two treatment groups
@@ -85,8 +91,9 @@
 #' confintAdj <- BuyseMultComp(list("b-a" = BT1ba, "c-a" = BT1ca, "c-b" = BT1cb),
 #'                             cluster = "id", global = TRUE)
 #' confintAdj
-#' dim(confintAdj$iid) ## number of subjects x number of analyses
-#' cor(confintAdj$iid)
+#' if(require(lava)){
+#' cor(lava::iid(confintAdj))
+#' }
 
 ## * BuyseMultComp (code)
 ##' @rdname BuyseMultComp
@@ -96,13 +103,14 @@ BuyseMultComp <- function(object, cluster = NULL, linfct = NULL, rhs = NULL, end
 
     ## ** normalize arguments
     option <- BuyseTest.options()
-
+    call <- match.call()
     ## object
     if(inherits(object,"S4BuyseTest")){
         test.list <- FALSE
         if(any(object@weightObs!=1)){
             stop("Cannot not currently handle weighted observations. \n") 
         }
+        name.object <- NULL
     }else if(all(sapply(object,inherits,"S4BuyseTest"))){
         n.object <- length(object)
         test.list <- TRUE
@@ -207,14 +215,23 @@ BuyseMultComp <- function(object, cluster = NULL, linfct = NULL, rhs = NULL, end
 
     ## ** extract iid and coefficients
     if(test.list){
-        if(all(duplicated(endpoint)[-1])){
-            iName <- name.object
+        if(is.null(name.object)){
+            iName <- endpoint
         }else{
-            iName <- paste0(name.object,": ",endpoint)
+            if(any(duplicated(name.object))){
+                iName <- paste0(name.object,": ",endpoint)
+            }else{
+                iName <- name.object
+            }
         }
-        vec.beta <- stats::setNames(unlist(lapply(1:n.object, function(iO){coef(object[[iO]], endpoint = endpoint[iO], statistic = statistic, cumulative = cumulative)})), iName)
+        if(any(duplicated(iName))){
+            stop("Duplicated names for the estimates: provide unique name to each element of the list containing the S4BuyseTest objects. \n")
+        }
+        ls.beta <- lapply(1:n.object, function(iO){coef(object[[iO]], endpoint = endpoint[iO], statistic = statistic, cumulative = cumulative, strata = "global")})
+        vec.beta <- stats::setNames(unlist(ls.beta), iName)
+
         ls.iid <- lapply(1:n.object, function(iO){ ## iO <- 1
-            iIID <- do.call(cbind,getIid(object[[iO]], endpoint = endpoint[iO], statistic = statistic, cumulative = cumulative))
+            iIID <- getIid(object[[iO]], endpoint = endpoint[iO], statistic = statistic, cumulative = cumulative, strata = "global", simplify = FALSE)[["global"]]
             colnames(iIID) <- iName[iO]
             return(iIID)
         })
@@ -231,25 +248,59 @@ BuyseMultComp <- function(object, cluster = NULL, linfct = NULL, rhs = NULL, end
             stop("The argument \'cluster\' must be specified to identify the common individuals across the BuyseTest object. \n")
         }else{
             ## retrieve data
-            cluster.var <- cluster
-            cluster <- try(lapply(object, function(iO){as.character(iO@call$data[[cluster.var]]) }), silent = TRUE)
-            if(inherits(cluster, "try-error")){
-                stop("Could not retrieve the column \"cluster\" from the evaluation of the call of the BuyseTest objects. \n")
+            if(is.numeric(cluster)){
+                if(length(unique(sapply(ls.iid,length)))>1){
+                    stop("Argument \'cluster\' cannot be numeric when the BuyseTest are performed on different number of observations. \n",
+                         "Number of observations per BuyseTest: ",paste(sapply(ls.iid,length), collapse = ", "),".\n")
+                }
+                if(any(length(cluster) != length(ls.iid)[[1]])){
+                    stop("Incorrect length for argument \'cluster\': when numeric it should have length the number of observations ",length(ls.iid[[1]]),".\n",
+                         "Current length: ",length(cluster),".\n")
+                }
+                if(any(cluster %in% 1:length(ls.iid[[1]]) == FALSE)){
+                    stop("Incorrect values for argument \'cluster\': when numeric it should takes integer values between 1 and ",length(ls.iid[[1]]),".\n",
+                         "Example of incorrect value: ",cluster[cluster %in% 1:length(ls.iid[[1]]) == FALSE][1],".\n")
+                }
+                cluster <- lapply(1:n.object, function(iO){cluster})
+            }else if(is.list(cluster)){
+                if(any(sapply(cluster,is.numeric) == FALSE)){
+                    stop("When a list, argument \'cluster\' should contain integers indexing the clusters")
+                }
+                if(any(sapply(cluster,length) != sapply(ls.iid,length))){
+                    stop("Incorrect argument \'cluster\': when a list, the length of each element should match the number of observations the BuyseTest.\n",
+                         "Length argument vs. BuyseTest: ",paste(paste(sapply(cluster,length), sapply(ls.iid,length), sep = " vs. "), collapse = ", "),".\n")
+                }
+                if(any(sapply(cluster,max) < 1) || any(unlist(lapply(cluster, `%%`, 1))!=0)){
+                    stop("Incorrect argument \'cluster\': when a list, element should contain integers indexing the clusters.\n")
+                }
+            }else{
+                cluster.var <- cluster
+                cluster <- lapply(object, function(iO){try(as.character(iO@call$data[[cluster.var]]), silent = TRUE) })
+                if(any(sapply(cluster, inherits, "try-error"))){
+                    indexPb <- which(sapply(cluster, inherits, "try-error"))
+                    stop("Could not retrieve the cluster column \"",cluster.var,"\" from the evaluation of the call of the BuyseTest objects. \n",
+                         "Problematic object(s): ",paste(iName[indexPb], collapse = ","),"\n")
+                }
+                if(any(sapply(cluster, length)==0)){
+                    indexPb <- which(sapply(cluster, length)==0)
+                    stop("Could not retrieve the cluster column \"",cluster.var,"\" from the evaluation of the call of the BuyseTest objects. \n",
+                         "Problematic object(s): ",paste(iName[indexPb], collapse = ","),"\n")
+                }
             }
             ## find unique clusters
             Ucluster <- unique(unlist(cluster))
+            cluster.factor <- lapply(cluster, factor, level = Ucluster)
             n.id <- length(Ucluster)
             ## store iid according to the clusters
-            M.iid <- matrix(0, nrow = n.id, ncol = n.object, dimnames = list(NULL, iName))
-            for(iObject in 1:n.object){
-                M.iid[match(cluster[[iObject]],Ucluster),iName[iObject]] <- ls.iid[[iObject]]
+            M.iid <- matrix(0, nrow = n.id, ncol = n.object, dimnames = list(Ucluster, iName))
+            for(iObject in 1:n.object){ ## iObject <- 1
+                M.iid[,iName[iObject]] <- tapply(ls.iid[[iObject]],cluster.factor[[iObject]],sum, default = 0)
             }
         }
     }else{
         iName <- endpoint
-
-        vec.beta <- stats::setNames(coef(object, endpoint = endpoint, statistic = statistic, cumulative = cumulative), iName)
-        M.iid <- do.call(cbind,getIid(object, endpoint = endpoint, statistic = statistic, cumulative = cumulative))
+        vec.beta <- stats::setNames(coef(object, endpoint = endpoint, statistic = statistic, cumulative = cumulative, strata = "global"), iName)
+        M.iid <- getIid(object, endpoint = endpoint, statistic = statistic, cumulative = cumulative, strata = "global")
         colnames(M.iid) <- iName
     }
 
@@ -357,34 +408,69 @@ BuyseMultComp <- function(object, cluster = NULL, linfct = NULL, rhs = NULL, end
                 )
     if(band){
         out$table.uni <- data.frame(estimate = as.double(vec.Cbeta), se = as.double(vec.Cse),
-                          lower.ci = as.double(iBand$lower), upper.ci = as.double(iBand$upper), null = rhs, p.value = as.double(iBand$p.value),
-                          lower.band = as.double(iBand$lowerBand), upper.band = as.double(iBand$upperBand), adj.p.value = as.double(iBand$adj.p.value))
+                                    lower.ci = as.double(iBand$lower), upper.ci = as.double(iBand$upper), null = rhs, p.value = as.double(iBand$p.value),
+                                    lower.band = as.double(iBand$lowerBand), upper.band = as.double(iBand$upperBand), adj.p.value = as.double(iBand$adj.p.value))
     }else{
         out$table.uni <- data.frame(estimate = as.double(vec.Cbeta), se = as.double(vec.Cse),
                                     lower.ci = as.double(iBand$lower), upper.ci = as.double(iBand$upper), null = rhs, p.value = as.double(iBand$p.value),
                                     lower.band = NA, upper.band = NA, adj.p.value = NA)
     }
-    
-    if(test.list){
-        rownames(out$table.uni) <- iName
-    }
+    rownames(out$table.uni) <- iName
     class(out) <- append("BuyseMultComp",class(out))
     return(out)
 }
         
 ## * as.data.frame.BuyseMultComp
+##' @method as.data.frame BuyseMultComp
 ##' @export
 as.data.frame.BuyseMultComp <- function(x, row.names = NULL, optional = FALSE, ...){
     return(as.data.frame(x$table.uni, row.names = row.names, optional = optional, ...))
 }
 
 ## * as.data.table.BuyseMultComp
+##' @method as.data.table BuyseMultComp
 ##' @export
 as.data.table.BuyseMultComp <- function(x, keep.rownames = NULL, ...){
     return(as.data.table(x$table.uni, keep.rownames = keep.rownames, ...))
 }
 
+## * coef.BuyseMultComp
+##' @method coef BuyseMultComp
+##' @export
+coef.BuyseMultComp <- function(object, ...){
+    out <- stats::setNames(object$table.uni$estimate,rownames(object$table.uni))
+    return(out) 
+}
+
+## * confint.BuyseMultComp
+##' @method confint BuyseMultComp
+##' @export
+confint.BuyseMultComp <- function(object, parm, level = 0.95, ...){
+    out <- object$table.uni[,c("estimate","lower.band","upper.band","adj.p.value")]
+    return(out) 
+}
+
+## * iid.BuyseMultComp
+##' @method iid BuyseMultComp
+##' @export
+iid.BuyseMultComp <- function(x, keep.rownames = NULL, ...){
+    return(x$iid)
+}
+
+## * model.tables.BuyseMultComp
+##' @method model.tables BuyseMultComp
+##' @export
+model.tables.BuyseMultComp <- function(x, type = "univariate", ...){
+    type <- match.arg(type, c("univariate","multivariate"))
+    if(type == "univariate"){
+        return(x$table.uni)
+    }else if(type == "multivariate"){
+        return(x$table.multi)
+    }
+}
+
 ## * print.BuyseMultComp
+##' @method print BuyseMultComp
 ##' @export
 print.BuyseMultComp <- function(x, ...){
     dots <- list(...)
@@ -405,5 +491,8 @@ print.BuyseMultComp <- function(x, ...){
     
     return(invisible(NULL))
 }
+
+
+
 ##----------------------------------------------------------------------
 ### multcomp.R ends here

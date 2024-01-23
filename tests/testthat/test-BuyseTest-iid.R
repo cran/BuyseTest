@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jan  8 2019 (11:54) 
 ## Version: 
-## Last-Updated: mar 20 2023 (13:52) 
+## Last-Updated: jul 17 2023 (16:53) 
 ##           By: Brice Ozenne
-##     Update #: 208
+##     Update #: 219
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -33,6 +33,7 @@ coef2 <- function(x){
 BuyseTest.options(check = TRUE,
                   keep.pairScore = FALSE,
                   method.inference = "u-statistic",
+                  pool.strata = "Buyse",
                   trace = 0)
 
 ## * iid average
@@ -117,7 +118,7 @@ d2 <- rbind(cbind(d, strata = 1),
             cbind(d, strata = 3))
 
 test_that("iid: binary with strata (balanced groups)", {
-    for(iOrder in 1:2){ ## iOrder <- 1
+    for(iOrder in 1:2){ ## iOrder <- 2
         BuyseTest.options(order.Hprojection = iOrder)
 
         e.BT <- BuyseTest(group ~ bin(toxicity) + strata,
@@ -147,10 +148,10 @@ test_that("iid: binary with strata (balanced groups)", {
         expect_equal(colSums(riskRegression::colMultiply_cpp(M.estimate,weight)),as.double(coef2(e.BT)))
         expect_equal(colSums(riskRegression::colMultiply_cpp(M.covariance,weight^2)),as.double(e.BT@covariance[,c(1:2,4)]))
         expect_equal(
-            rowSums(getIid(e.BT, statistic = "netBenefit", scale = FALSE, center = FALSE, stratified = TRUE)),
+            rowSums(getIid(e.BT, statistic = "netBenefit", scale = FALSE, center = FALSE, strata = TRUE)),
             as.double(unlist(lapply(ls.BT, getIid, statistic = "netBenefit", scale = FALSE, center = FALSE)))
         )
-        ## getIid(e.BT, statistic = "netBenefit", scale = FALSE, center = FALSE, stratified = TRUE)
+        ## getIid(e.BT, statistic = "netBenefit", scale = FALSE, center = FALSE, strata = TRUE)
         ## getIid(ls.BT[[1]], statistic = "netBenefit", scale = FALSE, center = FALSE)
         ## getIid(ls.BT[[2]], statistic = "netBenefit", scale = FALSE, center = FALSE)
 
@@ -200,7 +201,7 @@ test_that("iid: binary and strata (unbalanced groups)", {
         expect_equal(colSums(riskRegression::colMultiply_cpp(M.estimate,weight)),as.double(coef2(e.BT)))
         expect_equal(colSums(riskRegression::colMultiply_cpp(M.covariance,weight^2)),as.double(e.BT@covariance[,c(1:2,4)]))
         expect_equal(
-            rowSums(getIid(e.BT, statistic = "netBenefit", scale = FALSE, center = FALSE, stratified = TRUE)),
+            rowSums(getIid(e.BT, statistic = "netBenefit", scale = FALSE, center = FALSE, strata = TRUE)),
             as.double(unlist(lapply(ls.BT, getIid, statistic = "netBenefit", scale = FALSE, center = FALSE)))
         )
 
@@ -218,7 +219,7 @@ test_that("iid: binary and strata (unbalanced groups)", {
 ## ** 1 continuous variable
 n <- 5
 set.seed(10)
-dt <- simBuyseTest(n)
+dt <- simBuyseTest(n, name.cluster = NULL)
 
 dtS <- rbind(cbind(S = 1, dt), cbind(S = 2, dt), cbind(S = 3, dt))
 dtS$score1 <- dtS$score
@@ -256,8 +257,11 @@ test_that("Manual calculation of second order H projection (no strata)",{
     dt.pair[, H2.unfavorable := unfavorable - H1C.unfavorable - H1T.unfavorable]
 
     ## check H1
-    expect_true(all(abs(dt.pair[!duplicated(index.C),.(H1C.favorable/.N,H1C.unfavorable/.N)]-getIid(e.BT_c3, statistic = c("favorable","unfavorable"))[1:n,])<1e-6))
-    expect_true(all(abs(dt.pair[!duplicated(index.T),.(H1T.favorable/.N,H1T.unfavorable/.N)]-getIid(e.BT_c3, statistic = c("favorable","unfavorable"))[(n+1):(2*n),])<1e-6))
+    expect_true(all(abs(dt.pair[!duplicated(index.C),H1C.favorable/.N]-getIid(e.BT_c3, statistic = "favorable")[1:n])<1e-6))
+    expect_true(all(abs(dt.pair[!duplicated(index.C),H1C.unfavorable/.N]-getIid(e.BT_c3, statistic = "unfavorable")[1:n])<1e-6))
+
+    expect_true(all(abs(dt.pair[!duplicated(index.T),H1T.favorable/.N]-getIid(e.BT_c3, statistic = "favorable")[n+(1:n)])<1e-6))
+    expect_true(all(abs(dt.pair[!duplicated(index.T),H1T.unfavorable/.N]-getIid(e.BT_c3, statistic = "unfavorable")[n+(1:n)])<1e-6))
         
     ## check H2
     manual <- dt.pair[,.(favorable = var2(H2.favorable)/.N,
@@ -296,8 +300,11 @@ test_that("Manual calculation of second order H projection (strata)",{
     dt.pair[, H2.unfavorable := unfavorable - H1C.unfavorable - H1T.unfavorable]
 
     ## check H1
-    expect_true(all(abs(dt.pair[!duplicated(index.C),.(H1C.favorable/.N,H1C.unfavorable/.N)]-getIid(e.BT_c3, statistic = c("favorable","unfavorable"))[which(dtS$treatment=="C"),])<1e-6))
-    expect_true(all(abs(dt.pair[!duplicated(index.T),.(H1T.favorable/.N,H1T.unfavorable/.N)]-getIid(e.BT_c3, statistic = c("favorable","unfavorable"))[which(dtS$treatment=="T"),])<1e-6))
+    expect_true(all(abs(dt.pair[!duplicated(index.C),H1C.favorable/.N]-getIid(e.BT_c3, statistic = "favorable")[which(dtS$treatment=="C")])<1e-6))
+    expect_true(all(abs(dt.pair[!duplicated(index.C),H1C.unfavorable/.N]-getIid(e.BT_c3, statistic = "unfavorable")[which(dtS$treatment=="C")])<1e-6))
+
+    expect_true(all(abs(dt.pair[!duplicated(index.T),H1T.favorable/.N]-getIid(e.BT_c3, statistic = "favorable")[which(dtS$treatment=="T")])<1e-6))
+    expect_true(all(abs(dt.pair[!duplicated(index.T),H1T.unfavorable/.N]-getIid(e.BT_c3, statistic = "unfavorable")[which(dtS$treatment=="T")])<1e-6))
         
     ## check H2
     manual <- dt.pair[,.(favorable = var2(H2.favorable)/.N,
@@ -506,10 +513,11 @@ test_that("iid: two endpoints (strata)", {
         
         expect_equal(Reduce("+",lapply(1:length(weight), function(iS){ls.estimate[[iS]]*weight[iS]})),coef2(e.BT), tol = 1e-7)
         expect_equal(Reduce("+",lapply(1:length(weight), function(iS){ls.covariance[[iS]]*weight[iS]^2})),e.BT@covariance[,c(1:2,4)])
+
         
         expect_equal(
-            rowSums(getIid(e.BT, statistic = "netBenefit", scale = FALSE, center = FALSE, stratified = TRUE)),
-            as.double(unlist(lapply(ls.BT, getIid, statistic = "netBenefit", scale = FALSE, center = FALSE)))
+            Reduce("+",getIid(e.BT, statistic = "netBenefit", scale = FALSE, center = FALSE, strata = TRUE)),
+            do.call(rbind,lapply(ls.BT, getIid, statistic = "netBenefit", scale = FALSE, center = FALSE))
         )
 
         if(iOrder==1){
@@ -532,7 +540,7 @@ test_that("cluster option", {
                        data = dtS,
                        method.inference = "u-statistic")
 
-    expect_equal(getIid(e.BT),getIid(e3.BT, cluster = dtS$id), tol = 1e-6)
+    expect_equal(unname(getIid(e.BT)),unname(getIid(e3.BT, cluster = dtS$id)), tol = 1e-6)
     expect_equivalent(as.data.frame(confint(e.BT)),
                       as.data.frame(confint(e3.BT, cluster = dtS$id)), tol = 1e-6)
 })
@@ -637,16 +645,12 @@ test_that("iid with nuisance parameters: 1 TTE + 1 binary",{
                              method.inference = "u-statistic")
 
     test <- confint(e.BT_ttebin)
-    attr(test,"n.resampling") <- NULL
-    attr(test,"iid") <- NULL
-    attr(test,"transform") <- NULL
-    attr(test,"backtransform") <- NULL
     GS <- matrix(c(-0.33333333, -0.13333333, 0.24130536, 0.36004622, -0.70573842, -0.69241599, 0.18339631, 0.52579681, 0, 0, 0.20172157, 0.7144262), 
                  nrow = 2, 
                  ncol = 6, 
                  dimnames = list(c("eventtime_t1", "toxicity"),c("estimate", "se", "lower.ci", "upper.ci","null", "p.value")) 
                  ) 
-    expect_equal(test, as.data.frame(GS), tol = 1e-6)
+    expect_equivalent(test, as.data.frame(GS), tol = 1e-6)
 
     ## exponential approximation of the survival when computing the influence function
     e.TTEM <- BuyseTTEM(Hist(eventtime,status)~treatment, data = dt, iid=TRUE, iid.surv="prodlim")
@@ -659,16 +663,12 @@ test_that("iid with nuisance parameters: 1 TTE + 1 binary",{
                              method.inference = "u-statistic")
 
     test <- confint(e.BT_ttebin)
-    attr(test,"n.resampling") <- NULL
-    attr(test,"iid") <- NULL
-    attr(test,"transform") <- NULL
-    attr(test,"backtransform") <- NULL
     GS <- matrix(c(-0.33333333, -0.13333333, 0.23587679, 0.35518499, -0.69967949, -0.68733243, 0.17180423, 0.51874253, 0, 0, 0.19153767, 0.71069249), 
                  nrow = 2, 
                  ncol = 6, 
                  dimnames = list(c("eventtime_t1", "toxicity"),c("estimate", "se", "lower.ci", "upper.ci", "null","p.value")) 
                  ) 
-    expect_equal(test, as.data.frame(GS), tol = 1e-6)
+    expect_equivalent(test, as.data.frame(GS), tol = 1e-6)
 
     ## GS <- BuyseTest(treatment ~ tte(eventtime, status, threshold = 1) + bin(toxicity),
                     ## data = dt, 
@@ -713,17 +713,13 @@ test_that("iid with nuisance parameters: 2 TTE",{
                           data = dt.sim,
                           method.inference = "u-statistic")
     test <- confint(e.BT_tte)
-    attr(test,"n.resampling") <- NULL
-    attr(test,"iid") <- NULL
-    attr(test,"transform") <- NULL
-    attr(test,"backtransform") <- NULL
     GS <- matrix(c(0.26401345, 0.179801, 0.00853608, 0.19937703, 0.2148585, 0.2408939, -0.14852611, -0.24811831, -0.43304747, 0.59828277, 0.54900838, 0.4468153, 0, 0, 0, 0.20703017, 0.41296871, 0.97173422), 
                  nrow = 3, 
                  ncol = 6, 
                  dimnames = list(c("eventtime1_t1", "eventtime2_t1", "toxicity1"),c("estimate", "se", "lower.ci", "upper.ci", "null", "p.value")) 
                  ) 
 
-    expect_equal(test, as.data.frame(GS), tol = 1e-3)
+    expect_equivalent(test, as.data.frame(GS), tol = 1e-3)
 
     ## exponential approximation of the survival when computing the influence function
     e.TTEM <- list(BuyseTTEM(Hist(eventtime1,status1)~treatment, data = dt.sim, iid=TRUE, iid.surv="prodlim"),
@@ -735,17 +731,13 @@ test_that("iid with nuisance parameters: 2 TTE",{
                           model.tte = e.TTEM,
                           method.inference = "u-statistic")
     test <- confint(e.BT_tte)
-    attr(test,"n.resampling") <- NULL
-    attr(test,"iid") <- NULL
-    attr(test,"transform") <- NULL
-    attr(test,"backtransform") <- NULL
     GS <- matrix(c(0.26401345, 0.179801, 0.00853608, 0.17433724, 0.19140473, 0.21888023, -0.09657678, -0.20304112, -0.39734512, 0.5633411, 0.51495999, 0.41162398, 0, 0, 0, 0.14902033, 0.35809689, 0.96889279), 
                  nrow = 3, 
                  ncol = 6, 
                  dimnames = list(c("eventtime1_t1", "eventtime2_t1", "toxicity1"),c("estimate", "se", "lower.ci", "upper.ci", "null", "p.value")) 
                  ) 
 
-    expect_equal(test, as.data.frame(GS), tol = 1e-3)
+    expect_equivalent(test, as.data.frame(GS), tol = 1e-3)
 })
 
 
@@ -773,7 +765,7 @@ test_that("iid with nuisance parameters: 1 TTE + strata",{
     expect_equal(colSums(riskRegression::colMultiply_cpp(M.estimate,weight)),as.double(coef2(e.BT_tteS)))
     expect_equal(colSums(riskRegression::colMultiply_cpp(M.covariance,weight^2)),as.double(e.BT_tteS@covariance[,c(1:2,4)]))
 
-    test <- rowSums(getIid(e.BT_tteS, statistic = "netBenefit", scale = FALSE, center = FALSE, stratified = TRUE))
+    test <- rowSums(getIid(e.BT_tteS, statistic = "netBenefit", scale = FALSE, center = FALSE, strata = TRUE))
     GS <- unlist(lapply(ls.BT_tteS, getIid, statistic = "netBenefit", scale = FALSE, center = FALSE))
     expect_equal(test[unlist(split(1:NROW(dt.sim),dt.sim$toxicity1))], unname(GS), tol = 1e-7)
 })
@@ -795,8 +787,8 @@ test_that("iid - remove normalization", {
                           data = dt[strata=="a"], trace = 0)
     ## summary(e.strata)
 
-    iid.all <- getIid(e.all, scale = FALSE, center = FALSE, stratified = TRUE)[which(dt$strata=="a"),"a"]
-    iid.strata <- as.double(getIid(e.strata, scale = FALSE, center = FALSE))
+    iid.all <- getIid(e.all, scale = FALSE, center = FALSE, strata = "a")[which(dt$strata=="a"),"score"]
+    iid.strata <- as.double(getIid(e.strata, scale = FALSE, center = FALSE)[,"score"])
     
     expect_equal(unname(iid.all),unname(iid.strata), tol = 1e-9)
     GS <- c(0.37313, -0.70149, 0.40299, -0.13433, -0.76119, 0.43284, 0.28358, -0.79104, -0.73134, 0.28358, -0.43284, -0.13433, -0.16418, -0.22388, -0.31343, -0.67164, -0.97015, 0.43284, 0.28358, -0.64179, -0.9403, 0.19403, 0.43284, 0.01493, -0.91045, -0.13433, 0.04478, 0.52239, 0.91045, 0.10448, 0.07463, 0.40299, 0.28358, -0.43284, 0.07463, -0.79104, -0.73134, 0.07463, -0.64179, -0.67164, 0.64179, -0.22388, -0.76119, 1, -0.34328, 0.70149, -0.31343, -0.58209, -0.49254, -0.58209, -0.31343, 0.49254, 0.43284, -0.73134, 0.22388, 0.91045, 0.73134, 0.28358, 0.49254, 0.70149, -0.07463, 0.43284, -0.61194, -0.8806, 0.91045, -0.2, -0.01538, 0.32308, -0.96923, -0.84615, -0.41538, -0.96923, 0.66154, -0.66154, 0.13846, 0.38462, -0.72308, -0.75385, 0.41538, -0.75385, 0.2, 0.81538, -0.87692, -0.26154, 0.38462, 0.32308, 1, -0.23077, -0.41538, -0.78462, -0.07692, 0.50769, 0.41538, -0.96923, -0.87692, 0.90769, 0.93846, -0.16923, -0.26154, 0.75385, 0.13846, -0.01538, 0.10769, -0.01538, -0.87692, 0.41538, -0.66154, -0.75385, 0.01538, 0.63077, 0.32308, 0.29231, 0.2, -0.78462, 0.87692, 0.87692, 0.47692, -0.41538, 0.56923, -0.2, 0.96923, 0.87692, -0.44615, 0.2, -0.2, -0.50769, -0.87692, 0.01538, -0.87692, -0.87692, -0.75385, -0.04615)

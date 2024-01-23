@@ -8,7 +8,7 @@
 #' \code{\link{BuyseTest}} for the function computing generalized pairwise comparisons. \cr
 #' \code{\link{S4BuyseTest-summary}} for the summary of the BuyseTest function results
 #' 
-#' @keywords classes S4BuyseTest-class
+#' @keywords classes
 #' @author Brice Ozenne
 
 ## * Class S4BuyseTest
@@ -51,6 +51,7 @@ setClass(
       weightStrataResampling = "array",
       iidAverage = "list",
       iidNuisance = "list",
+      seed = "numeric",
       tablePairScore = "list",
       tableSurvival = "list"
       )
@@ -86,13 +87,14 @@ methods::setMethod(
                                    endpoint,
                                    level.strata,
                                    level.treatment,
-                                   scoring.rule,
+                                   scoring.rule, paired,
                                    hierarchical,
                                    neutral.as.uninf,
                                    add.halfNeutral,
                                    correction.uninf,
                                    method.inference,
                                    method.score,
+                                   seed,
                                    strata,
                                    threshold,
                                    restriction,
@@ -104,8 +106,8 @@ methods::setMethod(
                                    deltaResampling = NULL, ## from inferenceResampling
                                    DeltaResampling = NULL, ## from inferenceResampling
                                    weightStrataResampling = NULL, ## from inferenceResampling
-                                   covarianceResampling = NULL, ## from inferenceResampling
-                                   args){
+                                   covarianceResampling = NULL ## from inferenceResampling
+                                   ){
 
                  name.endpoint <- paste0(endpoint,ifelse(!is.na(restriction),paste0("_r",restriction),""),ifelse(threshold>1e-12,paste0("_t",threshold),""))
 
@@ -190,6 +192,8 @@ methods::setMethod(
                  attr(method.score, "test.censoring") <- NULL
                  attr(scoring.rule,"test.CR") <- attr(method.score, "test.CR")
                  attr(method.score, "test.CR") <- NULL
+                 attr(scoring.rule,"test.paired") <- paired
+                 attr(method.score, "test.paired") <- NULL
                  attr(scoring.rule,"method.score") <- stats::setNames(method.score, name.endpoint)
 
                  ## ** hierarchical
@@ -219,7 +223,7 @@ methods::setMethod(
 
                  ## ** weightStrata
                  weightStrata <- as.double(weightStrata)
-                 attr(weightStrata,"type") <- attr(pool.strata,"original")
+                 attr(weightStrata,"type") <- attr(pool.strata,"type")
 
                  ## ** n.resampling
                  if(!is.null(deltaResampling)){                     
@@ -272,7 +276,10 @@ methods::setMethod(
                  .Object@weightEndpoint <- weightEndpoint
                  .Object@weightStrata <- weightStrata
                  .Object@n.resampling <- n.resampling
-                 
+                 if(!missing(seed)){
+                     .Object@seed <- seed
+                 }
+
                  ## *** optional information
                  ## resampling
                  if(!is.null(deltaResampling)){

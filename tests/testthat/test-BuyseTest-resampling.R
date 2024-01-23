@@ -3,9 +3,9 @@
 ## author: Brice
 ## created: maj 12 2017 (14:34) 
 ## Version: 
-## last-updated: Mar 13 2023 (09:32) 
+## last-updated: sep 15 2023 (16:33) 
 ##           By: Brice Ozenne
-##     Update #: 190
+##     Update #: 209
 #----------------------------------------------------------------------
 ## 
 ### Commentary: Check 
@@ -27,7 +27,8 @@ BuyseTest.options(check = TRUE,
                   keep.pairScore = TRUE,
                   keep.survival = FALSE,
                   order.Hprojection = 1,
-                  add.1.pperm = FALSE,
+                  add.1.presample = FALSE,
+                  pool.strata = "Buyse",
                   trace = 0)
 n.patients <- 100
 method <- "Peron"
@@ -48,9 +49,9 @@ test_that("permutation", {
                          method.inference = "studentized permutation", n.resampling = 5)
 
     ## ** summary (two.sided)
-    outSummaryPerc <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "two.sided", method.ci.resampling = "percentile", transform = FALSE))
-    outSummaryStud <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "two.sided", method.ci.resampling = "studentized", transform = FALSE))
-    ## summary(BT.perm)
+    outSummaryPerc <- suppressWarnings(model.tables(BT.perm, alternative = "two.sided", method.ci.resampling = "percentile", transform = FALSE))
+    outSummaryStud <- suppressWarnings(model.tables(BT.perm, alternative = "two.sided", method.ci.resampling = "studentized", transform = FALSE))
+    ## outSummaryPerc
     ##       Generalized pairwise comparisons with 2 prioritized endpoints
 
     ## > statistic       : net benefit (delta: endpoint specific, Delta: global) 
@@ -68,45 +69,40 @@ test_that("permutation", {
     
     p.value <- c(mean(abs(BT.perm@Delta[1,"netBenefit"]/sqrt(BT.perm@covariance[1,"netBenefit"])) <= abs(BT.perm@DeltaResampling[,1,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,1,"netBenefit"]))),
                  mean(abs(BT.perm@Delta[2,"netBenefit"]/sqrt(BT.perm@covariance[2,"netBenefit"])) <= abs(BT.perm@DeltaResampling[,2,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,2,"netBenefit"]))))
-    expect_equal(outSummaryStud$table[outSummaryStud$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryStud$p.value, p.value)
 
     p.value <- c(mean(abs(BT.perm@Delta[1,"netBenefit"]) <= abs(BT.perm@DeltaResampling[,1,"netBenefit"])),
                  mean(abs(BT.perm@Delta[2,"netBenefit"]) <= abs(BT.perm@DeltaResampling[,2,"netBenefit"])))
-    expect_equal(outSummaryPerc$table[outSummaryPerc$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryPerc$p.value, p.value)
        
     ## ** summary (greater)
-    outSummaryPerc <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "greater", method.ci.resampling = "percentile"))
-    outSummaryStud <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "greater", method.ci.resampling = "studentized"))
+    outSummaryPerc <- suppressWarnings(model.tables(BT.perm, alternative = "greater", method.ci.resampling = "percentile"))
+    outSummaryStud <- suppressWarnings(model.tables(BT.perm, alternative = "greater", method.ci.resampling = "studentized"))
     
     p.value <- c(mean(BT.perm@Delta[1,"netBenefit"]/sqrt(BT.perm@covariance[1,"netBenefit"]) <= BT.perm@DeltaResampling[,1,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,1,"netBenefit"])),
                  mean(BT.perm@Delta[2,"netBenefit"]/sqrt(BT.perm@covariance[2,"netBenefit"]) <= BT.perm@DeltaResampling[,2,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,2,"netBenefit"])))
-    expect_equal(outSummaryStud$table[outSummaryStud$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryStud$p.value, p.value)
 
     p.value <- c(mean(BT.perm@Delta[1,"netBenefit"] <= BT.perm@DeltaResampling[,1,"netBenefit"]),
                  mean(BT.perm@Delta[2,"netBenefit"] <= BT.perm@DeltaResampling[,2,"netBenefit"]))
-    expect_equal(outSummaryPerc$table[outSummaryPerc$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryPerc$p.value, p.value)
 
     ## ** summary (less)
-    outSummaryPerc <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "less", method.ci.resampling = "percentile"))
-    outSummaryStud <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "less", method.ci.resampling = "studentized"))
+    outSummaryPerc <- suppressWarnings(model.tables(BT.perm, alternative = "less", method.ci.resampling = "percentile"))
+    outSummaryStud <- suppressWarnings(model.tables(BT.perm, alternative = "less", method.ci.resampling = "studentized"))
     
     p.value <- c(mean(BT.perm@Delta[1,"netBenefit"]/sqrt(BT.perm@covariance[1,"netBenefit"]) >= BT.perm@DeltaResampling[,1,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,1,"netBenefit"])),
                  mean(BT.perm@Delta[2,"netBenefit"]/sqrt(BT.perm@covariance[2,"netBenefit"]) >= BT.perm@DeltaResampling[,2,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,2,"netBenefit"])))
-    expect_equal(outSummaryStud$table[outSummaryStud$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryStud$p.value, p.value)
 
     p.value <- c(mean(BT.perm@Delta[1,"netBenefit"] >= BT.perm@DeltaResampling[,1,"netBenefit"]),
                  mean(BT.perm@Delta[2,"netBenefit"] >= BT.perm@DeltaResampling[,2,"netBenefit"]))
-    expect_equal(outSummaryPerc$table[outSummaryPerc$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryPerc$p.value, p.value)
     
     ## ** check permutation
-    set.seed(10)
+    vec.seed <- BT.perm@seed
     for(iResample in 1:2){ ## iResample <- 1
+        set.seed(vec.seed[iResample])
         dt.perm <- copy(dt.sim)
 
         dt.perm[, treatment := treatment[sample.int(.N, size = .N, replace = FALSE)] ]
@@ -137,8 +133,8 @@ test_that("stratified permutation", {
                          method.inference = "studentized permutation", n.resampling = 5)
 
     ## ** summary (two.sided)
-    outSummaryPerc <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "two.sided", method.ci.resampling = "percentile", transform = FALSE))
-    outSummaryStud <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "two.sided", method.ci.resampling = "studentized", transform = FALSE))
+    outSummaryPerc <- suppressWarnings(model.tables(BT.perm, alternative = "two.sided", method.ci.resampling = "percentile", transform = FALSE))
+    outSummaryStud <- suppressWarnings(model.tables(BT.perm, alternative = "two.sided", method.ci.resampling = "studentized", transform = FALSE))
     ##       Generalized pairwise comparisons with 2 prioritized endpoints and 3 strata
 
     ## > statistic       : net benefit (delta: endpoint specific, Delta: global) 
@@ -163,45 +159,40 @@ test_that("stratified permutation", {
 
     p.value <- c(mean(abs(BT.perm@Delta[1,"netBenefit"]/sqrt(BT.perm@covariance[1,"netBenefit"])) <= abs(BT.perm@DeltaResampling[,1,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,1,"netBenefit"]))),
                  mean(abs(BT.perm@Delta[2,"netBenefit"]/sqrt(BT.perm@covariance[2,"netBenefit"])) <= abs(BT.perm@DeltaResampling[,2,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,2,"netBenefit"]))))
-    expect_equal(outSummaryStud$table[outSummaryStud$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryStud[outSummaryStud$strata == "global","p.value"], p.value)
 
     p.value <- c(mean(abs(BT.perm@Delta[1,"netBenefit"]) <= abs(BT.perm@DeltaResampling[,1,"netBenefit"])),
                  mean(abs(BT.perm@Delta[2,"netBenefit"]) <= abs(BT.perm@DeltaResampling[,2,"netBenefit"])))
-    expect_equal(outSummaryPerc$table[outSummaryPerc$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryPerc[outSummaryPerc$strata=="global","p.value"], p.value)
 
     ## ** summary (greater)
-    outSummaryPerc <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "greater", method.ci.resampling = "percentile"))
-    outSummaryStud <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "greater", method.ci.resampling = "studentized"))
+    outSummaryPerc <- suppressWarnings(model.tables(BT.perm, alternative = "greater", method.ci.resampling = "percentile"))
+    outSummaryStud <- suppressWarnings(model.tables(BT.perm, alternative = "greater", method.ci.resampling = "studentized"))
     
     p.value <- c(mean(BT.perm@Delta[1,"netBenefit"]/sqrt(BT.perm@covariance[1,"netBenefit"]) <= BT.perm@DeltaResampling[,1,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,1,"netBenefit"])),
                  mean(BT.perm@Delta[2,"netBenefit"]/sqrt(BT.perm@covariance[2,"netBenefit"]) <= BT.perm@DeltaResampling[,2,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,2,"netBenefit"])))
-    expect_equal(outSummaryStud$table[outSummaryStud$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryStud[outSummaryStud$strata=="global","p.value"], p.value)
 
     p.value <- c(mean(BT.perm@Delta[1,"netBenefit"] <= BT.perm@DeltaResampling[,1,"netBenefit"]),
                  mean(BT.perm@Delta[2,"netBenefit"] <= BT.perm@DeltaResampling[,2,"netBenefit"]))
-    expect_equal(outSummaryPerc$table[outSummaryPerc$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryPerc[outSummaryPerc$strata=="global","p.value"], p.value)
 
     ## ** summary (less)
-    outSummaryPerc <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "less", method.ci.resampling = "percentile"))
-    outSummaryStud <- suppressWarnings(summary(BT.perm, print = FALSE, alternative = "less", method.ci.resampling = "studentized"))
+    outSummaryPerc <- suppressWarnings(model.tables(BT.perm, alternative = "less", method.ci.resampling = "percentile"))
+    outSummaryStud <- suppressWarnings(model.tables(BT.perm, alternative = "less", method.ci.resampling = "studentized"))
     
     p.value <- c(mean(BT.perm@Delta[1,"netBenefit"]/sqrt(BT.perm@covariance[1,"netBenefit"]) >= BT.perm@DeltaResampling[,1,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,1,"netBenefit"])),
                  mean(BT.perm@Delta[2,"netBenefit"]/sqrt(BT.perm@covariance[2,"netBenefit"]) >= BT.perm@DeltaResampling[,2,"netBenefit"]/sqrt(BT.perm@covarianceResampling[,2,"netBenefit"])))
-    expect_equal(outSummaryStud$table[outSummaryStud$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryStud[outSummaryStud$strata=="global","p.value"], p.value)
 
     p.value <- c(mean(BT.perm@Delta[1,"netBenefit"] >= BT.perm@DeltaResampling[,1,"netBenefit"]),
                  mean(BT.perm@Delta[2,"netBenefit"] >= BT.perm@DeltaResampling[,2,"netBenefit"]))
-    expect_equal(outSummaryPerc$table[outSummaryPerc$table$strata=="global","p.value"],
-                 p.value)
+    expect_equal(outSummaryPerc[outSummaryPerc$strata=="global","p.value"], p.value)
     
     ## ** check permutation
-    set.seed(10)
-    for(iResample in 1:2){ ## iResample <- 1 
+    vec.seed <- BT.perm@seed
+    for(iResample in 1:2){ ## iResample <- 1
+        set.seed(vec.seed[iResample])
         dt.perm <- copy(dt.sim)
         dt.perm[, treatment := treatment[sample.int(.N, size = .N, replace = FALSE)]]
 
@@ -225,8 +216,8 @@ test_that("stratified permutation", {
                               data = dt.sim, scoring.rule = method, seed = 10, 
                               method.inference = "studentized permutation", strata.resampling = strataVar, n.resampling = 5)
 
-        set.seed(10)
         for(iResample in 1:2){ ## iResample <- 1 
+            set.seed(vec.seed[iResample])
             dt.perm2 <- copy(dt.sim)
             setkeyv(dt.perm2, cols = strataVar)
             dt.perm2[, treatment := treatment[sample.int(.N, size = .N, replace = FALSE)], by = strataVar]
@@ -257,8 +248,8 @@ test_that("Bootstrap", {
     
     ## ** summary (two.sided)
     ## warnings because too few bootstrap samples
-    outSummaryPerc <- suppressWarnings(summary(BT.boot, print = FALSE, alternative = "two.sided", method.ci.resampling = "percentile", transform = FALSE))
-    outSummaryStud <- suppressWarnings(summary(BT.boot, print = FALSE, alternative = "two.sided", method.ci.resampling = "studentized", transform = FALSE))
+    outSummaryPerc <- suppressMessages(model.tables(BT.boot, alternative = "two.sided", method.ci.resampling = "percentile", transform = FALSE))
+    outSummaryStud <- suppressMessages(model.tables(BT.boot, alternative = "two.sided", method.ci.resampling = "studentized", transform = FALSE))
     ## summary(BT.boot)
     ##     Generalized pairwise comparisons with 2 prioritized endpoints
 
@@ -276,49 +267,49 @@ test_that("Bootstrap", {
     ##  toxicity1       0.5    57.22        10.92          17.62      28.68        0 -0.0670 -0.0774     0.5  [-0.2693;0.0596]
 
     CI <- t(apply(BT.boot@DeltaResampling[,,"netBenefit"], 2, quantile, probs = c(0.025, 0.975)))
-    expect_equal(as.double(unlist(outSummaryPerc$table[outSummaryPerc$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryPerc[,c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
 
-    qz <- t(apply(apply(BT.boot@DeltaResampling[,,"netBenefit"],2,scale,scale=FALSE)/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = c(0.025, 0.975)))
+    qz <- t(apply(sweep(BT.boot@DeltaResampling[,,"netBenefit"], MARGIN = 2, FUN = "-", STATS = coef(BT.boot))/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = c(0.025, 0.975)))
     CI <- cbind(BT.boot@Delta[,"netBenefit"] + sqrt(BT.boot@covariance[,"netBenefit"]) * qz[,1],
                 BT.boot@Delta[,"netBenefit"] + sqrt(BT.boot@covariance[,"netBenefit"]) * qz[,2])
-    
-    expect_equal(as.double(unlist(outSummaryStud$table[outSummaryStud$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryStud[,c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
     
     ## ** greater
     ## warnings because too few bootstrap samples
-    outSummaryPerc <- suppressWarnings(summary(BT.boot, print = FALSE, alternative = "greater", method.ci.resampling = "percentile", transform = FALSE))
-    outSummaryStud <- suppressWarnings(summary(BT.boot, print = FALSE, alternative = "greater", method.ci.resampling = "studentized", transform = FALSE))
+    outSummaryPerc <- suppressMessages(model.tables(BT.boot, alternative = "greater", method.ci.resampling = "percentile", transform = FALSE))
+    outSummaryStud <- suppressMessages(model.tables(BT.boot, alternative = "greater", method.ci.resampling = "studentized", transform = FALSE))
 
     CI <- cbind(apply(BT.boot@DeltaResampling[,,"netBenefit"], 2, quantile, probs = c(0.05)), Inf)
-    expect_equal(as.double(unlist(outSummaryPerc$table[outSummaryPerc$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryPerc[,c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
 
-    qz <- apply(apply(BT.boot@DeltaResampling[,,"netBenefit"],2,scale,scale=FALSE)/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = 0.05)
+    qz <- apply(sweep(BT.boot@DeltaResampling[,,"netBenefit"], MARGIN = 2, FUN = "-", STATS = coef(BT.boot))/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = 0.05)
     CI <- cbind(BT.boot@Delta[,"netBenefit"] + sqrt(BT.boot@covariance[,"netBenefit"]) * qz, Inf)
-    
-    expect_equal(as.double(unlist(outSummaryStud$table[outSummaryStud$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryStud[,c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
 
     ## ** lower
     ## warnings because too few bootstrap samples
-    outSummaryPerc <- suppressWarnings(summary(BT.boot, print = FALSE, alternative = "less", method.ci.resampling = "percentile", transform = FALSE))
-    outSummaryStud <- suppressWarnings(summary(BT.boot, print = FALSE, alternative = "less", method.ci.resampling = "studentized", transform = FALSE))
+    outSummaryPerc <- suppressMessages(model.tables(BT.boot, alternative = "less", method.ci.resampling = "percentile", transform = FALSE))
+    outSummaryStud <- suppressMessages(model.tables(BT.boot, alternative = "less", method.ci.resampling = "studentized", transform = FALSE))
 
     CI <- cbind(-Inf, apply(BT.boot@DeltaResampling[,,"netBenefit"], 2, quantile, probs = c(0.95)))
-    expect_equal(as.double(unlist(outSummaryPerc$table[outSummaryPerc$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryPerc[,c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
 
-    qz <- apply(apply(BT.boot@DeltaResampling[,,"netBenefit"],2,scale,scale=FALSE)/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = 0.95)
+    qz <- apply(sweep(BT.boot@DeltaResampling[,,"netBenefit"], MARGIN = 2, FUN = "-", STATS = coef(BT.boot))/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = 0.95)
     CI <- cbind(-Inf, BT.boot@Delta[,"netBenefit"] + sqrt(BT.boot@covariance[,"netBenefit"]) * qz)
     
-    expect_equal(as.double(unlist(outSummaryStud$table[outSummaryStud$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryStud[,c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
     
     ## ** check bootstrap
-    set.seed(10)
+    vec.seed <- BT.boot@seed
+
     for(iResample in 1:2){ ## iResample <- 1
+        set.seed(vec.seed[iResample])
         dt.boot <- dt.sim[sample.int(.N, size = .N, replace = TRUE)]
 
         iBT.boot <- BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 1) + bin(toxicity1),
@@ -346,8 +337,8 @@ test_that("stratified bootstrap", {
                          method.inference = "studentized bootstrap", n.resampling = 10)
     
     ## ** summary (two.sided)
-    outSummaryPerc <- summary(BT.boot, print = FALSE, alternative = "two.sided", method.ci.resampling = "percentile", transform = FALSE)
-    outSummaryStud <- summary(BT.boot, print = FALSE, alternative = "two.sided", method.ci.resampling = "studentized", transform = FALSE)
+    outSummaryPerc <- suppressMessages(model.tables(BT.boot, alternative = "two.sided", method.ci.resampling = "percentile", transform = FALSE))
+    outSummaryStud <- suppressMessages(model.tables(BT.boot, alternative = "two.sided", method.ci.resampling = "studentized", transform = FALSE))
     ## summary(BT.boot)
     ##       Generalized pairwise comparisons with 2 prioritized endpoints and 3 strata
 
@@ -371,47 +362,48 @@ test_that("stratified bootstrap", {
     ##                           1    25.66         4.64           8.63      12.39     0.00 -0.1151                                  
     ##                           2    17.42         3.93           4.36       9.13     0.00 -0.0138                                  
     CI <- t(apply(BT.boot@DeltaResampling[,,"netBenefit"], 2, quantile, probs = c(0.025, 0.975)))
-    expect_equal(as.double(unlist(outSummaryPerc$table[outSummaryPerc$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryPerc[outSummaryPerc$strata=="global",c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
 
-    qz <- t(apply(apply(BT.boot@DeltaResampling[,,"netBenefit"],2,scale,scale=FALSE)/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = c(0.025, 0.975)))
+    qz <- t(apply(sweep(BT.boot@DeltaResampling[,,"netBenefit"], MARGIN = 2, FUN = "-", STATS = coef(BT.boot))/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = c(0.025, 0.975)))
     CI <- cbind(BT.boot@Delta[,"netBenefit"] + sqrt(BT.boot@covariance[,"netBenefit"]) * qz[,1],
                 BT.boot@Delta[,"netBenefit"] + sqrt(BT.boot@covariance[,"netBenefit"]) * qz[,2])
-    
-    expect_equal(as.double(unlist(outSummaryStud$table[outSummaryStud$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryStud[outSummaryStud$strata=="global",c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
     
     ## ** greater
-    outSummaryPerc <- summary(BT.boot, print = FALSE, alternative = "greater", method.ci.resampling = "percentile", transform = FALSE)
-    outSummaryStud <- summary(BT.boot, print = FALSE, alternative = "greater", method.ci.resampling = "studentized", transform = FALSE)
+    outSummaryPerc <- suppressMessages(model.tables(BT.boot, alternative = "greater", method.ci.resampling = "percentile", transform = FALSE))
+    outSummaryStud <- suppressMessages(model.tables(BT.boot, alternative = "greater", method.ci.resampling = "studentized", transform = FALSE))
 
     CI <- cbind(apply(BT.boot@DeltaResampling[,,"netBenefit"], 2, quantile, probs = c(0.05)), Inf)
-    expect_equal(as.double(unlist(outSummaryPerc$table[outSummaryPerc$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryPerc[outSummaryPerc$strata=="global",c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
 
-    qz <- apply(apply(BT.boot@DeltaResampling[,,"netBenefit"],2,scale,scale=FALSE)/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = 0.05)
+    qz <- apply(sweep(BT.boot@DeltaResampling[,,"netBenefit"], MARGIN = 2, FUN = "-", STATS = coef(BT.boot))/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = 0.05)
     CI <- cbind(BT.boot@Delta[,"netBenefit"] + sqrt(BT.boot@covariance[,"netBenefit"]) * qz, Inf)
     
-    expect_equal(as.double(unlist(outSummaryStud$table[outSummaryStud$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryStud[outSummaryStud$strata=="global",c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
 
     ## ** lower
-    outSummaryPerc <- summary(BT.boot, print = FALSE, alternative = "less", method.ci.resampling = "percentile", transform = FALSE)
-    outSummaryStud <- summary(BT.boot, print = FALSE, alternative = "less", method.ci.resampling = "studentized", transform = FALSE)
+    outSummaryPerc <- suppressMessages(model.tables(BT.boot, alternative = "less", method.ci.resampling = "percentile", transform = FALSE))
+    outSummaryStud <- suppressMessages(model.tables(BT.boot, alternative = "less", method.ci.resampling = "studentized", transform = FALSE))
 
     CI <- cbind(-Inf, apply(BT.boot@DeltaResampling[,,"netBenefit"], 2, quantile, probs = c(0.95)))
-    expect_equal(as.double(unlist(outSummaryPerc$table[outSummaryPerc$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryPerc[outSummaryPerc$strata=="global",c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
 
-    qz <- apply(apply(BT.boot@DeltaResampling[,,"netBenefit"],2,scale,scale=FALSE)/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = 0.95)
+    qz <- apply(sweep(BT.boot@DeltaResampling[,,"netBenefit"], MARGIN = 2, FUN = "-", STATS = coef(BT.boot))/sqrt(BT.boot@covarianceResampling[,,"netBenefit"]), 2, quantile, probs = 0.95)
     CI <- cbind(-Inf, BT.boot@Delta[,"netBenefit"] + sqrt(BT.boot@covariance[,"netBenefit"]) * qz)
     
-    expect_equal(as.double(unlist(outSummaryStud$table[outSummaryStud$table$strata=="global",c("CIinf.Delta","CIsup.Delta")])),
+    expect_equal(as.double(unlist(outSummaryStud[outSummaryStud$strata=="global",c("lower.ci","upper.ci")])),
                  as.double(CI), tol = 1e-6)
     
     ## ** check bootstrap
-    set.seed(10)
+    vec.seed <- BT.boot@seed
+
     for(iResample in 1:2){ ## iResample <- 1
+        set.seed(vec.seed[iResample])
         dt.boot <- dt.sim[sample.int(.N, size = .N, replace = TRUE)]
 
         iBT.boot <- BuyseTest(treatment ~ tte(eventtime1, status1, threshold = 1) + bin(toxicity1) + strata,
@@ -435,8 +427,8 @@ test_that("stratified bootstrap", {
                               data = dt.sim, scoring.rule = method, seed = 10, 
                               method.inference = "studentized bootstrap", strata.resampling = strataVar, n.resampling = 10)
 
-        set.seed(10)
         for(iResample in 1:2){ ## iResample <- 1
+        set.seed(vec.seed[iResample])
             dt.boot2 <- copy(dt.sim)
             setkeyv(dt.boot2, cols = strataVar)
             dt.boot2 <- dt.boot2[,.SD[sample.int(.N, size = .N, replace = TRUE)], by = strataVar]
@@ -491,11 +483,11 @@ test_that("compare with t-test (two.sided)", {
     res.tt <- t.test(y = df[df$Group=="T","score"], x = df[df$Group=="C","score"], alternative = "two.sided")
 
     ls.res <- list(perm = suppressWarnings(confint(e.perm, alternative = "two.sided")),
-                   percboot = confint(e.boot, alternative = "two.sided", method.ci.resampling = "percentile"),
-                   gausboot = confint(e.boot, alternative = "two.sided", method.ci.resampling = "gaussian", transformation = FALSE),
-                   gausboot.trans = confint(e.boot, alternative = "two.sided", method.ci.resampling = "gaussian", transformation = TRUE),
-                   studboot = confint(e.boot, alternative = "two.sided", method.ci.resampling = "studentized", transformation = FALSE),
-                   studboot.trans = confint(e.boot, alternative = "two.sided", method.ci.resampling = "studentized", transformation = TRUE),
+                   percboot = suppressMessages(confint(e.boot, alternative = "two.sided", method.ci.resampling = "percentile")),
+                   gausboot = suppressMessages(confint(e.boot, alternative = "two.sided", method.ci.resampling = "gaussian", transformation = FALSE)),
+                   gausboot.trans = suppressMessages(confint(e.boot, alternative = "two.sided", method.ci.resampling = "gaussian", transformation = TRUE)),
+                   studboot = suppressMessages(confint(e.boot, alternative = "two.sided", method.ci.resampling = "studentized", transformation = FALSE)),
+                   studboot.trans = suppressMessages(confint(e.boot, alternative = "two.sided", method.ci.resampling = "studentized", transformation = TRUE)),
                    ustat = confint(e.ustat, alternative = "two.sided", transformation = FALSE),
                    ustat.trans = confint(e.ustat, alternative = "two.sided", transformation = TRUE)
                    )
@@ -509,15 +501,18 @@ test_that("compare with t-test (two.sided)", {
     ## same variance for studentized bootstrap and asymptotic 
     expect_true(all(abs(diff(M.res[c("studboot","studboot.trans","ustat","ustat.trans"),"se"])<1e-6)))
     ## lower.ci smaller than upper ci
-    expect_true(all(M.res[,"lower.ci"]<M.res[,"upper.ci"]))
+    expect_true(all(is.na(M.res[1,c("lower.ci","upper.ci")])))
+    expect_true(all(M.res[-1,"lower.ci"]<M.res[-1,"upper.ci"]))
     ## check values
     ## butils::object2script(M.res, digits = 6)
-    GS <- matrix(c(-0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, 0.145434, 0.147342, 0.147342, 0.147342, 0.145434, 0.145434, 0.145434, 0.145434, -0.657594, -0.665138, -0.699984, -0.66126, -0.745069, -0.632558, -0.696245, -0.652766, -0.095572, -0.067126, -0.122416, -0.078896, -0.126607, -0.057924, -0.126155, -0.093729, 0.01, 0, 0.005258, 0.01672, 0, 0.01, 0.004693, 0.012523), 
-                 nrow = 8, 
-                 ncol = 5, 
-                 dimnames = list(c("perm", "percboot", "gausboot", "gausboot.trans", "studboot", "studboot.trans", "ustat", "ustat.trans"),c("estimate", "se", "lower.ci", "upper.ci", "p.value")) 
-                 ) 
-    ## expect_equal(GS, M.res, tol = 1e-4)
+    GS <- data.frame("estimate" = c(-0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112), 
+                     "se" = c(0.14543358, 0.15109607, 0.15109607, 0.15109607, 0.14543358, 0.14543358, 0.14543358, 0.14543358), 
+                     "lower.ci" = c(NA, -0.65632966, -0.70734285, -0.6657388, -0.70907164, -0.6244038, -0.69624457, -0.65276625), 
+                     "upper.ci" = c(NA, -0.02091063, -0.11505715, -0.07093912, -0.07297107, -0.00322604, -0.12615543, -0.09372943), 
+                     "null" = c(0, 0, 0, 0, 0, 0, 0, 0), 
+                     "p.value" = c(0.01, 0.03, 0.00649967, 0.01925831, 0, 0.04, 0.00469266, 0.01252311))
+
+    expect_equivalent(GS, M.res, tol = 1e-4)
 })
 
 ## ** confint (greater)
@@ -526,11 +521,11 @@ test_that("compare with t-test (greater)", {
     res.tt <- t.test(y = df[df$Group=="T","score"], x = df[df$Group=="C","score"], alternative = "greater")
 
     ls.res <- list(perm = suppressWarnings(confint(e.perm, alternative = "greater")),
-                   percboot = confint(e.boot, alternative = "greater", method.ci.resampling = "percentile"),
-                   gausboot = confint(e.boot, alternative = "greater", method.ci.resampling = "gaussian", transformation = FALSE),
-                   gausboot.trans = confint(e.boot, alternative = "greater", method.ci.resampling = "gaussian", transformation = TRUE),
-                   studboot = confint(e.boot, alternative = "greater", method.ci.resampling = "studentized", transformation = FALSE),
-                   studboot.trans = confint(e.boot, alternative = "greater", method.ci.resampling = "studentized", transformation = TRUE),
+                   percboot = suppressMessages(confint(e.boot, alternative = "greater", method.ci.resampling = "percentile")),
+                   gausboot = suppressMessages(confint(e.boot, alternative = "greater", method.ci.resampling = "gaussian", transformation = FALSE)),
+                   gausboot.trans = suppressMessages(confint(e.boot, alternative = "greater", method.ci.resampling = "gaussian", transformation = TRUE)),
+                   studboot = suppressMessages(confint(e.boot, alternative = "greater", method.ci.resampling = "studentized", transformation = FALSE)),
+                   studboot.trans = suppressMessages(confint(e.boot, alternative = "greater", method.ci.resampling = "studentized", transformation = TRUE)),
                    ustat = confint(e.ustat, alternative = "greater", transformation = FALSE),
                    ustat.trans = confint(e.ustat, alternative = "greater", transformation = TRUE)
                    )
@@ -545,18 +540,20 @@ test_that("compare with t-test (greater)", {
     ## same variance for studentized bootstrap and asymptotic 
     expect_true(all(abs(diff(M.res[c("studboot","studboot.trans","ustat","ustat.trans"),"se"])<1e-6)))
     ## lower.ci smaller than upper ci
-    expect_true(all(M.res[,"lower.ci"]<M.res[,"upper.ci"]))
+    expect_true(all(is.na(M.res[1,c("lower.ci","upper.ci")])))
+    expect_true(all(M.res[-1,"lower.ci"]<M.res[-1,"upper.ci"]))
     ## upper ci
     expect_true(all(M.res[grep("trans",rownames(M.res)),"upper.ci"]==1))
     expect_true(all(is.infinite(M.res[-grep("trans|perm",rownames(M.res)),"upper.ci"])))
     ## check values
     ## butils::object2script(M.res, digits = 6)
-    GS <- matrix(c(-0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, 0.145434, 0.147342, 0.147342, 0.147342, 0.145434, 0.145434, 0.145434, 0.145434, -0.636778, -0.622851, -0.653555, -0.627628, -0.685803, -0.606192, -0.650417, -0.619966, 1, Inf, Inf, 1, Inf, 1, Inf, 1, 1, 1, 0.997371, 0.99164, 0.995, 0.995, 0.997654, 0.993738), 
-                 nrow = 8, 
-                 ncol = 5, 
-                 dimnames = list(c("perm", "percboot", "gausboot", "gausboot.trans", "studboot", "studboot.trans", "ustat", "ustat.trans"),c("estimate", "se", "lower.ci", "upper.ci", "p.value")) 
-                 )
-    ## expect_equal(GS, M.res, tol = 1e-5)
+    GS <- data.frame("estimate" = c(-0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112), 
+                     "se" = c(0.14543358, 0.15109607, 0.15109607, 0.15109607, 0.14543358, 0.14543358, 0.14543358, 0.14543358), 
+                     "lower.ci" = c(NA, -0.62211538, -0.65973091, -0.6316809, -0.66549951, -0.60288984, -0.65041694, -0.61996641), 
+                     "upper.ci" = c(NA, Inf, Inf, 1, Inf, 1, Inf, 1), 
+                     "null" = c(0, 0, 0, 0, 0, 0, 0, 0), 
+                     "p.value" = c(0.995, 0.985, 0.99675016, 0.99037084, 1, 0.98, 0.99765367, 0.99373845))
+    expect_equivalent(GS, M.res, tol = 1e-4)
 })
 
 ## ** confint (less)
@@ -565,11 +562,11 @@ test_that("compare with t-test (less)", {
     res.tt <- t.test(y = df[df$Group=="T","score"], x = df[df$Group=="C","score"], alternative = "less")
 
     ls.res <- list(perm = suppressWarnings(confint(e.perm, alternative = "less")),
-                   percboot = confint(e.boot, alternative = "less", method.ci.resampling = "percentile"),
-                   gausboot = confint(e.boot, alternative = "less", method.ci.resampling = "gaussian", transformation = FALSE),
-                   gausboot.trans = confint(e.boot, alternative = "less", method.ci.resampling = "gaussian", transformation = TRUE),
-                   studboot = confint(e.boot, alternative = "less", method.ci.resampling = "studentized", transformation = FALSE),
-                   studboot.trans = confint(e.boot, alternative = "less", method.ci.resampling = "studentized", transformation = TRUE),
+                   percboot = suppressMessages(confint(e.boot, alternative = "less", method.ci.resampling = "percentile")),
+                   gausboot = suppressMessages(confint(e.boot, alternative = "less", method.ci.resampling = "gaussian", transformation = FALSE)),
+                   gausboot.trans = suppressMessages(confint(e.boot, alternative = "less", method.ci.resampling = "gaussian", transformation = TRUE)),
+                   studboot = suppressMessages(confint(e.boot, alternative = "less", method.ci.resampling = "studentized", transformation = FALSE)),
+                   studboot.trans = suppressMessages(confint(e.boot, alternative = "less", method.ci.resampling = "studentized", transformation = TRUE)),
                    ustat = confint(e.ustat, alternative = "less", transformation = FALSE),
                    ustat.trans = confint(e.ustat, alternative = "less", transformation = TRUE)
                    )
@@ -584,17 +581,19 @@ test_that("compare with t-test (less)", {
     ## same variance for studentized bootstrap and asymptotic 
     expect_true(all(abs(diff(M.res[c("studboot","studboot.trans","ustat","ustat.trans"),"se"])<1e-6)))
     ## lower.ci smaller than upper ci
-    expect_true(all(M.res[,"lower.ci"]<M.res[,"upper.ci"]))
+    expect_true(all(is.na(M.res[1,c("lower.ci","upper.ci")])))
+    expect_true(all(M.res[-1,"lower.ci"]<M.res[-1,"upper.ci"]))
     ## lower ci
     expect_true(all(M.res[grep("trans",rownames(M.res)),"lower.ci"]==-1))
     expect_true(all(is.infinite(M.res[-grep("trans|perm",rownames(M.res)),"lower.ci"])))
     ## check values
     ## butils::object2script(M.res, digits = 6)
-    GS <- matrix(c(-0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, 0.145434, 0.147342, 0.147342, 0.147342, 0.145434, 0.145434, 0.145434, 0.145434, -1, -Inf, -Inf, -1, -Inf, -1, -Inf, -1, -0.138781, -0.157787, -0.168845, -0.135772, -0.19426, -0.144137, -0.171983, -0.148062, 0, 0, 0.002629, 0.00836, 0, 0.005, 0.002346, 0.006262), 
-                 nrow = 8, 
-                 ncol = 5, 
-                 dimnames = list(c("perm", "percboot", "gausboot", "gausboot.trans", "studboot", "studboot.trans", "ustat", "ustat.trans"),c("estimate", "se", "lower.ci", "upper.ci", "p.value")) 
-                 )
-    ## expect_equal(GS, M.res, tol = 1e-5)
+    GS <- data.frame("estimate" = c(-0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112, -0.4112), 
+           "se" = c(0.14543358, 0.15109607, 0.15109607, 0.15109607, 0.14543358, 0.14543358, 0.14543358, 0.14543358), 
+           "lower.ci" = c(NA, -Inf, -Inf, -1, -Inf, -1, -Inf, -1), 
+           "upper.ci" = c(NA, -0.15025183, -0.16266909, -0.1291752, -0.18137423, -0.14017782, -0.17198306, -0.14806218), 
+           "null" = c(0, 0, 0, 0, 0, 0, 0, 0), 
+           "p.value" = c(0.005, 0.015, 0.00324984, 0.00962916, 0, 0.02, 0.00234633, 0.00626155))
+    expect_equivalent(GS, M.res, tol = 1e-4)
 })
 
