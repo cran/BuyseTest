@@ -4,7 +4,7 @@
 ## Created: maj 19 2018 (23:37) 
 ## Version: 
 ##           By: Brice Ozenne
-##     Update #: 1103
+##     Update #: 1224
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -136,9 +136,6 @@ setMethod(f = "confint",
               if(is.null(statistic)){
                   statistic <- option$statistic
               }
-              if(is.null(transformation)){
-                  transformation <- option$transformation
-              }
               if(is.null(conf.level)){
                   if(!attr(method.inference,"permutation")){
                       conf.level <- option$conf.level
@@ -186,6 +183,7 @@ setMethod(f = "confint",
                                refuse.NULL = TRUE,
                                refuse.duplicates = TRUE,
                                method = "autoplot[S4BuyseTest]")
+                  strata <- level.strata[strata]
               }else{
                   validCharacter(strata,
                                  name1 = "strata",
@@ -200,8 +198,10 @@ setMethod(f = "confint",
 
               ## method.ci
               if(attr(method.inference,"permutation") || attr(method.inference,"bootstrap")){
-                  if(is.null(method.ci.resampling)){                  
-                      if(attr(method.inference,"studentized")){
+                  if(is.null(method.ci.resampling)){
+                      if(method.inference == "varexact permutation"){
+                          method.ci.resampling <- "gaussian"
+                      }else if(attr(method.inference,"studentized")){
                           method.ci.resampling <- "studentized"
                       }else{
                           method.ci.resampling <- "percentile"
@@ -216,6 +216,9 @@ setMethod(f = "confint",
                                  refuse.NULL = FALSE,                             
                                  method = "confint[S4BuyseTest]")
 
+                  if(method.ci.resampling != "gaussian" && method.inference == "varexact permutation"){
+                      stop("Argument \'method.ci.resampling\' must be set to \'gaussian\' if argument \'method.inference\' has been set to \"varexact permutation\" when calling BuyseTest. \n")
+                  }
                   if(method.ci.resampling == "studentized" && !attr(method.inference,"studentized")){
                       stop("Argument \'method.ci.resampling\' cannot be set to \'studentized\' unless a studentized bootstrap/permutation has been performed.\n",
                            "Consider setting \'method.ci.resampling\' to \"percentile\" or \"gaussian\" \n",
@@ -226,8 +229,24 @@ setMethod(f = "confint",
                            "Consider applying the BuyseTest function separately to each endpoint \n",
                            "or set \'method.inference\' to \"studentized bootstrap\" or \"studentized permutation\" when calling BuyseTest. \n")
                   }
-              }else if(!is.null(method.ci.resampling)){
-                  warning("Argument \'method.ci.resampling\' is disregarded when not using resampling\n")                  
+                  if(is.null(transformation)){
+                      if(method.ci.resampling=="percentile" || method.inference == "varexact permutation"){
+                          transformation <- FALSE ## ensures consistency between p-values for different statistics as transformation may lead to numerical unaccuracies when comparing resampling to observed
+                      }else{
+                          transformation <- option$transformation
+                      }
+                  }else if(transformation && method.inference == "varexact permutation"){
+                      transformation <- FALSE
+                      message("Argument \'transformation\' has been set to FALSE. \n",
+                              "Transformation is not available if argument \'method.inference\' has been set to \"varexact permutation\" when calling BuyseTest. \n")
+                  }              
+              }else{
+                  if(is.null(transformation)){
+                      transformation <- option$transformation
+                  }              
+                  if(!is.null(method.ci.resampling)){
+                      warning("Argument \'method.ci.resampling\' is disregarded when not using resampling\n")                  
+                  }
               }
               if(attr(method.inference,"studentized") && (any(strata != "global") || (cumulative!=TRUE)) ){
                   stop("Can only perform statistical inference based on studentized resampling for global cumulative effects. \n",
@@ -303,7 +322,7 @@ setMethod(f = "confint",
               
               ## safety
               test.model.tte <- all(unlist(lapply(object@iidNuisance,dim))==0)
-              if(method.inference %in% c("u-statistic","u-statistic-bebu") && object@correction.uninf > 0){
+              if(method.inference %in% c("u statistic","u statistic bebu") && object@correction.uninf > 0){
                   warning("The current implementation of the asymptotic distribution is not valid when using a correction. \n",
                           "Standard errors / confidence intervals / p-values may not be correct. \n",
                           "Consider using a resampling approach or checking the control of the type 1 error with powerBuyseTest. \n")
@@ -325,7 +344,7 @@ setMethod(f = "confint",
                   Delta <- stats::setNames(DeltaL$statistic, paste(DeltaL$time, DeltaL$strata, sep = sep))
               }
 
-              if(attr(method.inference,"permutation") || attr(method.inference,"bootstrap")){
+              if(((attr(method.inference,"permutation") && method.inference != "varexact permutation")) || attr(method.inference,"bootstrap")){
                   DeltaW.resampling <- coef(object, endpoint = endpoint, statistic = statistic, strata = strata, cumulative = cumulative, resampling = TRUE, simplify = FALSE)
                   if(length(strata)==1 && all(strata=="global")){
                       Delta.resampling <- matrix(DeltaW.resampling[,"global",], ncol = length(endpoint), dimnames = list(NULL, endpoint))
@@ -371,7 +390,29 @@ setMethod(f = "confint",
                       Delta.se.resampling <- NULL
                   }
               }else{
-                  Delta.se <- NULL
+                  if(!is.null(cluster)){
+                      message("BuyseTest: argument \'cluster\' ignored when evaluating uncertainty with resampling methods. \n")
+                  }
+                      
+                  if(method.inference == "varexact permutation"){
+                      if(statistic == "winRatio"){
+                          stop("BuyseTest: cannot evaluate the exact variance of the permutation distribution for the win ratio. \n",
+                               "Consider using the net benefit instead (argument statistic = \"netBenefit\"). \n")
+                      }
+                      if(cumulative == FALSE){
+                          stop("BuyseTest: cannot evaluate the exact variance of the permutation distribution for each endpoint separately. \n",
+                               "Consider setting the argument \'cumulative\' to TRUE. \n")
+                      }
+                      if((length(strata)==1 && all(strata=="global"))){
+                          Delta.se <- sqrt(object@covariance[endpoint,statistic])
+                      }else{
+                          Delta.se <- unlist(stats::setNames(lapply(endpoint, function(iE){ ## iE <- endpoint[1]
+                              c("global" = sqrt(object@covariance[iE,statistic]), sqrt(attr(object@covariance,"strata")[[iE]][,statistic]))[strata]
+                          }),endpoint))
+                      }
+                  }else{
+                      Delta.se <- NULL
+                  }
                   Delta.se.resampling <- NULL
               }
 
@@ -382,13 +423,13 @@ setMethod(f = "confint",
                   null <- switch(statistic,
                                  "netBenefit" = 0,
                                  "winRatio" = 1,
-                                 "favorable" = 1/2,
-                                 "unfavorable" = 1/2)
+                                 "favorable" = ifelse(add.halfNeutral,1/2,NA),
+                                 "unfavorable" = ifelse(add.halfNeutral,1/2,NA))
               }else {
                   validNumeric(null, valid.length = 1,
                                refuse.NA = !attr(method.inference,"permutation"),
-                               min = if("statistic"=="netBenefit"){-1}else{0},
-                               max = if("statistic"=="winRatio"){Inf}else{1})
+                               min = if(statistic=="netBenefit"){-1}else{0},
+                               max = if(statistic=="winRatio"){Inf}else{1})
               }
               null <- rep(null, length(Delta))
 
@@ -396,6 +437,8 @@ setMethod(f = "confint",
               if(method.inference == "none"){
                   method.confint <- confint_none
                   transformation <- FALSE
+              }else if(method.inference == "varexact permutation"){
+                  method.confint <- confint_varexactPermutation
               }else if(attr(method.inference,"ustatistic")){
                   method.confint <- confint_Ustatistic
               }else if(attr(method.inference,"permutation")){
@@ -537,6 +580,11 @@ setMethod(f = "confint",
               }
 
               ## ** compute the confidence intervals
+              if(statistic=="winRatio" && transformation==FALSE){
+                  attr(null, "type")  <- "relative"
+              }else{
+                  attr(null, "type")  <- "absolute"
+              }
               outConfint <- do.call(method.confint,
                                     args = list(Delta = trans.delta(Delta),
                                                 Delta.resampling = trans.delta(Delta.resampling),
@@ -557,7 +605,7 @@ setMethod(f = "confint",
               outConfint <- as.data.frame(outConfint)
 
               ## ** number of permutations
-              if(method.inference != "none" && (attr(method.inference,"permutation") || attr(method.inference,"bootstrap"))){
+              if(method.inference != "none" && ((attr(method.inference,"permutation") && (method.inference!="varexact permutation")) || attr(method.inference,"bootstrap"))){
                   attr(outConfint, "n.resampling")  <- colSums(!is.na(Delta.resampling))
               }else{
                   attr(outConfint, "n.resampling")  <- stats::setNames(rep(as.numeric(NA), D), all.endpoint)
@@ -623,15 +671,28 @@ confint_percentilePermutation <- function(Delta, Delta.resampling,
     ## ** p-value
     add.1 <- BuyseTest.options()$add.1.presample
     outTable[,"p.value"] <- sapply(1:n.endpoint, FUN = function(iE){ ## iE <- 1
-        test.alternative <- switch(alternative, # test whether each sample is has a cumulative proportions in favor of treatment more extreme than the point estimate
-                                   "two.sided" = abs(Delta[iE] - null[iE]) <= abs(Delta.resampling[,iE] - null[iE]),
-                                   "less" = Delta[iE] >= Delta.resampling[,iE],
-                                   "greater" = Delta[iE] <= Delta.resampling[,iE]
-                                   )
+        ## rounding is here to mitigate p-value mismatch between netBenefit and winRatio due to finite numeric precision
+        
+        if(alternative == "two.sided"){
+            if(attr(null,"type")=="relative"){ ## win ratio without transformation
+                ## H0 WR=1 so if hat(WR)=3/2 more extreme is above 3/2 or below 2/3
+                test.alternative <- round(pmax(Delta.resampling[,iE]/null,null/Delta.resampling[,iE]),10)/round(max(Delta[iE]/null,null/Delta[iE]),10) >= 1
+                ## test.alternative <- abs(log(Delta[iE]/null)) <= abs(log(Delta.resampling[,iE]/null)) ## try to avoid log-transformation
+            }else if(attr(null,"type")=="absolute"){
+                test.alternative <- round(abs(Delta[iE]-null),10) <= round(abs(Delta.resampling[,iE]-null),10)
+            }
+
+        }else{
+            test.alternative <- switch(alternative, 
+                                       "less" = round(Delta[iE],10) >= round(Delta.resampling[,iE],10),
+                                       "greater" = round(Delta[iE],10) <= round(Delta.resampling[,iE],10)
+                                       )
+        }
+
         p.alternative <- (add.1 + sum(test.alternative, na.rm = TRUE)) / (add.1 + sum(!is.na(test.alternative), na.rm = TRUE))
         return(p.alternative)        
     })
-    
+
     ## ** export
     return(outTable)
 }
@@ -700,18 +761,29 @@ confint_gaussian <- function(Delta, Delta.resampling,
     outTable[,"estimate"] <- backtransform.delta(Delta)
 
     ## ** standard error
-    Delta.se <- apply(Delta.resampling, MARGIN = 2, FUN = stats::sd, na.rm = TRUE) ## computed based on the sample
-    if(any(is.infinite(Delta.resampling))){
-        if(abs(Delta!=outTable[,"estimate"])>1e-12){
-            warning("Infinite value for the summary statistic after transformation in some of the bootstrap samples. \n",
-                    "Cannot compute confidence intervals or p-value under Gaussian approximation. \n",
-                    "Consider setting the argument \'transform\' to FALSE. \n")
-        }else{
-            warning("Infinite value for the summary statistic in some of the bootstrap samples. \n",
-                    "Cannot compute confidence intervals or p-value under Gaussian approximation. \n")
-        }
-    }
     outTable[,"se"] <- apply(backtransform.delta(Delta.resampling), MARGIN = 2, FUN = stats::sd, na.rm = TRUE)
+
+    if(any(is.infinite(Delta.resampling))){
+        txt.range <- NULL
+        pc.infinite <- 100*mean(is.infinite(Delta.resampling))
+        if(any(Delta.resampling[is.infinite(Delta.resampling)]>0)){
+            Delta.resampling.max <- max(Delta.resampling[!is.infinite(Delta.resampling)])
+            if(Delta.resampling.max<0){Delta.resampling.max <- 1}
+            txt.range <- paste(txt.range, signif(Delta.resampling.max), collapse = " and ")
+            Delta.resampling[is.infinite(Delta.resampling) & Delta.resampling > 0] <- 1.1*Delta.resampling.max
+        }
+        if(any(Delta.resampling[is.infinite(Delta.resampling)]<0)){
+            Delta.resampling.min <- min(Delta.resampling[!is.infinite(Delta.resampling)])
+            if(Delta.resampling.min>0){Delta.resampling.min <- -1}
+            txt.range <- paste(txt.range, signif(Delta.resampling.min), collapse = " and ")
+            Delta.resampling[is.infinite(Delta.resampling) & Delta.resampling < 0] <- 1.1*Delta.resampling.min
+        }
+
+        warning("Infinite statistic value after transformation in ",round(pc.infinite,2),"% of the bootstrap samples. \n",
+                "Will be set to",txt.range," when evaluating CIs or p-value under Gaussian approximation. \n",
+                "(110% of the most extreme, non-infinite, value or +/- 1 if not finite value of the same sign)", sep = "")
+    }
+    Delta.se <- apply(Delta.resampling, MARGIN = 2, FUN = stats::sd, na.rm = TRUE) ## computed based on the sample
 
     ## ** confidence interval
     if(!is.na(alpha)){
@@ -760,12 +832,6 @@ confint_studentPermutation <- function(Delta, Delta.se, Delta.resampling, Delta.
     ## ** standard error
     outTable[,"se"] <- backtransform.se(Delta, se = Delta.se)
 
-    ## ** null
-    if(any(is.na(null))){
-        null[is.na(null)] <- apply(Delta.resampling,2,stats::median)[is.na(null)]
-    }
-    outTable[,"null"] <- backtransform.delta(null)
-
     ## ** critical quantile
     if(!is.na(alpha) && length(index.var)>0){
         
@@ -794,26 +860,39 @@ confint_studentPermutation <- function(Delta, Delta.se, Delta.resampling, Delta.
         outTable[index.novar,"upper.ci"] <- backtransform.delta(Delta[index.novar])
     }
     
+    ## ** null
+    if(any(is.na(null))){
+        null[is.na(null)] <- apply(Delta.resampling,2,stats::median)[is.na(null)]
+    }
+    outTable[,"null"] <- backtransform.delta(null)
+
     ## ** p.value
-    add.1 <- BuyseTest.options()$add.1.presample
+
     if(length(index.var)>0){
+        add.1 <- BuyseTest.options()$add.1.presample
         Delta.stat <- (Delta-null)/Delta.se
         Delta.stat.resampling <- (Delta.resampling-null)/Delta.se.resampling
+        if(any(is.infinite(Delta.resampling))){
+            Delta.stat.resampling[is.infinite(Delta.resampling)] <- Delta.resampling[is.infinite(Delta.resampling)]
+        }
         outTable[index.var,"p.value"] <- sapply(index.var, FUN = function(iE){ ## iE <- 1
-            test.alternative <- switch(alternative, # test whether each sample is has a cumulative proportions in favor of treatment more extreme than the point estimate
-                                       "two.sided" = abs(Delta.stat[iE]) <= abs(Delta.stat.resampling[,iE]),
-                                       "less" = Delta.stat[iE] >= Delta.stat.resampling[,iE],
-                                       "greater" = Delta.stat[iE] <= Delta.stat.resampling[,iE]
+
+            ## rounding is here to mitigate p-value mismatch between netBenefit and winRatio due to finite numeric precision
+            test.alternative <- switch(alternative,
+                                       "two.sided" = round(abs(Delta.stat[iE]),10) <= round(abs(Delta.stat.resampling[,iE]),10),
+                                       "less" = round(Delta.stat[iE],10) >= round(Delta.stat.resampling[,iE],10),
+                                       "greater" = round(Delta.stat[iE],10) <= round(Delta.stat.resampling[,iE],10)
                                        )
-            p.alternative <- (add.1 + sum(test.alternative, na.rm = TRUE)) / (add.1 + sum(!is.na(test.alternative), na.rm = TRUE))
+
+            p.alternative <- (add.1 + sum(test.alternative, na.rm = TRUE)) / (add.1 + sum(!is.na(test.alternative)))
             return(p.alternative)        
         })
     }
-
-    if(length(index.novar)>0){
-        outTable[index.novar,c("p.value")] <- 1
-    }
     
+    if(length(index.novar)>0){
+        outTable[index.novar,"p.value"] <- as.numeric(abs(outTable[index.novar,"estimate"]-outTable[index.novar,"null"])<1e-10)
+    }
+
     ## ** export
     return(outTable)
 
@@ -847,7 +926,6 @@ confint_studentBootstrap <- function(Delta, Delta.se, Delta.resampling, Delta.se
         ## Delta.statH0.resampling <- apply(Delta.resampling[,index.var,drop=FALSE], MARGIN = 2, FUN = scale, scale = FALSE, center = TRUE)/Delta.se.resampling[,index.var,drop=FALSE]  
 
         if(!is.na(alpha)){
-
             Delta.qInf <- switch(alternative,
                                  "two.sided" = apply(Delta.statH0.resampling, MARGIN = 2, FUN = stats::quantile, na.rm = TRUE, probs = alpha/2),
                                  "less" = -Inf,
@@ -903,8 +981,44 @@ confint_studentBootstrap <- function(Delta, Delta.se, Delta.resampling, Delta.se
 }
 
 
+## * confint_varexactPermutation (called by confint)
+confint_varexactPermutation <- function(Delta, Delta.se, null,
+                                        alternative, alpha,
+                                        endpoint, ...){
+
+    n.endpoint <- length(endpoint)
+    outTable <- matrix(as.numeric(NA), nrow = n.endpoint, ncol = 6,
+                       dimnames = list(endpoint, c("estimate","se","lower.ci","upper.ci","null","p.value")))
+    ## Note: no transformation
+
+    ## ** point estimate
+    outTable[,"estimate"] <- Delta
+
+    ## ** standard error
+    outTable[,"se"] <- Delta.se
+
+    ## ** confidence interval
+    ## No CI because se estimated under H0 instead of H1
+    
+    ## ** p-value
+    outTable[,"null"] <- null
+    outTable[,"p.value"] <- switch(alternative,
+                                   "two.sided" = 2*(1-stats::pnorm(abs((Delta-null)/Delta.se))), 
+                                   "less" = stats::pnorm((Delta-null)/Delta.se),
+                                   "greater" = 1-stats::pnorm((Delta-null)/Delta.se) 
+                                   )
+
+    ## special case with no variability
+    if(any(na.omit((Delta==null)*(Delta.se==0)) == 1)){
+        outTable[(Delta==null)*(Delta.se==0) == 1,"p.value"] <- 1
+    }
+
+    ## ** export
+    return(outTable)
+}
+
 ## * confint_Ustatistic (called by confint)
-confint_Ustatistic <- function(Delta, Delta.se, statistic, null,
+confint_Ustatistic <- function(Delta, Delta.se, null,
                                alternative, alpha,
                                endpoint, backtransform.delta, backtransform.se, ...){
 

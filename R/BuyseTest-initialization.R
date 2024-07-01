@@ -138,10 +138,13 @@ initializeArgs <- function(status,
     
     ## ** default values
     if(is.null(formula)){
-
         if(is.null(threshold)){
             threshold <- rep(10^{-12},D)  # if no treshold is proposed all threshold are by default set to 10^{-12}
+            attr(threshold, "original") <- ifelse(type=="bin",NA,0)
+        }else{
+            attr(threshold, "original") <- threshold
         }
+
         if(is.null(restriction)){
             restriction <- rep(as.numeric(NA),D)  
         }
@@ -171,6 +174,8 @@ initializeArgs <- function(status,
             censoring <- rep("right", D)
             censoring[index.typeTTE] <- status.save             
         }
+    }else{
+        attr(threshold, "original") <- threshold
     }
 
     ## ** status
@@ -249,6 +254,19 @@ initializeArgs <- function(status,
                               )
         attr(pool.strata,"type") <- pool.strata_save
         attr(pool.strata,"original") <- pool.strata_save
+    }else if(is.numeric(pool.strata)){
+        pool.strata_save <- switch(as.character(pool.strata),
+                               "0" = "buyse",
+                               "1" = "cmh",
+                               "2" = "equal",
+                               "3.1" = "var-favorable",
+                               "3.2" = "var-unfavorable",
+                               "3.3" = "var-netbenefit",
+                               "3.4" = "var-winratio",
+                               NA
+                              )
+        attr(pool.strata,"type") <- pool.strata_save
+        attr(pool.strata,"original") <- pool.strata_save
     }else{
         pool.strata <- NA
     }
@@ -262,15 +280,18 @@ initializeArgs <- function(status,
     }
 
     ## ** method.inference
-    method.inference <- tolower(method.inference)    
+    method.inference <- gsub("-"," ",tolower(method.inference),fixed = TRUE)
     attr(method.inference,"permutation") <- grepl("permutation",method.inference)
     attr(method.inference,"bootstrap") <- grepl("bootstrap",method.inference)
     attr(method.inference,"studentized") <- grepl("studentized",method.inference)
-    attr(method.inference,"ustatistic") <- grepl("u-statistic",method.inference)
+    attr(method.inference,"ustatistic") <- grepl("u statistic",method.inference)
     if(is.na(strata.resampling) || length(strata.resampling)== 0){
         attr(method.inference,"resampling-strata") <- as.character(NA)
     }else{
         attr(method.inference,"resampling-strata") <- strata.resampling
+    }
+    if(method.inference == "varexact permutation"){
+        n.resampling <- Inf
     }
 
     ## ** neutral.as.uninf
@@ -303,7 +324,7 @@ initializeArgs <- function(status,
     }
 
     ## ** iid
-    iid <- attr(method.inference,"studentized") || (method.inference == "u-statistic")
+    iid <- attr(method.inference,"studentized") || (method.inference == "u statistic")
     if(iid){
         attr(method.inference,"hprojection") <- option$order.Hprojection
     }else{

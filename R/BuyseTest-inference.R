@@ -66,10 +66,14 @@ inferenceResampling <- function(envir){
                                  )
     }else { ## *** parallel resampling test
 
+        ## split into a 100 jobs
+        split.resampling <- parallel::splitIndices(nx = n.resampling, ncl = min(max(100,10*cpus), n.resampling))
+        nsplit.resampling <- length(split.resampling)
+
         ## define cluster
         cl <- parallel::makeCluster(cpus)
         if(trace>0){
-            pb <- utils::txtProgressBar(max = n.resampling, style = 3)          
+            pb <- utils::txtProgressBar(max = nsplit.resampling, style = 3)          
             progress <- function(n){utils::setTxtProgressBar(pb, n)}
             opts <- list(progress = progress)
         }else{
@@ -83,33 +87,35 @@ inferenceResampling <- function(envir){
             parallel::clusterExport(cl, varlist = "seqSeed", envir = environment())
         }         
 
-        ## export package
-        parallel::clusterCall(cl, fun = function(x){
-            suppressPackageStartupMessages(library(BuyseTest, quietly = TRUE, warn.conflicts = FALSE, verbose = FALSE))
-        })
         ## export functions
         toExport <- c(".BuyseTest","calcPeron","calcSample")
-        iB <- NULL ## [:forCRANcheck:] foreach        
-        ls.resampling <- foreach::`%dopar%`(
-                                      foreach::foreach(iB=1:n.resampling,
-                                                       .export = toExport,
-                                                       .packages = "data.table",
-                                                       .options.snow = opts),                                            
-                                      {
-                                          if(!is.null(seed)){set.seed(seqSeed[iB])}
-                                          iOut <- .BuyseTest(envir = envir,
-                                                             iid = iid,
-                                                             method.inference = method.inference,
-                                                             pointEstimation = FALSE)
-                                          if(!is.null(seed)){
-                                              return(c(iOut,list(seed = seqSeed[iB])))
-                                          }else{
-                                              return(iOut)
-                                          }                      
-                                       })
+        iB <- NULL ## [:forCRANcheck:] foreach
+
+        ls2.resampling <- foreach::`%dopar%`(
+                                       foreach::foreach(iB=1:nsplit.resampling,
+                                                        .export = toExport,
+                                                        .packages = c("data.table","BuyseTest"),
+                                                        .options.snow = opts), {
+                                           iOut <- lapply(split.resampling[[iB]], function(iSplit){
+                                               if(!is.null(seed)){set.seed(seqSeed[iSplit])}
+                                               iBT <- .BuyseTest(envir = envir,
+                                                                 iid = iid,
+                                                                 method.inference = method.inference,
+                                                                 pointEstimation = FALSE)
+                                               if(!is.null(seed)){
+                                                   return(c(iBT,list(seed = seqSeed[iSplit])))
+                                               }else{
+                                                   return(iBT)
+                                               }
+                                           })
+                                           return(iOut)
+                                       })        
 
         parallel::stopCluster(cl)
         if(trace>0){close(pb)}
+
+        ## collect
+        ls.resampling <- do.call("c",ls2.resampling)
     }
 
     ## ** post treatment
@@ -319,6 +325,80 @@ inferenceUstatisticBebu <- function(tablePairScore, subset.C = NULL, subset.T = 
     return(out)
 }
 
+## * inference permutation (Anderson and Verbeeck 2023)
+##' @description Implement the computation of the variance of the permutation distribution as described in Anderson and Verbeeck (2023)
+##' exactVarPermutation, the core of this function, is essentially a copy of the code provided by the authors (Anderson and Verbeeck).
+##' @noRd
+##' @references William N Anderson and Johan Verbeeck. Exact permutation and bootstrap distribution of generalized pairwise comparisons statistics (2023), Mathematics.
+inferenceVarPermutation <- function(data, treatment, level.treatment, weightStrata, ...){
+
+    ## ** extend data
+    n.obs <- NROW(data)
+    if("XXgroupXX" %in% names(data)){
+        stop("BuyseTest: Argument \'data\' must not contain a column \"XXgroupXX\". \n")
+    }
+    if("XXindexXX" %in% names(data)){
+        stop("BuyseTest: Argument \'data\' must not contain a column \"XXindexXX\". \n")
+    }
+    data.ext <- rbind(cbind(XXgroupXX = "A", XXindexXX = 1:n.obs, data), 
+                      cbind(XXgroupXX = "B", XXindexXX = 1:n.obs, data))
+
+    ## ** run GPC on all pairs
+    eBT.all <- BuyseTest(data = data.ext, treatment = "XXgroupXX", ,
+                         method.inference = "none", keep.pairScore = TRUE,
+                         trace = FALSE, ...)
+    endpoint <- eBT.all@endpoint
+    strata <- eBT.all@level.strata
+    if(any("Peron" %in% eBT.all@scoring.rule)){
+        warning("BuyseTest: the current implementation of the exact variance of the permutation distribution will not provide type 1 error control when using the Peron scoring rule. \n")
+    }else if(any(eBT.all@correction.uninf>0)){
+        warning("BuyseTest: the current implementation of the exact variance of the permutation distribution will not provide type 1 error control when using a correction for uninformative pairs. \n")
+    }
+
+    ## ** extract all pairwise scores
+    eBTscore.all <- getPairScore(eBT.all, endpoint = endpoint, cumulative = TRUE, unlist = FALSE)        
+
+    ## ** create score matrix
+    U.favorable <- lapply(endpoint, function(iE){matrix(0, nrow = n.obs, ncol = n.obs)})
+    U.unfavorable <- lapply(endpoint, function(iE){matrix(0, nrow = n.obs, ncol = n.obs)})
+    U.score <- lapply(endpoint, function(iE){matrix(0, nrow = n.obs, ncol = n.obs)})
+        
+    for(iEndpoint in endpoint){
+        eBTscore.all[[iEndpoint]]$pos.A <- data.ext$XXindexXX[eBTscore.all[[iEndpoint]]$index.A] ## location in the original dataset
+        eBTscore.all[[iEndpoint]]$pos.B <- data.ext$XXindexXX[eBTscore.all[[iEndpoint]]$index.B] ## location in the original dataset
+
+        U.favorable[[iEndpoint]][(eBTscore.all[[iEndpoint]]$pos.B-1)*n.obs + eBTscore.all[[iEndpoint]]$pos.A] <- eBTscore.all[[iEndpoint]]$favorable
+        U.unfavorable[[iEndpoint]][(eBTscore.all[[iEndpoint]]$pos.B-1)*n.obs + eBTscore.all[[iEndpoint]]$pos.A] <- eBTscore.all[[iEndpoint]]$unfavorable
+        U.score[[iEndpoint]] <- U.favorable[[iEndpoint]] - U.unfavorable[[iEndpoint]]
+    }
+
+    ## ** evaluate permutation variance
+    if(length(strata)==1){
+        ls.permvar <- lapply(endpoint, function(iEndpoint){
+            exactVarPermutation(U.score[[iEndpoint]], treatment = data[[treatment]], level.treatment = level.treatment)
+        })
+    }else{
+        index.strata <- lapply(attr(strata,"index"), intersect, 1:n.obs) ## to retrieve original size since the dataset was duplicated
+        ls.permvar <- lapply(endpoint, function(iEndpoint){ ## iEndpoint <- "score"
+            iM.permvar <- do.call(rbind,lapply(index.strata, function(iIndex){ ## iIndex <- index.strata[[1]]
+                exactVarPermutation(U.score[[iEndpoint]][iIndex,iIndex], treatment = data[iIndex,treatment], level.treatment = level.treatment)
+            }))
+            rownames(iM.permvar) <- strata
+            iOut <- colSums(sweep(iM.permvar, MARGIN = 1, FUN = "*", STATS = weightStrata^2))
+            attr(iOut,"strata") <- iM.permvar
+            return(iOut)
+        })
+    }
+
+    ## ** reshape
+    out <- do.call(rbind, ls.permvar)
+    rownames(out) <- endpoint
+    if(length(strata)>1){
+        attr(out,"strata") <- lapply(ls.permvar,attr,"strata")
+    }
+    return(out)
+}
+
 ## * wsumPairScore
 ##' @description cumulate over endpoint the scores
 ##' @noRd
@@ -362,5 +442,73 @@ wsumPairScore <- function(pairScore, weightEndpoint, subset.C, subset.T){
             out[[iE]][indexMatch, c("uninf") := .SD$uninf + iTable$uninf]
         }
     }
+    return(out)
+}
+
+## * exactVarPermutation
+## Function adapted from William Anderson and Johan Verbeeck
+exactVarPermutation <- function(winmatrix, treatment, level.treatment){
+    if (any(winmatrix + t(winmatrix)  != 0)) stop("Win matrix not skew")
+    m <- sum(treatment == level.treatment[1])
+    n <- sum(treatment == level.treatment[2])
+    N <- m + n   
+  
+    ## compute various vertex values
+    ## computations are O(N^2), because the matrix multiplications are by component 
+    ## sum of values of edges pointing in to the vertex -- real analog of indegree
+    invalues <- colSums(winmatrix*as.integer(winmatrix > 0))  
+    insqvalues <- colSums(winmatrix^2*as.integer(winmatrix > 0))  
+    ## sum of values of edges pointing out of the vertex -- real analog of outdegree 
+    outvalues <- rowSums(winmatrix*as.integer(winmatrix > 0))  
+    ## sum of squares of values of edges pointing out of the vertex
+    outsqvalues <- rowSums(winmatrix^2*as.integer(winmatrix > 0))
+    edgesum <- sum(invalues) ## could also use outvalues
+    ## count the cases at each vertex v -- case definitions in manuscript
+    ## the case matrix has 5 rows (1 for each case), and N columns
+    ## case 6 is not represented in this matrix, because case 6 situations do not belong to a specific vertex
+    ## the matrix is perhaps useful in understanding the algorithm, but only the rowSums are actually used
+    casematrix <- rbind(insqvalues,
+                        invalues^2 - insqvalues,
+                        outvalues^2 - outsqvalues,
+                        invalues*outvalues,
+                        invalues*outvalues)
+    ## add the cases from all the vertices
+    casecounts <- rowSums(casematrix)
+    casecounts[6] <- edgesum^2 - sum(casecounts) # now we have case 6
+    expected =  rep(edgesum*m*n/(N*(N - 1)), 2)
+    names(expected) <- c("Test Wins", "Control Wins")
+    TTerms <- c(m*n/(N*(N - 1)), m*n*(m - 1)/(N*(N - 1)*(N - 2)),
+                m*n*(n - 1)/(N*(N - 1)*(N - 2)), 0, 0, 
+                m*n*(m - 1)*(n - 1)/(N*(N - 1)*(N - 2)*(N - 3)))
+    CTerms <- c(m*n/(N*(N - 1)), m*n*(n - 1)/(N*(N - 1)*(N - 2)),
+                m*n*(m - 1)/(N*(N - 1)*(N - 2)), 0, 0,
+                m*n*(m - 1)*(n - 1)/(N*(N - 1)*(N - 2)*(N - 3)))
+    TCTerms <- c(0, 0, 0, m*n*(n - 1)/(N*(N - 1)*(N - 2)),
+                 m*n*(m - 1)/(N*(N - 1)*(N - 2)),
+                 m*n*(m - 1)*(n - 1)/(N*(N - 1)*(N - 2)*(N - 3)))
+    CTTerms <- c(0, 0, 0, m*n*(m - 1)/(N*(N - 1)*(N - 2)),
+                 m*n*(n - 1)/(N*(N - 1)*(N - 2)),
+                 m*n*(m - 1)*(n - 1)/(N*(N - 1)*(N - 2)*(N - 3)))
+    expectedforvariance <- c(sum(casecounts*TTerms), sum(casecounts*TCTerms),
+                             sum(casecounts*CTTerms), sum(casecounts*CTerms))
+    expectedforvariance <- matrix(expectedforvariance, nrow = 2)
+    variance <- expectedforvariance - expected %*% t(expected)
+    rownames(variance) <- c("Test Win Sum", "Control Win Sum")
+    colnames(variance) <- c("Test Win Sum", "Control Win Sum")
+
+    out <- c(favorable = variance[1,1]/(m*n)^2,
+             unfavorable = variance[2,2]/(m*n)^2,
+             covariance = variance[1,2]/(m*n)^2,
+             netBenefit = (variance[1,1] + variance[2,2] - 2*variance[1,2])/(m*n)^2,
+             winRatio = as.numeric(NA))
+
+    ## testrows <- which(treatment == level.treatment[2])
+    ## comparisonmatrix <- winmatrix[testrows, -testrows]
+    ## K <- pmax(comparisonmatrix, 0) # Test wins are the positive matrix entries; test losses and ties are 0
+    ## L <- pmax(-comparisonmatrix, 0) # Control wins are the positive matrix entries; control losses and ties are 0
+    ## winssum <- c("Test Win Sum" = sum(K), "Control Win Sum" = sum(L))
+    ## stats <- c(winssum-expected,winssum[1]-winssum[2])/sqrt(c(variance[1,1],variance[2,2], variance[1,1]+variance[2,2]-2*variance[1,2]))
+    ## 2*(1-pnorm(abs(stats)))
+
     return(out)
 }

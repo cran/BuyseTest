@@ -25,7 +25,7 @@
 #' @param model.tte [list] optional survival models relative to each time to each time to event endpoint.
 #' Models must \code{prodlim} objects and stratified on the treatment and strata variable. When used, the uncertainty from the estimates of these survival models is ignored.
 #' @param method.inference [character] method used to compute confidence intervals and p-values.
-#' Can be \code{"none"}, \code{"u-statistic"}, \code{"permutation"}, \code{"studentized permutation"}, \code{"bootstrap"}, \code{"studentized bootstrap"}.
+#' Can be \code{"none"}, \code{"u-statistic"}, \code{"permutation"}, \code{"studentized permutation"}, \code{"bootstrap"}, \code{"studentized bootstrap"}, \code{"varExact permutation"}.
 #' See Details, section "Statistical inference".
 #' @param n.resampling [integer] the number of permutations/samples used for computing the confidence intervals and the p.values. 
 #' See Details, section "Statistical inference".
@@ -111,15 +111,14 @@
 #' Available methods are:
 #' \itemize{
 #'   \item argument \code{method.inference="none"}: only the point estimate is computed which makes the execution of the \code{BuyseTest} faster than with the other methods.
-#'   \item argument \code{method.inference="u-statistic"}: uses a Gaussian approximation to obtain the distribution of the GPC estimators.
-#' The U-statistic theory indicates that this approximation is asymptotically exact.
-#' The variance is computed using a H-projection of order 1 (default option), which is a consistent but downward biased estimator.
-#' An unbiased estimator can be obtained using a H-projection of order 2 (only available for the uncorrected Gehan's scoring rule, see \code{BuyseTest.options}).
+#'   \item argument \code{method.inference="u-statistic"}: compute the variance of the estimate using a H-projection of order 1 (default option) or 2 (see \code{BuyseTest.options}). The first order is downward biased but consistent. When considering the Gehan scoring rule, no transformation nor correction, the second order is unbiased and equivalent to the variance of the bootstrap distribution. P-values and confidence intervals are then evaluated assuming that the estimates follow a Gaussian distribution.
 #' \bold{WARNING}: the current implementation of the H-projection is not valid when using corrections for uninformative pairs (\code{correction.uninf=1}, or \code{correction.uninf=2}).
 #'   \item argument \code{method.inference="permutation"}: perform a permutation test, estimating in each sample the summary statistics (net benefit, win ratio).
 #'   \item argument \code{method.inference="studentized permutation"}: perform a permutation test, estimating in each sample the summary statistics (net benefit, win ratio) and the variance-covariance matrix of the estimate.
+#'   \item argument \code{method.inference="varExact permutation"}: compute the variance of the permutation distribution using a closed-form formula (Anderson and Verbeeck 2023). P-values and confidence intervals are then evaluated assuming that the estimates follow a Gaussian distribution.
+#' \bold{WARNING}: the current implementation of the variance estimator for the permutation distribution is not valid when using the Peron scoring rule or corrections for uninformative pairs.
 #'   \item argument \code{method.inference="bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio).
-#'   \item argument \code{method.inference=" studentized bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio) and the variance-covariance matrix of the estimator.
+#'   \item argument \code{method.inference="studentized bootstrap"}: perform a non-parametric boostrap, estimating in each sample the summary statistics (net benefit, win ratio) and the variance-covariance matrix of the estimator.
 #' }
 #' Additional arguments for permutation and bootstrap resampling:
 #' \itemize{
@@ -161,6 +160,7 @@
 #' On the Gehan's scoring rule: Gehan EA (1965). \bold{A generalized two-sample Wilcoxon test for doubly censored data}. \emph{Biometrika}  52(3):650-653 \cr
 #' On inference in GPC using the U-statistic theory: Ozenne B, Budtz-Jorgensen E, Peron J (2021). \bold{The asymptotic distribution of the Net Benefit estimator in presence of right-censoring}. \emph{Statistical Methods in Medical Research} 2021 doi:10.1177/09622802211037067 \cr
 #' On how to handle right-censoring: J. Peron, M. Idlhaj, D. Maucort-Boulch, et al. (2021) \bold{Correcting the bias of the net benefit estimator due to right-censored observations}. \emph{Biometrical Journal} 63: 893–906. 
+#' On closed-form formula for permutation variance:  W.N. Anderson and J. Verbeeck (2023). \bold{Exact Permutation and Bootstrap Distribution of Generalized Pairwise Comparisons Statistics}. \emph{Mathematics} , 11, 1502. doi:10.3390/math11061502.
 #'
 #' @seealso 
 #' \code{\link{S4BuyseTest-summary}} for a summary of the results of generalized pairwise comparison. \cr
@@ -441,9 +441,9 @@ BuyseTest <- function(formula,
     }
 
     outResampling <- NULL
-    if(outArgs$method.inference == "u-statistic"){
+    if(outArgs$method.inference == "u statistic"){
         ## done in the C++ code        
-    }else if(outArgs$method.inference == "u-statistic-bebu"){
+    }else if(outArgs$method.inference == "u statistic bebu"){
         if(outArgs$keep.pairScore == FALSE){
             stop("Argument \'keep.pairScore\' needs to be TRUE when argument \'method.inference\' is \"u-statistic-bebu\" \n")
         }
@@ -461,6 +461,34 @@ BuyseTest <- function(formula,
 
         outPoint$covariance <- outCovariance$Sigma
         attr(outArgs$method.inference,"Hprojection") <- option$order.Hprojection
+    }else if(outArgs$method.inference == "varexact permutation"){
+
+        if(!is.null(outArgs$weightObs) && any(abs(outArgs$weightObs-1)>1e-10)){
+            warning("Argument \'weightObs\' is being ignored when computing the exact permutation variance. \n")
+        }
+
+        outVariance <- inferenceVarPermutation(data = as.data.frame(data),
+                                               treatment = outArgs$treatment,
+                                               level.treatment = outArgs$level.treatment,
+                                               weightStrata = outPoint$weightStrata,
+                                               scoring.rule = outArgs$scoring.rule,
+                                               pool.strata = outArgs$pool.strata,
+                                               correction.uninf = outArgs$correction.uninf,
+                                               model.tte = outArgs$model.tte,
+                                               hierarchical = outArgs$hierarchical,
+                                               weightEndpoint = outArgs$weightEndpoint,
+                                               neutral.as.uninf = outArgs$neutral.as.uninf,
+                                               add.halfNeutral = outArgs$add.halfNeutral,
+                                               endpoint = outArgs$endpoint,
+                                               type = outArgs$type,
+                                               threshold = outArgs$threshold,                      
+                                               status = type$status,
+                                               operator = type$operator,
+                                               censoring = type$censoring,
+                                               restriction = outArgs$restriction,
+                                               strata = outArgs$strata)
+
+        outPoint$covariance <- outVariance
     }else if(grepl("bootstrap|permutation",outArgs$method.inference)){
         outResampling <- inferenceResampling(envirBT)
     }
@@ -549,15 +577,16 @@ BuyseTest <- function(formula,
         for(iE in index.rendpoint){ ## iE <- 1
             iRestriction <- envir$outArgs$restriction[iE]
             iStatus <- envir$outArgs$index.status[iE]+1
-
             if(envir$outArgs$operator[iE]==1){ ## ">0"
                 if(envir$outArgs$method.score[iE] %in% c("TTEgehan","SurvPeron","CRPeron")){ ## right censoring
                     envir$outArgs$M.status[envir$outArgs$M.endpoint[,iE]>iRestriction,iStatus] <- 1/2
+                    envir$outArgs$M.status[envir$outArgs$M.endpoint[,iE]==iRestriction & envir$outArgs$M.status[,iStatus]==0,iStatus] <- 1/2 ## rm censoring when restriction at the censoring time
                 }
                 envir$outArgs$M.endpoint[envir$outArgs$M.endpoint[,iE]>iRestriction,iE] <- iRestriction
             }else if(envir$outArgs$operator[iE]==-1){ ## "<0"
                 if(envir$outArgs$method.score[iE] %in% c("TTEgehan2")){ ## left censoring
                     envir$outArgs$M.status[envir$outArgs$M.endpoint[,iE]<iRestriction,iStatus] <- 1/2
+                    envir$outArgs$M.status[envir$outArgs$M.endpoint[,iE]==iRestriction & envir$outArgs$M.status[,iStatus]==0,iStatus] <- 1/2 ## rm censoring when restriction at the censoring time
                 }
                 envir$outArgs$M.endpoint[envir$outArgs$M.endpoint[,iE]<iRestriction,iE] <- iRestriction
             }
@@ -573,6 +602,7 @@ BuyseTest <- function(formula,
                                  indexT = outSample$ls.indexT,                     
                                  posT = outSample$ls.posT,                     
                                  threshold = envir$outArgs$threshold,
+                                 threshold0 = attr(envir$outArgs$threshold,"original")==0,
                                  restriction = envir$outArgs$restriction,
                                  weightEndpoint = envir$outArgs$weightEndpoint,
                                  weightObs = envir$outArgs$weightObs,
@@ -640,7 +670,7 @@ calcSample <- function(envir, method.inference){
         data = data.table::data.table()
     )
 
-    if(method.inference %in% c("none","u-statistic")){
+    if(method.inference %in% c("none","u statistic")){
 
         ## ** no resampling
         if(envir$outArgs$n.strata==1){        
