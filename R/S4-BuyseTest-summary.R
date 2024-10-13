@@ -409,32 +409,30 @@ setMethod(f = "summary",
                   cat(" - inference       : ",txt.method, sep = "")
               }
                   
-                  cat(" - treatment groups: ",object@level.treatment[2]," (treatment) vs. ",object@level.treatment[1]," (control) \n", sep = "")
-                  
-                  if(n.strata>1){
-                      cat(" - strata weights  : ",paste(paste0(round(100*object@weightStrata, digit[1]),"%"), collapse = ", ")," \n", sep = "")
-                  }else if(attr(scoring.rule,"test.paired") & length(object@weightStrata)>1){
-                      table.weightStrata <- table(paste0(round(100*object@weightStrata, digit[1]),"%"))
-                      cat(" - pair weights    : ",paste(names(table.weightStrata), collapse = ", ")," (K=",paste(table.weightStrata, collapse=","),")\n", sep = "")
-                  }
+              cat(" - treatment groups: ",object@level.treatment[2]," (treatment) vs. ",object@level.treatment[1]," (control) \n", sep = "")
 
-                  if(any(object@type == "tte") && any(attr(scoring.rule,"test.censoring"))){
+              if(n.strata>1){
+                  cat(" - strata weights  : ",paste(paste0(round(100*object@weightStrata, digit[1]),"%"), collapse = ", ")," \n", sep = "")
+              }else if(attr(scoring.rule,"test.paired") & length(object@weightStrata)>1){
+                  table.weightStrata <- table(paste0(round(100*object@weightStrata, digit[1]),"%"))
+                  cat(" - pair weights    : ",paste(names(table.weightStrata), collapse = ", ")," (K=",paste(table.weightStrata, collapse=","),")\n", sep = "")
+              }else 
+              if(any(object@type == "tte") && any(attr(scoring.rule,"test.censoring"))){
                       
-                      if(all(attr(scoring.rule,"method.score")[object@type=="tte"]=="CRPeron")){
-                          txt.Peron <- "cif"
-                      }else if(all(attr(scoring.rule,"method.score")[object@type=="tte"]=="SurvPeron")){
-                          txt.Peron <- "survival"
-                      }else{
-                          txt.Peron <- "survival/cif"
-                      }
-
-                      txt.scoring.rule <- switch(scoring.rule,
-                                                 "Gehan" = "deterministic score or uninformative",
-                                                 "Peron" = paste0("probabilistic score based on the ",txt.Peron," curves")
-                                                 )
-                      cat(" - censored pairs  : ",txt.scoring.rule,"\n", sep = "")
+                  if(all(attr(scoring.rule,"method.score")[object@type=="tte"]=="CRPeron")){
+                      txt.Peron <- "cif"
+                  }else if(all(attr(scoring.rule,"method.score")[object@type=="tte"]=="SurvPeron")){
+                      txt.Peron <- "survival"
+                  }else{
+                      txt.Peron <- "survival/cif"
                   }
-                  
+
+                  txt.scoring.rule <- switch(scoring.rule,
+                                             "Gehan" = "deterministic score or uninformative",
+                                             "Peron" = paste0("probabilistic score based on the ",txt.Peron," curves")
+                                             )
+                  cat(" - censored pairs  : ",txt.scoring.rule,"\n", sep = "")
+              }
               if(hierarchical && n.endpoint>1 && any(object@count.neutral>0)){
                   Uneutral.as.uninf <- unique(object@neutral.as.uninf)
                   if(identical(Uneutral.as.uninf,TRUE)){

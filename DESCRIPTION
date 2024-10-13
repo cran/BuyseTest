@@ -1,16 +1,16 @@
 Package: BuyseTest
 Type: Package
 Title: Generalized Pairwise Comparisons
-Version: 3.0.4
-Date: 2024-07-01
+Version: 3.0.5
+Date: 2024-10-13
 Authors@R: c(
     person("Brice", "Ozenne", role = c("aut", "cre"), email = "brice.mh.ozenne@gmail.com", comment = c(ORCID = "0000-0001-9694-2956")),
-    person("Julien", "Peron", role = "ctb"),
     person("Eva", "Cantagallo", role = "aut"),
-    person("William", "Anderson", role = "ctb"),
-    person("Johan", "Verbeeck", role = "aut")
+    person("William", "Anderson", role = "aut"),
+    person("Julien", "Peron", role = "ctb"),
+    person("Johan", "Verbeeck", role = "ctb")
 	)
-Description: Implementation of the Generalized Pairwise Comparisons (GPC) as defined in Buyse (2010) <doi:10.1002/sim.3923> for complete observations, and extended in Peron (2018) <doi:10.1177/0962280216658320> to deal with right-censoring. GPC compare two groups of observations (intervention vs. control group) regarding several prioritized endpoints to estimate the probability that a random observation drawn from one group performs better than a random observation drawn from the other group (Mann-Whitney parameter). The net benefit and win ratio statistics, i.e. the difference and ratio between the probabilities relative to the intervention and control groups, can then also be estimated. Confidence intervals and p-values are obtained based on asymptotic results (Ozenne 2021 <doi:10.1177/09622802211037067>), non-parametric bootstrap, or permutations. The software enables the use of thresholds of minimal importance difference, stratification, non-prioritized endpoints (O Brien test), and can handle right-censoring and competing-risks.
+Description: Implementation of the Generalized Pairwise Comparisons (GPC) as defined in Buyse (2010) <doi:10.1002/sim.3923> for complete observations, and extended in Peron (2018) <doi:10.1177/0962280216658320> to deal with right-censoring. GPC compare two groups of observations (intervention vs. control group) regarding several prioritized endpoints to estimate the probability that a random observation drawn from one group performs better/worse/equivalently than a random observation drawn from the other group. Summary statistics such as the net treatment benefit, win ratio, or win odds are then deduced from these probabilities. Confidence intervals and p-values are obtained based on asymptotic results (Ozenne 2021 <doi:10.1177/09622802211037067>), non-parametric bootstrap, or permutations. The software enables the use of thresholds of minimal importance difference, stratification, non-prioritized endpoints (O Brien test), and can handle right-censoring and competing-risks.
 License: GPL-3
 Encoding: UTF-8
 URL: https://github.com/bozenne/BuyseTest
@@ -41,14 +41,15 @@ Collate: '0-onLoad.R' '1-setGeneric.R' 'BuyseMultComp.R' 'BuyseTTEM.R'
         'iid.S3sensitivity.R' 'iid.prodlim.R' 'normexp.R'
         'performance.R' 'performanceResample.R' 'plot.S3sensitivity.R'
         'powerBuyseTest.R' 'predict.logit.R'
-        'rbind.performanceResample.R' 'simBuyseTest.R'
-        'simCompetingRisks.R' 'summary.performance.R' 'valid.R'
-Packaged: 2024-07-01 08:18:48 UTC; bozenne
+        'rbind.performanceResample.R' 'sim.simBuyseTest.R'
+        'simBuyseTest.R' 'simCompetingRisks.R' 'summary.performance.R'
+        'valid.R'
+Packaged: 2024-10-13 20:24:50 UTC; bozenne
 Author: Brice Ozenne [aut, cre] (<https://orcid.org/0000-0001-9694-2956>),
-  Julien Peron [ctb],
   Eva Cantagallo [aut],
-  William Anderson [ctb],
-  Johan Verbeeck [aut]
+  William Anderson [aut],
+  Julien Peron [ctb],
+  Johan Verbeeck [ctb]
 Maintainer: Brice Ozenne <brice.mh.ozenne@gmail.com>
 Repository: CRAN
-Date/Publication: 2024-07-01 09:20:02 UTC
+Date/Publication: 2024-10-13 21:40:02 UTC
