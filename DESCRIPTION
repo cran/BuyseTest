@@ -1,8 +1,8 @@
 Package: BuyseTest
 Type: Package
 Title: Generalized Pairwise Comparisons
-Version: 3.0.5
-Date: 2024-10-13
+Version: 3.1.0
+Date: 2025-03-04
 Authors@R: c(
     person("Brice", "Ozenne", role = c("aut", "cre"), email = "brice.mh.ozenne@gmail.com", comment = c(ORCID = "0000-0001-9694-2956")),
     person("Eva", "Cantagallo", role = "aut"),
@@ -15,14 +15,14 @@ License: GPL-3
 Encoding: UTF-8
 URL: https://github.com/bozenne/BuyseTest
 BugReports: https://github.com/bozenne/BuyseTest/issues
-Depends: R (>= 2.10), Rcpp
+Depends: R (>= 3.5.0), Rcpp
 Imports: data.table, doSNOW, foreach, ggplot2, methods, lava, parallel,
         prodlim, riskRegression, rlang, scales, stats, stats4, utils
 Suggests: cvAUC, mvtnorm, pbapply, pROC, R.rsp, survival, testthat
 LinkingTo: Rcpp, RcppArmadillo
 VignetteBuilder: R.rsp
 NeedsCompilation: yes
-RoxygenNote: 7.3.1
+RoxygenNote: 7.3.2
 Collate: '0-onLoad.R' '1-setGeneric.R' 'BuyseMultComp.R' 'BuyseTTEM.R'
         'BuyseTest-Peron.R' 'BuyseTest-check.R' 'BuyseTest-inference.R'
         'BuyseTest-initialization.R' 'BuyseTest-package.R'
@@ -37,14 +37,14 @@ Collate: '0-onLoad.R' '1-setGeneric.R' 'BuyseMultComp.R' 'BuyseTTEM.R'
         'S4-BuyseTest-print.R' 'S4-BuyseTest-sensitivity.R'
         'S4-BuyseTest-show.R' 'S4-BuyseTest.options.R'
         'as.data.table.performance.R' 'auc.R' 'autoplot.S4BuyseTest.R'
-        'brier.R' 'constStrata.R' 'discreteRoot.R'
-        'iid.S3sensitivity.R' 'iid.prodlim.R' 'normexp.R'
+        'brier.R' 'constStrata.R' 'discreteRoot.R' 'doc-data.R'
+        'efronlim.R' 'iid.S3sensitivity.R' 'iid.prodlim.R' 'normexp.R'
         'performance.R' 'performanceResample.R' 'plot.S3sensitivity.R'
         'powerBuyseTest.R' 'predict.logit.R'
         'rbind.performanceResample.R' 'sim.simBuyseTest.R'
         'simBuyseTest.R' 'simCompetingRisks.R' 'summary.performance.R'
         'valid.R'
-Packaged: 2024-10-13 20:24:50 UTC; bozenne
+Packaged: 2025-03-04 14:06:25 UTC; hpl802
 Author: Brice Ozenne [aut, cre] (<https://orcid.org/0000-0001-9694-2956>),
   Eva Cantagallo [aut],
   William Anderson [aut],
@@ -52,4 +52,4 @@ Author: Brice Ozenne [aut, cre] (<https://orcid.org/0000-0001-9694-2956>),
   Johan Verbeeck [ctb]
 Maintainer: Brice Ozenne <brice.mh.ozenne@gmail.com>
 Repository: CRAN
-Date/Publication: 2024-10-13 21:40:02 UTC
+Date/Publication: 2025-03-04 14:40:02 UTC
