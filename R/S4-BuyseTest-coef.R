@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 12 2019 (10:45) 
 ## Version: 
-## Last-Updated: Oct 13 2024 (20:29) 
+## Last-Updated: Apr 21 2025 (11:54) 
 ##           By: Brice Ozenne
-##     Update #: 397
+##     Update #: 414
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -80,7 +80,7 @@ setMethod(f = "coef",
                   stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
               }
     
-              ## statistic
+              ## *** statistic
               add.halfNeutral <- slot(object,"add.halfNeutral")
               if(is.null(statistic)){
                   statistic <- option$statistic
@@ -112,7 +112,7 @@ setMethod(f = "coef",
                   stop("Argument \'cumulative\' must be FALSE when argument \'statistic\' is set to \"neutral\" or \"uninf\". \n")
               }
 
-              ## endpoint
+              ## *** endpoint
               valid.endpoint <- names(object@endpoint)
               n.endpoint <- length(valid.endpoint)
               if(is.null(endpoint)){
@@ -134,8 +134,8 @@ setMethod(f = "coef",
               }
               weightEndpoint <- slot(object, "weightEndpoint")
                   
-              ## strata
-              level.strata <- object@level.strata
+              ## *** strata
+                  level.strata <- object@level.strata
               n.strata <- length(level.strata)
               weightStrata <- object@weightStrata
               type.weightStrata <- attr(weightStrata,"type")
@@ -168,8 +168,9 @@ setMethod(f = "coef",
                                  refuse.NULL = FALSE,
                                  method = "coef[S4BuyseTest]")
               }
+              
 
-              ## resampling
+              ## *** resampling
               if(resampling){
 
                   if(!attr(slot(object, "method.inference"),"permutation") && !attr(slot(object, "method.inference"),"bootstrap")){
@@ -179,8 +180,8 @@ setMethod(f = "coef",
                   if(statistic %in% type.count){
                       stop("The number of ",gsub("count.","",statistic)," pairs when performing resampling is not saved. \n")
                   }
-
-                  n.resampling <- slot(object, "n.resampling")
+                  
+                  n.resampling <- dim(slot(object, "nResampling"))[1]
                   weightStrataResampling <- slot(object, "weightStrataResampling")
 
               }

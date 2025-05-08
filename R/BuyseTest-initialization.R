@@ -234,40 +234,53 @@ initializeArgs <- function(status,
                               "buyse" = 0,
                               "cmh" = 1,
                               "equal" = 2,
-                              "var-favorable" = 3.1,
-                              "var-unfavorable" = 3.2,
-                              "var-netbenefit" = 3.3,
-                              "var-winratio" = 3.4,
+                              "standardisation" = 3,
+                              "standardization" = 3,
+                              "var-favorable" = 4.1,
+                              "var-unfavorable" = 4.2,
+                              "var-netbenefit" = 4.3,
+                              "var-winratio" = 4.4,
                               NA
                               )
-        attr(pool.strata,"type") <- option$pool.strata   
+        if(tolower(option$pool.strata)=="standardisation"){
+            attr(pool.strata,"type") <- "standardization"
+        }else{
+            attr(pool.strata,"type") <- tolower(option$pool.strata)
+        }
         attr(pool.strata,"original") <- NA   
         
     }else if(is.character(pool.strata)){
         pool.strata_save <- tolower(pool.strata)
         pool.strata <- switch(pool.strata_save,
-                               "buyse" = 0,
-                               "cmh" = 1,
-                               "equal" = 2,
-                               "var-favorable" = 3.1,
-                               "var-unfavorable" = 3.2,
-                               "var-netbenefit" = 3.3,
-                               "var-winratio" = 3.4,
-                               NA
+                              "buyse" = 0,
+                              "cmh" = 1,
+                              "equal" = 2,
+                              "standardisation" = 3,
+                              "standardization" = 3,
+                              "var-favorable" = 4.1,
+                              "var-unfavorable" = 4.2,
+                              "var-netbenefit" = 4.3,
+                              "var-winratio" = 4.4,
+                              NA
                               )
-        attr(pool.strata,"type") <- pool.strata_save
+        if(!is.na(pool.strata_save) && pool.strata_save=="standardisation"){
+            attr(pool.strata,"type") <- "standardization"
+        }else{
+            attr(pool.strata,"type") <- pool.strata_save
+        }
         attr(pool.strata,"original") <- pool.strata_save
     }else if(is.numeric(pool.strata)){
         pool.strata_save <- switch(as.character(pool.strata),
-                               "0" = "buyse",
-                               "1" = "cmh",
-                               "2" = "equal",
-                               "3.1" = "var-favorable",
-                               "3.2" = "var-unfavorable",
-                               "3.3" = "var-netbenefit",
-                               "3.4" = "var-winratio",
-                               NA
-                              )
+                                   "0" = "buyse",
+                                   "1" = "cmh",
+                                   "2" = "equal",
+                                   "3" = "standardization",
+                                   "4.1" = "var-favorable",
+                                   "4.2" = "var-unfavorable",
+                                   "4.3" = "var-netbenefit",
+                                   "4.4" = "var-winratio",
+                                   NA
+                                   )
         attr(pool.strata,"type") <- pool.strata_save
         attr(pool.strata,"original") <- pool.strata_save
     }else{
@@ -288,7 +301,7 @@ initializeArgs <- function(status,
     attr(method.inference,"bootstrap") <- grepl("bootstrap",method.inference)
     attr(method.inference,"studentized") <- grepl("studentized",method.inference)
     attr(method.inference,"ustatistic") <- grepl("u statistic",method.inference)
-    if(is.na(strata.resampling) || length(strata.resampling)== 0){
+    if(all(is.na(strata.resampling)) || length(strata.resampling)== 0){
         attr(method.inference,"resampling-strata") <- as.character(NA)
     }else{
         attr(method.inference,"resampling-strata") <- strata.resampling
@@ -310,12 +323,17 @@ initializeArgs <- function(status,
     
     ## ** model.tte
     if(scoring.rule>0){
-        if((!is.null(model.tte)) && (length(unique(endpoint.TTE)) == 1) && !inherits(model.tte, "list")){
-            attr.save <- attr(model.tte,"iidNuisance")
+        if((!is.null(model.tte))){
+            if((length(unique(endpoint.TTE)) == 1) && !inherits(model.tte, "list")){
+                attr.save <- attr(model.tte,"iidNuisance")
             
-            model.tte <- list(model.tte)
-            names(model.tte) <- unique(endpoint.TTE)
-            attr(model.tte,"iidNuisance") <- attr.save
+                model.tte <- list(model.tte)
+                names(model.tte) <- unique(endpoint.TTE)
+                attr(model.tte,"iidNuisance") <- attr.save
+            }
+            attr(data,"model.tte_regressor") <- unique(unlist(lapply(model.tte, function(iM){
+                all.vars(stats::delete.response(terms(formula(iM))))
+            })))
         }
     }else{
         model.tte <- NULL
@@ -459,8 +477,18 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
         level.strata <- 1
     }
 
-    n.strata <- length(level.strata)
-   
+    nlevel.strata <- length(level.strata)
+    if(pool.strata==3){
+        grid.strata <- as.matrix(expand.grid(0:(nlevel.strata-1), 0:(nlevel.strata-1)))
+        rownames(grid.strata) <- ifelse(level.strata[grid.strata[,1]+1]==level.strata[grid.strata[,2]+1],
+                                        level.strata[grid.strata[,1]+1],
+                                        paste(level.strata[grid.strata[,1]+1],level.strata[grid.strata[,2]+1],sep="."))
+    }else{
+        grid.strata <- cbind(0:(nlevel.strata-1), 0:(nlevel.strata-1))
+        rownames(grid.strata) <- level.strata
+    }
+    n.strata <- NROW(grid.strata)
+    
     ## ** convert treatment to binary indicator
     level.treatment <- levels(as.factor(data[[treatment]]))
     trt2bin <- stats::setNames(0:1,level.treatment)
@@ -474,16 +502,14 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
         data[,c("..NA..") := -100]
     }
 
+
     ## ** TTE with status
     if(scoring.rule>0){
         test.status <- sapply(status.TTE, function(iC){any(data[[iC]]==0)})
         if(all(test.status==FALSE)){
             scoring.rule <- 0
             iidNuisance <- FALSE            
-        }else if(identical(attr(method.inference,"hprojection"),2)){
-            keep.pairScore <- TRUE ## need the detail of the score to perform the 2nd order projection
         }
-        
         ## distinct time to event endpoints
         endpoint.UTTE <- unique(endpoint.TTE[test.status])
         status.UTTE <- unique(status.TTE[test.status])
@@ -544,7 +570,7 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
     ## ** number of observations per strata used when resampling
     index.C <- which(data[[treatment]] == 0)
     index.T <- which(data[[treatment]] == 1)
-    if(!is.na(attr(method.inference,"resampling-strata"))){
+    if(any(!is.na(attr(method.inference,"resampling-strata")))){
         n.obsStrataResampling <- table(data[,interaction(.SD), .SDcols = attr(method.inference,"resampling-strata")])
     }else{
         n.obsStrataResampling <- n.obs
@@ -594,9 +620,32 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
         }
     }
 
+    ## ** keep.pairScore
+    if(identical(attr(method.inference,"hprojection"),2) && scoring.rule>0){
+        ## need the detail of the score to perform the 2nd order projection
+        keep.pairScore <- TRUE 
+    }else if(identical(attr(method.inference,"hprojection"),2) && pool.strata == 3){
+        table2x2.nobs <- table(strata = data[["..strata.."]],data[[treatment]])
+        dfStrata2 <- expand.grid(strata0 = 1:length(level.strata),
+                                 strata1 = 1:length(level.strata))
+        dfStrata2$N <- NROW(data)
+        dfStrata2$m <- length(index.C)
+        dfStrata2$n <- length(index.T)
+        dfStrata2$m.X0 <- table2x2.nobs[dfStrata2$strata0,1]
+        dfStrata2$n.X1 <- table2x2.nobs[dfStrata2$strata1,2]
+        dfStrata2$X0 <- table(data[["..strata.."]])[dfStrata2$strata0]
+        dfStrata2$X1 <- table(data[["..strata.."]])[dfStrata2$strata1]
+        dfStrata2$weight <- (dfStrata2$X0*dfStrata2$X1/dfStrata2$N^2)/(dfStrata2$m.X0*dfStrata2$n.X1/(dfStrata2$m*dfStrata2$n))
+        if(any(dfStrata2$weight %% 1 != 0)){
+            ## if decimal weigths need the detail of the score to perform the 2nd order projection
+            keep.pairScore <- TRUE
+        }
+    }
+    
     ## ** export
-    keep.cols <- union(c(treatment, "..strata.."),
-                       na.omit(attr(method.inference,"resampling-strata")))
+    keep.cols <- union(union(c(treatment, strata, "..strata.."),
+                             na.omit(attr(method.inference,"resampling-strata"))),
+                       attr(data,"model.tte_regressor")) ## add regressor from survival models in case they do not match GPC strata variable (user-specific survival)
 
     return(list(data = data[,.SD,.SDcols = keep.cols],
                 M.endpoint = as.matrix(data[, .SD, .SDcols = Uendpoint]),
@@ -606,9 +655,9 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
                 weightObs = weightObs,
                 index.strata = tapply(data[["..rowIndex.."]], data[["..strata.."]], list),
                 level.treatment = level.treatment,
-                level.strata = level.strata, pool.strata = pool.strata,
+                level.strata = level.strata, pool.strata = pool.strata, ## distinct strata levels (e.g. M, F)
                 method.score = method.score, paired = paired,
-                n.strata = n.strata,
+                grid.strata = grid.strata, ## strata (e.g. M, F, M.F, F.M) - different from level.strata when using standardisation
                 n.obs = n.obs,
                 n.obsStrata = n.obsStrata,
                 n.obsStrataResampling = n.obsStrataResampling,

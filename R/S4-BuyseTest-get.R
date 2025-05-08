@@ -107,12 +107,13 @@ setMethod(f = "getIid",
                        "Set the argument \'method.inference\' to \"u-statistic\" when calling BuyseTest \n")
               }
 
+              ## index group
+              indexC <- attr(object@level.treatment,"indexC")
+              indexT <- attr(object@level.treatment,"indexT")
+
               ## strata
               level.strata <- object@level.strata
-              n.strata <- length(level.strata)
               weightStrata <- object@weightStrata
-              indexStrata <- attr(level.strata,"index")
-              attr(level.strata,"index") <- NULL
               if(is.null(strata)){
                   if(length(level.strata)==1){
                       strata <- "global"                      
@@ -141,6 +142,17 @@ setMethod(f = "getIid",
                                  refuse.NULL = FALSE,
                                  method = "coef[S4BuyseTest]")
               }
+              if(attr(weightStrata,"type")=="standardization"){
+                  if(any(strata %in% level.strata)){
+                      stop("Cannot output the strata-specific H-decomposition when using standardization. \n")
+                  }
+                  n.strata <- 1
+                  indexStrata <- list(union(indexC,indexT))
+              }else{
+                  n.strata <- length(level.strata)
+                  indexStrata <- attr(level.strata,"index")                  
+              }
+              attr(level.strata,"index") <- NULL
 
               ## cluster
               if(!is.null(cluster)){
@@ -176,10 +188,6 @@ setMethod(f = "getIid",
               ## pairs
               n.pairs <- object@n.pairs
               ntot.pair <- sum(n.pairs)
-
-              ## index group
-              indexC <- attr(object@level.treatment,"indexC")
-              indexT <- attr(object@level.treatment,"indexT")
               
               ## type
               validCharacter(gsub("-"," ",tolower(type), fixed = TRUE),
@@ -245,23 +253,21 @@ setMethod(f = "getIid",
                       delta.unfavorable <- coef(object, endpoint = valid.endpoint, cumulative = FALSE, statistic = "unfavorable", strata = level.strata, resampling = FALSE, simplify = FALSE)
                       delta.neutral <- coef(object, endpoint = valid.endpoint, cumulative = FALSE, statistic = "neutral", strata = level.strata, resampling = FALSE, simplify = FALSE)
                   }
-                  
+
                   for(iter_strata in 1:n.strata){  ## iter_strata <- 1
                       iStrataC <- intersect(indexC,indexStrata[[iter_strata]])
                       iStrataT <- intersect(indexT,indexStrata[[iter_strata]])
                       ## remove scaling (by the sample size: \sum_i IF_i^2 -> 1/n^2 \sum_i IF_i^2)
-                      if(scale==FALSE || center == FALSE){
-                          object.iid$favorable[iStrataC,] <- length(iStrataC) * object.iid$favorable[iStrataC,,drop=FALSE]
-                          object.iid$favorable[iStrataT,] <- length(iStrataT) * object.iid$favorable[iStrataT,,drop=FALSE]
+                      object.iid$favorable[iStrataC,] <- length(iStrataC) * object.iid$favorable[iStrataC,,drop=FALSE]
+                      object.iid$favorable[iStrataT,] <- length(iStrataT) * object.iid$favorable[iStrataT,,drop=FALSE]
 
-                          object.iid$unfavorable[iStrataC,] <- length(iStrataC) * object.iid$unfavorable[iStrataC,,drop=FALSE]
-                          object.iid$unfavorable[iStrataT,] <- length(iStrataT) * object.iid$unfavorable[iStrataT,,drop=FALSE]
+                      object.iid$unfavorable[iStrataC,] <- length(iStrataC) * object.iid$unfavorable[iStrataC,,drop=FALSE]
+                      object.iid$unfavorable[iStrataT,] <- length(iStrataT) * object.iid$unfavorable[iStrataT,,drop=FALSE]
 
-                          object.iid$neutral[iStrataC,] <- length(iStrataC) * object.iid$neutral[iStrataC,,drop=FALSE]
-                          object.iid$neutral[iStrataT,] <- length(iStrataT) * object.iid$neutral[iStrataT,,drop=FALSE]
-                      }
-                      
-                      ## remove centering
+                      object.iid$neutral[iStrataC,] <- length(iStrataC) * object.iid$neutral[iStrataC,,drop=FALSE]
+                      object.iid$neutral[iStrataT,] <- length(iStrataT) * object.iid$neutral[iStrataT,,drop=FALSE]
+                  
+                      ## remove centeringn
                       if(center==FALSE){
                           object.iid$favorable[c(iStrataC,iStrataT),] <- .rowCenter_cpp(object.iid$favorable[c(iStrataC,iStrataT),,drop=FALSE], - delta.favorable[iter_strata,,drop=FALSE])
                           object.iid$unfavorable[c(iStrataC,iStrataT),] <- .rowCenter_cpp(object.iid$unfavorable[c(iStrataC,iStrataT),,drop=FALSE], -delta.unfavorable[iter_strata,,drop=FALSE])
@@ -297,26 +303,31 @@ setMethod(f = "getIid",
                   }
 
               }
-
+              
               ## ** add strata weights
-              MweightStrata <- matrix(NA, nrow = n.obs, ncol = n.endpoint, dimnames = list(NULL,valid.endpoint))
-              MweightStrata[unlist(indexStrata),] <- do.call(rbind,lapply(1:n.strata, function(iS){
-                  matrix(weightStrata[iS], nrow = length(indexStrata[[iS]]), ncol = n.endpoint)
-              }))
+              if(attr(weightStrata,"type")=="standardization"){
+                  ls.iid.favorable <- list(global = object.iid$favorable)
+                  ls.iid.unfavorable <- list(global = object.iid$unfavorable)
+              }else{
+                  MweightStrata <- matrix(NA, nrow = n.obs, ncol = n.endpoint, dimnames = list(NULL,valid.endpoint))
+                  MweightStrata[unlist(indexStrata),] <- do.call(rbind,lapply(1:n.strata, function(iS){
+                      matrix(weightStrata[iS], nrow = length(indexStrata[[iS]]), ncol = n.endpoint)
+                  }))
 
-              ls.iid.favorable <- c(list(global = object.iid$favorable*MweightStrata),
-                                    stats::setNames(lapply(1:n.strata, function(iStrata){ ## iStrata <- 1
-                                        iM <- object.iid$favorable
-                                        iM[-indexStrata[[iStrata]],] <- 0
-                                        return(iM)
-                                    }), level.strata))
+                  ls.iid.favorable <- c(list(global = object.iid$favorable*MweightStrata),
+                                        stats::setNames(lapply(1:n.strata, function(iStrata){ ## iStrata <- 1
+                                            iM <- object.iid$favorable
+                                            iM[-indexStrata[[iStrata]],] <- 0
+                                            return(iM)
+                                        }), level.strata))
 
-              ls.iid.unfavorable <- c(list(global = object.iid$unfavorable*MweightStrata),
-                                      stats::setNames(lapply(1:n.strata, function(iStrata){ ## iStrata <- 1
-                                          iM <- object.iid$unfavorable
-                                          iM[-indexStrata[[iStrata]],] <- 0
-                                          return(iM)
-                                      }), level.strata))
+                  ls.iid.unfavorable <- c(list(global = object.iid$unfavorable*MweightStrata),
+                                          stats::setNames(lapply(1:n.strata, function(iStrata){ ## iStrata <- 1
+                                              iM <- object.iid$unfavorable
+                                              iM[-indexStrata[[iStrata]],] <- 0
+                                              return(iM)
+                                          }), level.strata))
+              }
 
               ## ** aggregate at a cluster level
               if(!is.null(cluster)){

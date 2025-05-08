@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: sep 26 2018 (12:57) 
 ## Version: 
-## Last-Updated: mar  4 2025 (14:41) 
+## Last-Updated: Apr 21 2025 (11:47) 
 ##           By: Brice Ozenne
-##     Update #: 1318
+##     Update #: 1333
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -23,6 +23,9 @@
 #' Returns estimates, their standard deviation, the average estimated standard error, and the rejection rate.
 #' Can also be use for power calculation or to approximate the sample size needed to reach a specific power.
 #'
+#' @param formula [formula] a symbolic description of the GPC model,
+#' typically \code{treatment ~ type1(endpoint1) + type2(endpoint2, threshold2) + strata}.
+#' See Details in the documentation of the \code{\link{BuyseTest}} function, section "Specification of the GPC model".
 #' @param sim [function] take two arguments:
 #' the sample size in the control group (\code{n.C}) and the sample size in the treatment group (\code{n.C})
 #' and generate datasets. The datasets must be data.frame objects or inherits from data.frame.
@@ -137,7 +140,8 @@
 
 ## * powerBuyseTest (code)
 ##' @export
-powerBuyseTest <- function(sim,
+powerBuyseTest <- function(formula,
+                           sim,
                            sample.size,
                            n.rep = c(1000,10),
                            null = c("netBenefit" = 0),
@@ -170,7 +174,7 @@ powerBuyseTest <- function(sim,
         transformation <- option$transformation
     }
     alpha <- 1 - conf.level
-    outArgs <- initializeArgs(cpus = cpus, option = option, call = mycall, 
+    outArgs <- initializeArgs(formula = formula, cpus = cpus, option = option, call = mycall, 
                               data = NULL, model.tte = NULL, ...)
     outArgs$call <- setNames(as.list(mycall),names(mycall))
 
@@ -326,7 +330,7 @@ powerBuyseTest <- function(sim,
                                 args = list(X = 1:n.rep[2],
                                             FUN = function(X){
                                                 if(!is.null(seed)){set.seed(seqSeed[X])}
-                                                iOut <- BuyseTest(..., data = sim(n.T = max.sample.size["T"], n.C = max.sample.size["C"]), trace = 0)
+                                                iOut <- BuyseTest(formula, data = sim(n.T = max.sample.size["T"], n.C = max.sample.size["C"]), trace = 0, ...)
                                                 return(iOut)
                                             })
                                 )
@@ -353,7 +357,7 @@ powerBuyseTest <- function(sim,
                                                        .options.snow = opts), {
                                          iOut <- lapply(split.resampling[[iB]], function(iSplit){
                                              if(!is.null(seed)){set.seed(seqSeed[iSplit])}
-                                             iBT <- BuyseTest(..., data = sim(n.T = max.sample.size["T"], n.C = max.sample.size["C"]), trace = 0)
+                                             iBT <- BuyseTest(formula, data = sim(n.T = max.sample.size["T"], n.C = max.sample.size["C"]), trace = 0, ...)
                                              return(iBT)                                             
                                          })
                                          return(iOut)                                         
@@ -464,7 +468,7 @@ powerBuyseTest <- function(sim,
             resInitData <- do.call(initializeData, args = c(outArgs[argsInit], list(copy = FALSE, data = dt.tempo)))
             do.call(printGeneral, args = c(outArgs, list(M.status = resInitData$M.status, paired = resInitData$paired)))
             if(outArgs$method.inference!="none"){
-                do.call(printInference, args = outArgs)
+                do.call(printInference, args = c(outArgs, list(paired = resInitData$paired)))
             }
         }
         if(!missing(sample.size) && !is.null(sample.size)){
@@ -612,7 +616,7 @@ powerBuyseTest <- function(sim,
 
     ## when creating S4 object
     keep.args <- c("index.C", "index.T", "index.strata", "type","endpoint","level.strata","level.treatment","scoring.rule","hierarchical","neutral.as.uninf","add.halfNeutral",
-                   "correction.uninf","method.inference","method.score","paired","strata","threshold","restriction","weightObs","weightEndpoint","pool.strata","n.resampling","call")
+                   "correction.uninf","method.inference","method.score","paired","strata","grid.strata","threshold","restriction","weightObs","weightEndpoint","pool.strata","n.resampling","call")
 
     ## ** Simulate data
     data <- data.table::as.data.table(envir$sim(n.T = envir$sample.sizeTmax, n.C = envir$sample.sizeCmax))

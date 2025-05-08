@@ -1,8 +1,8 @@
 Package: BuyseTest
 Type: Package
 Title: Generalized Pairwise Comparisons
-Version: 3.1.0
-Date: 2025-03-04
+Version: 3.2.0
+Date: 2025-05-08
 Authors@R: c(
     person("Brice", "Ozenne", role = c("aut", "cre"), email = "brice.mh.ozenne@gmail.com", comment = c(ORCID = "0000-0001-9694-2956")),
     person("Eva", "Cantagallo", role = "aut"),
@@ -44,12 +44,13 @@ Collate: '0-onLoad.R' '1-setGeneric.R' 'BuyseMultComp.R' 'BuyseTTEM.R'
         'rbind.performanceResample.R' 'sim.simBuyseTest.R'
         'simBuyseTest.R' 'simCompetingRisks.R' 'summary.performance.R'
         'valid.R'
-Packaged: 2025-03-04 14:06:25 UTC; hpl802
-Author: Brice Ozenne [aut, cre] (<https://orcid.org/0000-0001-9694-2956>),
+Packaged: 2025-05-08 09:44:46 UTC; bozenne
+Author: Brice Ozenne [aut, cre] (ORCID:
+    <https://orcid.org/0000-0001-9694-2956>),
   Eva Cantagallo [aut],
   William Anderson [aut],
   Julien Peron [ctb],
   Johan Verbeeck [ctb]
 Maintainer: Brice Ozenne <brice.mh.ozenne@gmail.com>
 Repository: CRAN
-Date/Publication: 2025-03-04 14:40:02 UTC
+Date/Publication: 2025-05-08 10:10:02 UTC
