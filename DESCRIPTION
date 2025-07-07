@@ -1,8 +1,8 @@
 Package: BuyseTest
 Type: Package
 Title: Generalized Pairwise Comparisons
-Version: 3.2.0
-Date: 2025-05-08
+Version: 3.3.1
+Date: 2025-07-07
 Authors@R: c(
     person("Brice", "Ozenne", role = c("aut", "cre"), email = "brice.mh.ozenne@gmail.com", comment = c(ORCID = "0000-0001-9694-2956")),
     person("Eva", "Cantagallo", role = "aut"),
@@ -35,16 +35,17 @@ Collate: '0-onLoad.R' '1-setGeneric.R' 'BuyseMultComp.R' 'BuyseTTEM.R'
         'S4-BuyseTest-model.tables.R' 'S4-BuyseTest-nobs.R'
         'S4-BuyseTest-plot.R' 'S4-BuyseTest-summary.R'
         'S4-BuyseTest-print.R' 'S4-BuyseTest-sensitivity.R'
-        'S4-BuyseTest-show.R' 'S4-BuyseTest.options.R'
+        'S4-BuyseTest-show.R' 'S4-BuyseTest-update.R'
+        'S4-BuyseTest.options.R' 'S4-BuyseTest.vcov.R'
         'as.data.table.performance.R' 'auc.R' 'autoplot.S4BuyseTest.R'
         'brier.R' 'constStrata.R' 'discreteRoot.R' 'doc-data.R'
-        'efronlim.R' 'iid.S3sensitivity.R' 'iid.prodlim.R' 'normexp.R'
-        'performance.R' 'performanceResample.R' 'plot.S3sensitivity.R'
-        'powerBuyseTest.R' 'predict.logit.R'
+        'efronlim.R' 'iid.S3sensitivity.R' 'iid.prodlim.R' 'mover.R'
+        'normexp.R' 'performance.R' 'performanceResample.R'
+        'plot.S3sensitivity.R' 'powerBuyseTest.R' 'predict.logit.R'
         'rbind.performanceResample.R' 'sim.simBuyseTest.R'
         'simBuyseTest.R' 'simCompetingRisks.R' 'summary.performance.R'
         'valid.R'
-Packaged: 2025-05-08 09:44:46 UTC; bozenne
+Packaged: 2025-07-07 20:02:26 UTC; bozenne
 Author: Brice Ozenne [aut, cre] (ORCID:
     <https://orcid.org/0000-0001-9694-2956>),
   Eva Cantagallo [aut],
@@ -53,4 +54,4 @@ Author: Brice Ozenne [aut, cre] (ORCID:
   Johan Verbeeck [ctb]
 Maintainer: Brice Ozenne <brice.mh.ozenne@gmail.com>
 Repository: CRAN
-Date/Publication: 2025-05-08 10:10:02 UTC
+Date/Publication: 2025-07-07 20:20:02 UTC

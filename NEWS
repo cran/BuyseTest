@@ -1,5 +1,21 @@
 # -*- mode: org -*-
 
+* Version 3.3.0
+** User visible change
+- the formula interface in BuyseTest can now take the outcome on the left hand side and the treatment and strata variables on the right-hand side
+- argument match added to the operator strata to handle paired design.
+- NEW FEATURE: add an update and vcov method for BuyseTest objects.
+
+** Internal change
+- fix bug in standardization when evaluating the standard error with u-statistic
+- coef() now outputs a numeric with name when a single value is returned. This is for consistency as when multiple values are
+  returned (e.g. multiple priorities) a numeric vector with names was output.
+
+
+* Version 3.2.1
+** Internal change
+- fix standard error estimation in a paired design
+
 * Version 3.2.0.
 ** User visible changes
 - NEW FEATURE: pool.strata = "standardization" to obtain a marginal Net Treatment Benefit after stratification.

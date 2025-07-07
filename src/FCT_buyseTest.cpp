@@ -82,7 +82,7 @@ arma::sp_mat subcol_sp_mat(const arma::sp_mat& X, arma::uvec index);
 //' @param addHalfNeutral Should half of the neutral score be added to the favorable and unfavorable scores?
 //' @param keepScore Should the result of each pairwise comparison be kept?
 //' @param precompute Have the integrals relative to the survival be already computed and stored in list_survTimeC/list_survTimeT and list_survJumpC/list_survJumpT (derivatives)
-//' @param paired In case of paired data, the variance of the summary statistic across strata will be added to the variance of the pooled statistic.
+//' @param match In case of matched data, the variance is computed using the variance of the summary statistic across strata instead of the usual H-decomposition.
 //' @param returnIID Should the iid be computed? Second element: is there any nuisance parameter?
 //' @param debug Print messages tracing the execution of the function to help debugging. The amount of messages increase with the value of debug (0-5).
 //'
@@ -136,7 +136,7 @@ Rcpp::List GPC_cpp(arma::mat endpoint,
 		   bool addHalfNeutral,
 		   bool keepScore,
 		   bool precompute,
-		   bool paired,
+		   bool match,
 		   std::vector< int > returnIID,
 		   int debug){
 
@@ -470,7 +470,7 @@ Rcpp::List GPC_cpp(arma::mat endpoint,
 		Mvar, returnIID,
 		posC, posT, weightObs, // note: no need to re-order weightObs as it should only contains 1
                 D, n_strata, grid_strata, vecn_pairs, vecn_control, vecn_treatment,
-		weightEndpoint, pool, poolWeight, addHalfNeutral, hprojection, pairScore, keepScore, paired);
+		weightEndpoint, pool, poolWeight, addHalfNeutral, hprojection, pairScore, keepScore, match);
 
   // ** export
   return(Rcpp::List::create(Rcpp::Named("count_favorable") = Mcount_favorable,
@@ -534,7 +534,7 @@ Rcpp::List GPC2_cpp(arma::mat endpoint,
 		    bool addHalfNeutral,
 		    bool keepScore,
 		    bool precompute,
-		    bool paired,
+		    bool match,
 		    std::vector< int > returnIID,
 		    int debug){
   if(debug>0){Rcpp::Rcout << std::endl;}
@@ -1046,13 +1046,13 @@ Rcpp::List GPC2_cpp(arma::mat endpoint,
       if(debug>0){Rcpp::Rcout << " - compute iid nuisance" << std::endl;}
 
       for(unsigned int iter_d=0; iter_d < D; iter_d++){
-	for(unsigned int iter_UTTE=0 ; iter_UTTE<D_UTTE; iter_UTTE++){	  
-	  iidNuisance_favorable.col(iter_d) += iid_survJumpC[iter_UTTE][iter_strataC] * Dfavorable_Dnuisance_strataC[iter_UTTE].col(iter_d)/vecn_pairs[iter_strataC];
-    	  iidNuisance_favorable.col(iter_d) += iid_survJumpT[iter_UTTE][iter_strataT] * Dfavorable_Dnuisance_strataT[iter_UTTE].col(iter_d)/vecn_pairs[iter_strataT];
-    	  iidNuisance_unfavorable.col(iter_d) += iid_survJumpC[iter_UTTE][iter_strataC] * Dunfavorable_Dnuisance_strataC[iter_UTTE].col(iter_d)/vecn_pairs[iter_strataC];
-    	  iidNuisance_unfavorable.col(iter_d) += iid_survJumpT[iter_UTTE][iter_strataT] * Dunfavorable_Dnuisance_strataT[iter_UTTE].col(iter_d)/vecn_pairs[iter_strataT];
-    	  iidNuisance_neutral.col(iter_d) += iid_survJumpC[iter_UTTE][iter_strataC] * Dneutral_Dnuisance_strataC[iter_UTTE].col(iter_d)/vecn_pairs[iter_strataC];
-    	  iidNuisance_neutral.col(iter_d) += iid_survJumpT[iter_UTTE][iter_strataT] * Dneutral_Dnuisance_strataT[iter_UTTE].col(iter_d)/vecn_pairs[iter_strataT];
+	for(unsigned int iter_UTTE=0 ; iter_UTTE<D_UTTE; iter_UTTE++){
+	  iidNuisance_favorable.col(iter_d) += iid_survJumpC[iter_UTTE][iter_strata] * Dfavorable_Dnuisance_strataC[iter_UTTE].col(iter_d)/vecn_pairs[iter_strata];
+	  iidNuisance_favorable.col(iter_d) += iid_survJumpT[iter_UTTE][iter_strata] * Dfavorable_Dnuisance_strataT[iter_UTTE].col(iter_d)/vecn_pairs[iter_strata];
+	  iidNuisance_unfavorable.col(iter_d) += iid_survJumpC[iter_UTTE][iter_strata] * Dunfavorable_Dnuisance_strataC[iter_UTTE].col(iter_d)/vecn_pairs[iter_strata];
+	  iidNuisance_unfavorable.col(iter_d) += iid_survJumpT[iter_UTTE][iter_strata] * Dunfavorable_Dnuisance_strataT[iter_UTTE].col(iter_d)/vecn_pairs[iter_strata];
+	  iidNuisance_neutral.col(iter_d) += iid_survJumpC[iter_UTTE][iter_strata] * Dneutral_Dnuisance_strataC[iter_UTTE].col(iter_d)/vecn_pairs[iter_strata];
+	  iidNuisance_neutral.col(iter_d) += iid_survJumpT[iter_UTTE][iter_strata] * Dneutral_Dnuisance_strataT[iter_UTTE].col(iter_d)/vecn_pairs[iter_strata];
 	}
       }
     }
@@ -1103,7 +1103,7 @@ Rcpp::List GPC2_cpp(arma::mat endpoint,
 		Mvar, returnIID,
 		posC, posT, weightObs_sort,
 		D, n_strata, grid_strata, vecn_pairs, vecn_control, vecn_treatment,
-		weightEndpoint, pool, poolWeight, addHalfNeutral, hprojection, pairScore, keepScore, paired);
+		weightEndpoint, pool, poolWeight, addHalfNeutral, hprojection, pairScore, keepScore, match);
 
   // ** export
   return(Rcpp::List::create(Rcpp::Named("count_favorable") = Mcount_favorable,
@@ -1225,29 +1225,29 @@ void updateIID(arma::mat& iidAverage_favorable, arma::mat& iidAverage_unfavorabl
       // DOCUMENTATION Armadillo
       // sum: For matrix M, return the sum of elements in each column (dim=0), or each row (dim=1)
       iDweight_Dnuisance_C = sum(iPairDweight_Dnuisance_C[0][activeUTTE[iter_UTTE]],1);
-      iidNuisance_favorable.col(iter_d) += iid_survJumpC[activeUTTE[iter_UTTE]][iter_strataC] * iDweight_Dnuisance_C / vecn_pairs[iter_strata];
+      iidNuisance_favorable.col(iter_d) += iid_survJumpC[activeUTTE[iter_UTTE]][iter_strata] * iDweight_Dnuisance_C / vecn_pairs[iter_strata];
       iDweight_Dnuisance_T = sum(iPairDweight_Dnuisance_T[0][activeUTTE[iter_UTTE]],1);
-      iidNuisance_favorable.col(iter_d) += iid_survJumpT[activeUTTE[iter_UTTE]][iter_strataT] * iDweight_Dnuisance_T / vecn_pairs[iter_strata];
+      iidNuisance_favorable.col(iter_d) += iid_survJumpT[activeUTTE[iter_UTTE]][iter_strata] * iDweight_Dnuisance_T / vecn_pairs[iter_strata];
 
       iDweight_Dnuisance_C = sum(iPairDweight_Dnuisance_C[1][activeUTTE[iter_UTTE]],1);
-      iidNuisance_unfavorable.col(iter_d) += iid_survJumpC[activeUTTE[iter_UTTE]][iter_strataC] * iDweight_Dnuisance_C / vecn_pairs[iter_strata];
+      iidNuisance_unfavorable.col(iter_d) += iid_survJumpC[activeUTTE[iter_UTTE]][iter_strata] * iDweight_Dnuisance_C / vecn_pairs[iter_strata];
       iDweight_Dnuisance_T = sum(iPairDweight_Dnuisance_T[1][activeUTTE[iter_UTTE]],1);
-      iidNuisance_unfavorable.col(iter_d) += iid_survJumpT[activeUTTE[iter_UTTE]][iter_strataT] * iDweight_Dnuisance_T / vecn_pairs[iter_strata];
+      iidNuisance_unfavorable.col(iter_d) += iid_survJumpT[activeUTTE[iter_UTTE]][iter_strata] * iDweight_Dnuisance_T / vecn_pairs[iter_strata];
 
       iDweight_Dnuisance_C = sum(iPairDweight_Dnuisance_C[2][activeUTTE[iter_UTTE]],1);
-      iidNuisance_neutral.col(iter_d) += iid_survJumpC[activeUTTE[iter_UTTE]][iter_strataC] * iDweight_Dnuisance_C / vecn_pairs[iter_strata];
+      iidNuisance_neutral.col(iter_d) += iid_survJumpC[activeUTTE[iter_UTTE]][iter_strata] * iDweight_Dnuisance_C / vecn_pairs[iter_strata];
       iDweight_Dnuisance_T = sum(iPairDweight_Dnuisance_T[2][activeUTTE[iter_UTTE]],1);
-      iidNuisance_neutral.col(iter_d) += iid_survJumpT[activeUTTE[iter_UTTE]][iter_strataT] * iDweight_Dnuisance_T / vecn_pairs[iter_strata];
+      iidNuisance_neutral.col(iter_d) += iid_survJumpT[activeUTTE[iter_UTTE]][iter_strata] * iDweight_Dnuisance_T / vecn_pairs[iter_strata];
     }
 
     // *** iid of the proba/score
     if(iMethod >= 5){
-      iidNuisance_favorable.col(iter_d) += iid_survJumpC[iIndex_UTTE][iter_strataC] * iDscore_Dnuisance_C.col(0)/vecn_pairs[iter_strata];
-      iidNuisance_favorable.col(iter_d) += iid_survJumpT[iIndex_UTTE][iter_strataT] * iDscore_Dnuisance_T.col(0)/vecn_pairs[iter_strata];
-      iidNuisance_unfavorable.col(iter_d) += iid_survJumpC[iIndex_UTTE][iter_strataC] * iDscore_Dnuisance_C.col(1)/vecn_pairs[iter_strata];
-      iidNuisance_unfavorable.col(iter_d) += iid_survJumpT[iIndex_UTTE][iter_strataT] * iDscore_Dnuisance_T.col(1)/vecn_pairs[iter_strata];
-      iidNuisance_neutral.col(iter_d) += iid_survJumpC[iIndex_UTTE][iter_strataC] * iDscore_Dnuisance_C.col(2)/vecn_pairs[iter_strata];
-      iidNuisance_neutral.col(iter_d) += iid_survJumpT[iIndex_UTTE][iter_strataT] * iDscore_Dnuisance_T.col(2)/vecn_pairs[iter_strata];
+      iidNuisance_favorable.col(iter_d) += iid_survJumpC[iIndex_UTTE][iter_strata] * iDscore_Dnuisance_C.col(0)/vecn_pairs[iter_strata];
+      iidNuisance_favorable.col(iter_d) += iid_survJumpT[iIndex_UTTE][iter_strata] * iDscore_Dnuisance_T.col(0)/vecn_pairs[iter_strata];
+      iidNuisance_unfavorable.col(iter_d) += iid_survJumpC[iIndex_UTTE][iter_strata] * iDscore_Dnuisance_C.col(1)/vecn_pairs[iter_strata];
+      iidNuisance_unfavorable.col(iter_d) += iid_survJumpT[iIndex_UTTE][iter_strata] * iDscore_Dnuisance_T.col(1)/vecn_pairs[iter_strata];
+      iidNuisance_neutral.col(iter_d) += iid_survJumpC[iIndex_UTTE][iter_strata] * iDscore_Dnuisance_C.col(2)/vecn_pairs[iter_strata];
+      iidNuisance_neutral.col(iter_d) += iid_survJumpT[iIndex_UTTE][iter_strata] * iDscore_Dnuisance_T.col(2)/vecn_pairs[iter_strata];
     }
 
   }
