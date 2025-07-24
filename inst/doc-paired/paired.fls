@@ -1493,6 +1493,8 @@ INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/stmaryrd/stmary7.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/prodint/prodint.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/prodint/prodint.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/prodint/prodint.tfm
+INPUT /usr/share/texmf/fonts/tfm/public/lm/ec-lmr17.tfm
+INPUT /usr/share/texmf/fonts/tfm/public/lm/ec-lmbx12.tfm
 INPUT /usr/share/texlive/texmf-dist/tex/latex/listings/lstlang1.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/listings/lstlang1.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/listings/lstlang1.sty
@@ -1534,7 +1536,6 @@ INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/prodint/prodint.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/prodint/prodint.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/prodint/prodint.tfm
 INPUT /var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map
-INPUT /usr/share/texmf/fonts/tfm/public/lm/ec-lmr17.tfm
 INPUT /usr/share/texmf/fonts/tfm/public/lm/ec-lmbx12.tfm
 INPUT /usr/share/texmf/fonts/tfm/public/lm/rm-lmr12.tfm
 INPUT /usr/share/texmf/fonts/tfm/public/lm/lmmi12.tfm
@@ -1558,6 +1559,11 @@ INPUT /usr/share/texmf/tex/latex/lm/ts1lmr.fd
 INPUT /usr/share/texmf/tex/latex/lm/ts1lmr.fd
 INPUT /usr/share/texmf/tex/latex/lm/ts1lmr.fd
 INPUT /usr/share/texmf/fonts/tfm/public/lm/ts1-lmr12.tfm
+INPUT ./figures/spaghetti-Nof1.pdf
+INPUT ./figures/spaghetti-Nof1.pdf
+INPUT ./figures/spaghetti-Nof1.pdf
+INPUT ./figures/spaghetti-Nof1.pdf
+INPUT ./figures/spaghetti-Nof1.pdf
 INPUT ./paired.bbl
 INPUT paired.bbl
 INPUT ./paired.bbl

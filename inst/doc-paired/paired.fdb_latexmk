@@ -1,14 +1,14 @@
 # Fdb version 3
-["bibtex paired"] 1751887301 "paired.aux" "paired.bbl" "paired" 1751887303
+["bibtex paired"] 1753345516 "paired.aux" "paired.bbl" "paired" 1753345517
   "/usr/share/texlive/texmf-dist/bibtex/bst/base/apalike.bst" 1292289607 24635 604dafcc79f521a11ea73e506e1fbd98 ""
-  "bibliography.bib" 1751873188 307 63fc7f9fcb152062265df04ecf310e65 ""
-  "paired.aux" 1751887302 1663 d827194cad9269b926dbc7cdd7eab026 "pdflatex"
+  "bibliography.bib" 1753340677 893 03a57ad374a2f4cf05f4fdae2730e5f7 ""
+  "paired.aux" 1753345517 3022 0f30e9f50f0e2a8b4d49cc92506e43ff "pdflatex"
   (generated)
   "paired.bbl"
   "paired.blg"
-["pdflatex"] 1751887301 "/home/bozenne/Documents/GitHub/BuyseTest/inst/doc-paired/paired.tex" "paired.pdf" "paired" 1751887303
+["pdflatex"] 1753345516 "/home/bozenne/Documents/GitHub/BuyseTest/inst/doc-paired/paired.tex" "paired.pdf" "paired" 1753345517
   "/etc/texmf/web2c/texmf.cnf" 1712233310 475 c0e671620eb5563b2130f56340a5fde8 ""
-  "/home/bozenne/Documents/GitHub/BuyseTest/inst/doc-paired/paired.tex" 1751887299 19788 4b52e59df5e2ffb370417c3b80efb90b ""
+  "/home/bozenne/Documents/GitHub/BuyseTest/inst/doc-paired/paired.tex" 1753345514 34339 83956cdb83ccc1c412aaafac49de7eda ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/adobe/symbol/psyr.tfm" 1136768653 1408 5937f58aa508ea2cea4901c07d10f5fe ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/adobe/zapfding/pzdr.tfm" 1136768653 1528 f853c4d1b4e0550255e02831fdc8496f ""
@@ -272,10 +272,11 @@
   "/usr/share/texmf/web2c/texmf.cnf" 1644012257 39432 7155514e09a3d69036fac785183a21c2 ""
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1712239075 4379155 98693266ff65f58d9f98aff394de12d2 ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1712239118 2799667 805ca6e7f2043d27ea77934bf6b4e5cc ""
-  "paired.aux" 1751887302 1663 d827194cad9269b926dbc7cdd7eab026 "pdflatex"
-  "paired.bbl" 1751887301 264 8e3f1eaf400e17856a292c0048bbc5a7 "bibtex paired"
-  "paired.out" 1751887302 678 9e06e23d68bba20372fb70ca106d0434 "pdflatex"
-  "paired.tex" 1751887299 19788 4b52e59df5e2ffb370417c3b80efb90b ""
+  "figures/spaghetti-Nof1.pdf" 1753340677 79510 9bc2baf7a20b179232307a221037124e ""
+  "paired.aux" 1753345517 3022 0f30e9f50f0e2a8b4d49cc92506e43ff "pdflatex"
+  "paired.bbl" 1753345516 754 e8ba36c48537ee92f9456f24658c3762 "bibtex paired"
+  "paired.out" 1753345517 1806 5466beb880ddd8fc1e3c56e3e2292f74 "pdflatex"
+  "paired.tex" 1753345514 34339 83956cdb83ccc1c412aaafac49de7eda ""
   (generated)
   "paired.aux"
   "paired.loc"
