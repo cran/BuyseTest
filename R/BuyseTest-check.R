@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 27 2018 (23:32) 
 ## Version: 
-## Last-Updated: Jul 24 2025 (09:35) 
+## Last-Updated: maj 22 2025 (16:08) 
 ##           By: Brice Ozenne
-##     Update #: 429
+##     Update #: 424
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -98,13 +98,11 @@ testArgs <- function(name.call,
         level.strata <- levels(strataT)
         n.strata <- length(level.strata)
         if(is.null(attr(strata,"match"))){
-            stop("Undefined value for \'match\': contact the package maintainer. \n")
+            stop("BuyseTest: undefined value for \'match\' . \n",
+                 "Contact the package maintainer. \n")
         }else if(length(attr(strata,"match"))!=1 || attr(strata,"match") %in% 0:1 == FALSE){
-            stop("Argument \'match\' should be a binary variable. \n")
-        }else if(length(attr(strata,"match")) == 1 && attr(strata,"match")>0 && pool.strata>=3){
-            stop("Argument pool.strata should be \"Buyse\", \"CMH\", or \"equal\" in a matched design. \n")
+            stop("BuyseTest: \'match\' should be a binary variable. \n")
         }
-        
     }
 
     
@@ -225,7 +223,7 @@ testArgs <- function(name.call,
     if(is.na(pool.strata)){
         stop("BuyseTest: wrong specification of \'pool.strata\'. \n",
              "valid values: \"Buyse\", \"CMH\", \"equal\", \"standardisation\", \"standardization\", \"var-favorable\", \"var-unfavorable\", \"var-netBenefit\", \"var-winRatio\". \n")
-    }else if(pool.strata == 3){
+    }else if(pool.strata == "standardization"){
         if(engine != "GPC2_cpp"){
             stop("BuyseTest: argument \'pool.strata\' set to \"standardization\" only available for engine = \"GPC2_cpp\". \n")
         }
