@@ -24,6 +24,8 @@ printGeneral <- function(status,
                          restriction,
                          strata,
                          threshold,
+                         model.tte,
+                         multiplicative.threshold,
                          trace,
                          treatment,
                          type,
@@ -70,10 +72,10 @@ printGeneral <- function(status,
     df.endpoint$endpoint <- paste0(df.endpoint$endpoint," ")
     df.endpoint$type <- paste0(df.endpoint$type," ")
     df.endpoint$operator <- paste0(df.endpoint$operator," ")
-    if(all(threshold <= 1e-12)){
-        df.endpoint$threshold <- NULL
+    if(all(threshold <= (multiplicative.threshold + 1e-12))){
+        df.endpoint$threshold <- ifelse(multiplicative.threshold,"multiplicative","additive")
     }else{
-        df.endpoint$threshold <- ifelse(df.endpoint$threshold<=1e-12,NA,paste0(df.endpoint$threshold," "))
+        df.endpoint$threshold <- ifelse(df.endpoint$threshold<= (multiplicative.threshold + 1e-12),NA,paste0(ifelse(multiplicative.threshold,"*","+"),df.endpoint$threshold," "))
     }
     if(all(is.na(restriction))){
         df.endpoint$restriction <- NULL
@@ -128,12 +130,20 @@ printGeneral <- function(status,
         }else{
             txt.Peron <- "survival/cif"
         }
-
-        switch(as.character(scoring.rule),
-               "0" = cat("deterministic score or uninformative \n"),
-               "1" = cat("probabilistic score based on the ",txt.Peron," curves \n",sep=""),
-               "2" = cat("probabilistic score based on the ",txt.Peron," curves \n \t\t\t   (set to 0 beyond available follow-up) \n",sep="")
-               )
+        
+        if(scoring.rule == "gehan"){
+            cat("deterministic score or uninformative \n")
+        }else if(!is.null(model.tte)){
+            cat("probabilistic score based on the ",txt.Peron," curves \n \t\t\t     (user-defined time to event model) \n",sep="")
+        }else if(scoring.rule %in% names(survival::survreg.distributions)){
+            cat("probabilistic score based on the ",txt.Peron," curves \n \t\t\t     (parametric, group-specific) \n",sep="")
+        }else{
+            switch(scoring.rule,
+                   "peron" = cat("probabilistic score based on the ",txt.Peron," curves \n \t\t\t     (non-parametric, group-specific) \n",sep=""),
+                   "latta" = cat("probabilistic score based on the ",txt.Peron," curves \n \t\t\t     (non-parametric, common to both groups) \n",sep=""),
+                   "efron" = cat("probabilistic score based on the ",txt.Peron," curves \n \t\t\t     (non-parametric, set to 0 beyond available follow-up) \n",sep="")
+                   )
+        }
     }
     ## if(trace>2){
     ##     if ( (scoring.rule == "3" || correction.uninf) && D > 1) {            

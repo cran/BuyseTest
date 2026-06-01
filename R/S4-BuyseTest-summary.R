@@ -151,6 +151,9 @@ setMethod(f = "summary",
               hierarchical <- slot(object,"hierarchical")
               scoring.rule <- slot(object,"scoring.rule")
 
+              scoring.rule_like_peron <- scoring.rule %in% c("peron","efron","latta",names(survival::survreg.distributions))
+
+
               if(is.null(statistic)){
                   statistic <- option$statistic
               }else{
@@ -268,7 +271,10 @@ setMethod(f = "summary",
               
               ## *** convert NA to ""
               if("threshold" %in% name.print){
-                  table.print$threshold[table.print$threshold<=1e-12] <- ""
+                  threshold.operator <- ifelse(attr(slot(object,"threshold"),"multiplicative"),"*","+")
+                  threshold.rm <- which(table.print$threshold<=1e-12)
+                  table.print$threshold <- paste0(threshold.operator,table.print$threshold)
+                  table.print$threshold[threshold.rm] <- ""                  
               }
               if("restriction" %in% name.print){
                   table.print[is.na(table.print$restriction), "restriction"] <- ""
@@ -370,7 +376,7 @@ setMethod(f = "summary",
                           }else{
                               txt.method <- paste0(txt.method," \n")
                           }
-                          if(test.model.tte && (scoring.rule == "Peron" || object@correction.uninf > 0)){
+                          if(test.model.tte && (scoring.rule_like_peron || object@correction.uninf > 0)){
                               txt.method <- paste0(txt.method,"                     (ignoring the uncertainty of the nuisance parameters)")
                           }
                       }
@@ -410,52 +416,58 @@ setMethod(f = "summary",
                   if(n.strata>1){
                       txt.strataPC <- paste0(round(100*object@weightStrata, digit[1]),"%")
                       table.strataPC <- table(txt.strataPC)
-                      shorttxt.strataPC <- ifelse(table.strataPC>1,paste0(names(table.strataPC), " (x",table.strataPC,")"),names(table.strataPC))
+                      if(any(table.strataPC>1)){
+                          shorttxt.strataPC <- ifelse(table.strataPC>1,paste0(names(table.strataPC), " (x",table.strataPC,")"),names(table.strataPC))
+                      }else{
+                          shorttxt.strataPC <- txt.strataPC
+                      }
                       cat(" - strata weights  : ",paste(shorttxt.strataPC, collapse = ", ")," \n", sep = "")
-              }else if(attr(scoring.rule,"test.match") & length(object@weightStrata)>1){
-                  table.weightStrata <- table(paste0(round(100*object@weightStrata, digit[1]),"%"))
-                  cat(" - pair weights    : ",paste(names(table.weightStrata), collapse = ", ")," (K=",paste(table.weightStrata, collapse=","),")\n", sep = "")
-              }else 
-              if(any(object@type == "tte") && any(attr(scoring.rule,"test.censoring"))){
+                  }else if(attr(scoring.rule,"test.match") & length(object@weightStrata)>1){
+                      table.weightStrata <- table(paste0(round(100*object@weightStrata, digit[1]),"%"))
+                      cat(" - pair weights    : ",paste(names(table.weightStrata), collapse = ", ")," (K=",paste(table.weightStrata, collapse=","),")\n", sep = "")
+                  }else  if(any(object@type == "tte") && any(attr(scoring.rule,"test.censoring"))){
 
-                  if(all(attr(scoring.rule,"method.score")[object@type=="tte"]=="CRPeron")){
-                      txt.Peron <- "cif"
-                  }else if(all(attr(scoring.rule,"method.score")[object@type=="tte"]=="SurvPeron")){
-                      txt.Peron <- "survival"
-                  }else{
-                      txt.Peron <- "survival/cif"
+                          if(all(attr(scoring.rule,"method.score")[object@type=="tte"]=="CRPeron")){
+                              txt.Peron <- "cif"
+                          }else if(all(attr(scoring.rule,"method.score")[object@type=="tte"]=="SurvPeron")){
+                              txt.Peron <- "survival"
+                          }else{
+                              txt.Peron <- "survival/cif"
+                          }
+                          if(scoring.rule_like_peron){
+                              txt.scoring.rule <- paste0("probabilistic score based on the ",txt.Peron," curves")
+                              if(scoring.rule == "efron"){
+                                  txt.scoring.rule <- paste0(txt.scoring.rule, "\n \t\t     (set to 0 beyond available follow-up)")
+                              }
+                              if(scoring.rule == "latta"){
+                                  txt.scoring.rule <- paste0(txt.scoring.rule, "\n \t\t     (common ",txt.Peron," across treatment groups)")
+                              }
+                          }else if(scoring.rule == "gehan"){
+                              txt.scoring.rule <- "deterministic score or uninformative"
+                          }
+                          cat(" - censored pairs  : ",txt.scoring.rule,"\n", sep = "")
+                      }
+                  if(hierarchical && n.endpoint>1 && any(object@count.neutral>0)){
+                      Uneutral.as.uninf <- unique(object@neutral.as.uninf)
+                      if(identical(Uneutral.as.uninf,TRUE)){
+                          txt.neutral <- "re-analyzed using lower priority endpoints"
+                      }else if(identical(Uneutral.as.uninf,FALSE)){
+                          txt.neutral <- "ignored at lower priority endpoints"
+                      }else{
+                          txt.neutral <- paste0("re-analyzed using lower priority endpoints for endpoint ",
+                                                paste(which(object@neutral.as.uninf), collapse = ", "),
+                                                " \n                     otherwise ignored at lower priority endpoints")
+                      }
+                      cat(" - neutral pairs   : ",txt.neutral,"\n", sep = "")
                   }
-
-                  txt.scoring.rule <- switch(scoring.rule,
-                                             "Gehan" = "deterministic score or uninformative",
-                                             "Peron" = paste0("probabilistic score based on the ",txt.Peron," curves")
-                                             )
-                  if(attr(scoring.rule,"efron")){
-                      txt.scoring.rule <- paste0(txt.scoring.rule, "\n \t\t     (set to 0 beyond available follow-up)")
+                  if(!( (object@correction.uninf == 0) && (all(object@count.uninf==0)) )){
+                      txt.uninf <- switch(as.character(object@correction.uninf),
+                                          "0" = if(n.endpoint==1){"no contribution"}else{"no contribution at the current endpoint, analyzed at later endpoints"},
+                                          "1" = "score equals the averaged score of all informative pairs",
+                                          "2" = "no contribution, their weight is passed to the informative pairs using IPCW"
+                                          )
+                      cat(" - uninformative pairs: ",txt.uninf,"\n", sep = "")
                   }
-                  cat(" - censored pairs  : ",txt.scoring.rule,"\n", sep = "")
-              }
-              if(hierarchical && n.endpoint>1 && any(object@count.neutral>0)){
-                  Uneutral.as.uninf <- unique(object@neutral.as.uninf)
-                  if(identical(Uneutral.as.uninf,TRUE)){
-                      txt.neutral <- "re-analyzed using lower priority endpoints"
-                  }else if(identical(Uneutral.as.uninf,FALSE)){
-                      txt.neutral <- "ignored at lower priority endpoints"
-                  }else{
-                      txt.neutral <- paste0("re-analyzed using lower priority endpoints for endpoint ",
-                                            paste(which(object@neutral.as.uninf), collapse = ", "),
-                                            " \n                     otherwise ignored at lower priority endpoints")
-                  }
-                  cat(" - neutral pairs   : ",txt.neutral,"\n", sep = "")
-              }
-              if(!( (object@correction.uninf == 0) && (all(object@count.uninf==0)) )){
-                  txt.uninf <- switch(as.character(object@correction.uninf),
-                                      "0" = if(n.endpoint==1){"no contribution"}else{"no contribution at the current endpoint, analyzed at later endpoints"},
-                                      "1" = "score equals the averaged score of all informative pairs",
-                                      "2" = "no contribution, their weight is passed to the informative pairs using IPCW"
-                                      )
-                  cat(" - uninformative pairs: ",txt.uninf,"\n", sep = "")
-              }
 
               cat(" - results\n")
               table.print2 <- table.print

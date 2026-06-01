@@ -66,6 +66,7 @@ initializeArgs <- function(status,
     ## ** apply default options
     if(is.null(cpus)){ cpus <- option$cpus }
     if(is.null(keep.pairScore)){ keep.pairScore <- option$keep.pairScore }
+    original.scoring.rule <- scoring.rule
     if(is.null(scoring.rule)){ scoring.rule <- option$scoring.rule }
     if(is.null(hierarchical)){ hierarchical <- option$hierarchical }
     if(is.null(correction.uninf)){ correction.uninf <- option$correction.uninf }
@@ -75,11 +76,10 @@ initializeArgs <- function(status,
     if(is.null(neutral.as.uninf)){ neutral.as.uninf <- option$neutral.as.uninf }
     if(is.null(add.halfNeutral)){ add.halfNeutral <- option$add.halfNeutral }
     if(is.null(trace)){ trace <- option$trace }
-    fitter.model.tte <- option$fitter.model.tte
     engine <- option$engine
     alternative <- option$alternative
     precompute <- option$precompute
-        
+    
     ## ** convert formula into separate arguments
     if(!missing(formula)){
         ## the missing is for BuysePower where the arguments are not necessarily specified
@@ -211,18 +211,23 @@ initializeArgs <- function(status,
     ## ** scoring.rule
     ## WARNING: choices must be lower cases
     ##          remember to update check scoring.rule (in BuyseTest-check.R)
+    args.model.tte <- option$args.model.tte
     if(is.character(scoring.rule)){
-        scoring.rule <- switch(tolower(scoring.rule),
-                               "gehan" = 0,
-                               "peron" = 1,
-                               "efron" = 2,
-                               NA
-                               )
+        scoring.rule <- tolower(scoring.rule)
+
+        valid.rule <- c("gehan","peron","efron","latta",names(survival::survreg.distributions))
+        if(scoring.rule %in% valid.rule == FALSE){
+            n.grid <- regmatches(scoring.rule, regexpr("[0-9]+", scoring.rule))
+            scoring.rule <- regmatches(scoring.rule, regexpr("[a-z]+", scoring.rule))
+            if(scoring.rule %in% names(survival::survreg.distributions)){
+                args.model.tte$n.grid <- try(as.numeric(n.grid))
+            }
+        }
     }
 
-    if (D.TTE == 0) {
-        scoring.rule <- 0
-        if ("scoring.rule" %in% name.call && trace > 0) {
+    if (D.TTE == 0){
+        scoring.rule <- "gehan"
+        if(trace > 0 && !is.null(original.scoring.rule) && scoring.rule != "gehan") {
             message("NOTE : there is no survival endpoint, \'scoring.rule\' argument is ignored \n")
         }
     }
@@ -296,11 +301,12 @@ initializeArgs <- function(status,
     }
     
     ## ** threshold
+    operator.star <- grepl("*",operator, fixed=TRUE) ## neutral threshold is 1 instead of 0 when multiplicative instead of additive threshold
     if(any(is.na(threshold))){
-        threshold[which(is.na(threshold))] <- 10^{-12}
+        threshold[which(is.na(threshold))] <- operator.star[which(is.na(threshold))] + 10^(-12)
     }
-    if(any(abs(threshold)<10^{-12})){
-        threshold[which(abs(threshold)<10^{-12})] <- 10^{-12}
+    if(sum(threshold < (operator.star + 10^(-12)), na.rm = TRUE)>0){ ## use sum(, na.rm=TRUE) as threshold may be NA
+        threshold[which(threshold < (operator.star + 10^(-12)))] <- operator.star[which(threshold < (operator.star + 10^(-12)))] + 10^(-12)
     }
 
     ## ** method.inference
@@ -330,11 +336,11 @@ initializeArgs <- function(status,
     }
     
     ## ** model.tte
-    if(scoring.rule>0){
+    if(!is.na(scoring.rule) && scoring.rule!="gehan"){
         if((!is.null(model.tte))){
             if((length(unique(endpoint.TTE)) == 1) && !inherits(model.tte, "list")){
                 attr.save <- attr(model.tte,"iidNuisance")
-            
+                
                 model.tte <- list(model.tte)
                 names(model.tte) <- unique(endpoint.TTE)
                 attr(model.tte,"iidNuisance") <- attr.save
@@ -346,11 +352,6 @@ initializeArgs <- function(status,
     }else{
         model.tte <- NULL
     }
-    if(!is.null(model.tte)){
-        fitter.model.tte <- unlist(lapply(model.tte, class))
-    }else{
-        fitter.model.tte <- setNames(rep(fitter.model.tte, length(Uendpoint.TTE)), Uendpoint.TTE)
-    }
 
     ## ** iid
     iid <- attr(method.inference,"studentized") || (method.inference == "u statistic")
@@ -359,7 +360,7 @@ initializeArgs <- function(status,
     }else{
         attr(method.inference,"hprojection") <- NA
     }
-    if(iid && scoring.rule>0){ ## Peron/Efron scoring rule
+    if(iid && !is.na(scoring.rule) && scoring.rule!="gehan"){ ## Peron/Efron scoring rule
         if(is.null(model.tte)){
             iidNuisance <- TRUE
         }else if(!is.null(attr(model.tte,"iidNuisance"))){
@@ -393,7 +394,28 @@ initializeArgs <- function(status,
 
     ## ** operator
     if(!is.numeric(operator)){
-        operator <- sapply(operator, switch, ">0"=1, "<0"=-1, NA)
+        multiplicative.threshold <- sapply(operator, switch,
+                                           ">0"=FALSE,
+                                           "+"=FALSE,
+                                           "+>0"=FALSE,
+                                           "<0"=FALSE,
+                                           "+<0"=FALSE,
+                                           "*>0"=TRUE,
+                                           "*"=TRUE,
+                                           "*<0"=TRUE,
+                                           NA)
+        operator <- sapply(operator, switch,
+                           ">0"=1,
+                           "+"=1,
+                           "*"=1,
+                           "+>0"=1,
+                           "*>0"=1,
+                           "<0"=-1,
+                           "+<0"=-1,
+                           "*<0"=-1,
+                           NA)
+    }else{
+        multiplicative.threshold <- rep(FALSE, length(operator))
     }
 
     ## ** export
@@ -409,7 +431,6 @@ initializeArgs <- function(status,
         endpoint = endpoint,
         endpoint.TTE = endpoint.TTE,
         engine = engine,
-        fitter.model.tte = fitter.model.tte,
         formula = formula,
         iid = iid,
         iidNuisance = iidNuisance,
@@ -420,6 +441,7 @@ initializeArgs <- function(status,
         scoring.rule = scoring.rule,
         pool.strata = pool.strata,
         model.tte = model.tte,
+        args.model.tte = args.model.tte,
         method.inference = method.inference,
         n.resampling = n.resampling,
         hierarchical = hierarchical,
@@ -433,6 +455,7 @@ initializeArgs <- function(status,
         seed = seed,
         strata = strata,
         threshold = threshold,
+        multiplicative.threshold = multiplicative.threshold,
         trace = trace,
         treatment = treatment,
         type = type,
@@ -510,12 +533,11 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
         data[,c("..NA..") := -100]
     }
 
-
     ## ** TTE with status
-    if(scoring.rule>0){
+    if(scoring.rule!="gehan"){
         test.status <- sapply(status.TTE, function(iC){any(data[[iC]]==0)})
         if(all(test.status==FALSE)){
-            scoring.rule <- 0
+            scoring.rule <- "gehan"
             iidNuisance <- FALSE            
         }
         ## distinct time to event endpoints
@@ -546,11 +568,11 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
         }else if(type[iE] == "tte"){
             if(test.censoring[iE]==FALSE && test.CR[iE]==FALSE){
                 return("continuous")
-            }else if(scoring.rule == 0){ ## 3/4 Gehan (right/left censoring)
+            }else if(scoring.rule == "gehan"){ ## 3/4 Gehan (right/left censoring)
                 return(switch(censoring[iE],
                               "left" = "TTEgehan2",
                               "right" = "TTEgehan"))
-            }else if(scoring.rule>0){
+            }else if(scoring.rule != "gehan"){
                 return(switch(as.character(test.CR[iE]),
                               "FALSE" = "SurvPeron",
                               "TRUE" = "CRPeron"))
@@ -561,7 +583,7 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
     attr(method.score,"test.CR") <- test.CR
     
     ## ** previously analyzed distinct TTE endpoints
-    if(scoring.rule>0 && hierarchical){ ## only relevant when using Peron scoring rule with hierarchical GPC
+    if(scoring.rule != "gehan" && hierarchical){ ## only relevant when using Peron scoring rule with hierarchical GPC
         ## number of distinct, previously analyzed, TTE endpoints
         nUTTE.analyzedPeron_M1 <- sapply(1:D, function(iE){
             if(iE>1){
@@ -626,7 +648,7 @@ initializeData <- function(data, type, endpoint, Uendpoint, D, scoring.rule, sta
     }
 
     ## ** keep.pairScore
-    if(identical(attr(method.inference,"hprojection"),2) && scoring.rule>0){
+    if(identical(attr(method.inference,"hprojection"),2) && scoring.rule != "gehan"){
         ## need the detail of the score to perform the 2nd order projection
         keep.pairScore <- TRUE 
     }else if(identical(attr(method.inference,"hprojection"),2) && pool.strata == 3){

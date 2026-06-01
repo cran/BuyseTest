@@ -1,8 +1,8 @@
 Package: BuyseTest
 Type: Package
 Title: Generalized Pairwise Comparisons
-Version: 3.3.4
-Date: 2025-09-23
+Version: 3.3.9
+Date: 2026-06-01
 Authors@R: c(
     person("Brice", "Ozenne", role = c("aut", "cre"), email = "brice.mh.ozenne@gmail.com", comment = c(ORCID = "0000-0001-9694-2956")),
     person("Eva", "Cantagallo", role = "aut"),
@@ -22,7 +22,7 @@ Suggests: cvAUC, mvtnorm, pbapply, pROC, R.rsp, survival, testthat
 LinkingTo: Rcpp, RcppArmadillo
 VignetteBuilder: R.rsp
 NeedsCompilation: yes
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 Collate: '0-onLoad.R' '1-setGeneric.R' 'BuyseMultComp.R' 'BuyseTTEM.R'
         'BuyseTest-Peron.R' 'BuyseTest-check.R' 'BuyseTest-inference.R'
         'BuyseTest-initialization.R' 'BuyseTest-package.R'
@@ -45,7 +45,7 @@ Collate: '0-onLoad.R' '1-setGeneric.R' 'BuyseMultComp.R' 'BuyseTTEM.R'
         'rbind.performanceResample.R' 'sim.simBuyseTest.R'
         'simBuyseTest.R' 'simCompetingRisks.R' 'summary.performance.R'
         'valid.R'
-Packaged: 2025-09-23 12:49:37 UTC; hpl802
+Packaged: 2026-06-01 10:01:38 UTC; bozenne
 Author: Brice Ozenne [aut, cre] (ORCID:
     <https://orcid.org/0000-0001-9694-2956>),
   Eva Cantagallo [aut],
@@ -54,4 +54,4 @@ Author: Brice Ozenne [aut, cre] (ORCID:
   Johan Verbeeck [ctb]
 Maintainer: Brice Ozenne <brice.mh.ozenne@gmail.com>
 Repository: CRAN
-Date/Publication: 2025-09-24 17:10:02 UTC
+Date/Publication: 2026-06-01 10:50:02 UTC

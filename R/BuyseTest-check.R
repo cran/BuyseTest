@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 27 2018 (23:32) 
 ## Version: 
-## Last-Updated: maj 22 2025 (16:08) 
+## Last-Updated: May 31 2026 (00:52) 
 ##           By: Brice Ozenne
-##     Update #: 424
+##     Update #: 445
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -47,6 +47,7 @@ testArgs <- function(name.call,
                      seed,
                      strata,
                      threshold,
+                     multiplicative.threshold,
                      trace,
                      treatment,
                      type,
@@ -98,11 +99,13 @@ testArgs <- function(name.call,
         level.strata <- levels(strataT)
         n.strata <- length(level.strata)
         if(is.null(attr(strata,"match"))){
-            stop("BuyseTest: undefined value for \'match\' . \n",
-                 "Contact the package maintainer. \n")
+            stop("Undefined value for \'match\': contact the package maintainer. \n")
         }else if(length(attr(strata,"match"))!=1 || attr(strata,"match") %in% 0:1 == FALSE){
-            stop("BuyseTest: \'match\' should be a binary variable. \n")
+            stop("Argument \'match\' should be a binary variable. \n")
+        }else if(length(attr(strata,"match")) == 1 && attr(strata,"match")>0 && pool.strata>=3){
+            stop("Argument pool.strata should be \"Buyse\", \"CMH\", or \"equal\" in a matched design. \n")
         }
+        
     }
 
     
@@ -205,25 +208,23 @@ testArgs <- function(name.call,
 
     ## ** scoring.rule
     ## must be before time to event endpoints
-    if(is.na(scoring.rule)){
+    valid.rule <- c("gehan","peron","efron","latta",names(survival::survreg.distributions))
+    if(is.na(scoring.rule) || scoring.rule %in% valid.rule == FALSE){
         stop("BuyseTest: wrong specification of \'scoring.rule\'. \n",
-             "valid values: \"Gehan\", \"Peron\", or \"Efron\". \n")
+             "valid values: \"Gehan\" (no survival model)\n",
+             "            : \"Peron\", \"Efron\", \"Latta\" (non-parametric survival model)\n",
+             "            : \"Exponential\", \"Weibull\", ... (parametric survival model, see argument dist in survival::survreg). \n")
     }
-    if(any(!is.na(censoring)) && any(stats::na.omit(censoring)=="left")){
-        if(scoring.rule==1){
-            warning("The Peron scoring rule does not support left-censored endpoints \n",
-                    "For those endpoints, the Gehan's scoring rule will be used instead.")
-        }else if(scoring.rule==2){
-            warning("The Efron scoring rule does not support left-censored endpoints \n",
-                    "For those endpoints, the Gehan's scoring rule will be used instead.")
-        }
+    if(any(!is.na(censoring)) && any(stats::na.omit(censoring)=="left") && scoring.rule!="gehan"){
+        warning("The ",scoring.rule," scoring rule does not support left-censored endpoints \n",
+                "For those endpoints, the Gehan's scoring rule will be used instead.", sep = "")
     }
 
     ## ** pool.strata
     if(is.na(pool.strata)){
         stop("BuyseTest: wrong specification of \'pool.strata\'. \n",
              "valid values: \"Buyse\", \"CMH\", \"equal\", \"standardisation\", \"standardization\", \"var-favorable\", \"var-unfavorable\", \"var-netBenefit\", \"var-winRatio\". \n")
-    }else if(pool.strata == "standardization"){
+    }else if(pool.strata == 3){
         if(engine != "GPC2_cpp"){
             stop("BuyseTest: argument \'pool.strata\' set to \"standardization\" only available for engine = \"GPC2_cpp\". \n")
         }
@@ -437,7 +438,8 @@ testArgs <- function(name.call,
     ## ** operator
     if(any(is.na(operator))){
         stop("BuyseTest: wrong specification of \'operator\'. \n",
-             "Should be either \"<0\" (lower is better) or \">0\" (higher is better)")
+             "Can be \"<0\" (lower is better), \">0\" (higher is better), \"+\" additive threshold, \"*\" multiplicative threshold \n",
+             "or a combination of the previous such as \"*<0\" (lower is better with multiplicative threshold). \n")
     }
 
     ## ** restriction
@@ -482,6 +484,10 @@ testArgs <- function(name.call,
                  min = 0,
                  refuse.NA = TRUE,
                  method = "BuyseTest")
+    if(any(multiplicative.threshold) && any(threshold[multiplicative.threshold]<=1)){
+        stop("BuyseTest: wrong specification of \'threshold\'. \n",
+             "\'threshold\' must be at least 1 + 1e-12 when considering multiplicative threshold. \n")
+    }
 
     ## check threshold at 1/2 for binary endpoints
     if(any(threshold[type=="bin"]>1e-12)){
